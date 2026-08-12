@@ -21,6 +21,7 @@ export default function TeacherRegistrationModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [dataLoading, setDataLoading] = useState(false)
 
   // Teacher Level Selection
   const [teacherLevel, setTeacherLevel] = useState<'PRIMARY' | 'SECONDARY' | null>(null)
@@ -58,23 +59,36 @@ export default function TeacherRegistrationModal({
   }, [isOpen, schoolId])
 
   const loadData = async () => {
+    setDataLoading(true)
     setError('')
     try {
+      console.log('Loading data for schoolId:', schoolId)
+
       // Load classes
-      const { data: combosData } = await supabase
+      const { data: combosData, error: combosError } = await supabase
         .from('class_arm_combos')
         .select('id, class_id, arm_id, class_teacher_id')
         .eq('school_id', schoolId)
-        .order('id')
+
+      console.log('Combos:', combosData, 'Error:', combosError)
 
       if (combosData && combosData.length > 0) {
         const classIds = [...new Set(combosData.map((c: any) => c.class_id))]
         const armIds = [...new Set(combosData.map((c: any) => c.arm_id))]
 
-        const [{ data: classesData }, { data: armsData }] = await Promise.all([
-          supabase.from('classes').select('id, name, level, type').in('id', classIds),
-          supabase.from('arms').select('id, name').in('id', armIds),
-        ])
+        console.log('Class IDs:', classIds, 'Arm IDs:', armIds)
+
+        const { data: classesData, error: classError } = await supabase
+          .from('classes')
+          .select('id, name, level, type')
+          .in('id', classIds)
+
+        const { data: armsData, error: armError } = await supabase
+          .from('arms')
+          .select('id, name')
+          .in('id', armIds)
+
+        console.log('Classes:', classesData, 'Arms:', armsData)
 
         const merged = combosData.map((combo: any) => ({
           id: combo.id,
@@ -83,19 +97,24 @@ export default function TeacherRegistrationModal({
           arm: armsData?.find((a: any) => a.id === combo.arm_id),
         }))
 
+        console.log('Merged classes:', merged)
         setClasses(merged)
       }
 
-      // Load subjects
-      const { data: subjectsData } = await supabase
+      // Load subjects - ALWAYS load all subjects regardless of level
+      const { data: subjectsData, error: subjectsError } = await supabase
         .from('subjects')
         .select('id, name, code, applicable_to_levels')
         .eq('school_id', schoolId)
         .order('name')
 
+      console.log('Subjects:', subjectsData, 'Error:', subjectsError)
       setSubjects(subjectsData || [])
     } catch (err: any) {
+      console.error('Load error:', err)
       setError(`Error loading data: ${err.message}`)
+    } finally {
+      setDataLoading(false)
     }
   }
 
@@ -246,13 +265,8 @@ export default function TeacherRegistrationModal({
     }
   }
 
-  // Filter classes and subjects based on teacher level
-  const filteredClasses = classes.filter((c) => teacherLevel === null || c.class?.type === teacherLevel)
-  const filteredSubjects = subjects.filter((s) => {
-    if (!teacherLevel) return true
-    // For now, show all subjects. In practice, you'd filter by level
-    return true
-  })
+  // Filter classes based on teacher level
+  const filteredClasses = classes.filter((c) => !teacherLevel || c.class?.type === teacherLevel)
 
   if (!isOpen) return null
 
@@ -293,6 +307,12 @@ export default function TeacherRegistrationModal({
           {success && (
             <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
               {success}
+            </div>
+          )}
+
+          {dataLoading && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm">
+              Loading classes and subjects...
             </div>
           )}
 
@@ -591,6 +611,9 @@ export default function TeacherRegistrationModal({
                     </option>
                   ))}
                 </select>
+                {filteredClasses.length === 0 && (
+                  <p className="text-xs text-gray-500 mt-2">No classes available for {teacherLevel} level</p>
+                )}
               </div>
 
               {/* Subjects Selection */}
@@ -602,9 +625,9 @@ export default function TeacherRegistrationModal({
                   </span>
                 </label>
                 <div className="border border-gray-300 rounded-lg p-4 max-h-64 overflow-y-auto bg-gray-50">
-                  {filteredSubjects.length > 0 ? (
+                  {subjects && subjects.length > 0 ? (
                     <div className="space-y-2">
-                      {filteredSubjects.map((subject) => (
+                      {subjects.map((subject) => (
                         <label
                           key={subject.id}
                           className="flex items-center gap-3 p-2 hover:bg-white rounded cursor-pointer transition"
@@ -630,7 +653,7 @@ export default function TeacherRegistrationModal({
                     </p>
                   )}
                 </div>
-                {filteredSubjects.length > 0 && (
+                {subjects && subjects.length > 0 && (
                   <p className="text-sm text-gray-600 mt-2">
                     {selectedSubjects.size} subject{selectedSubjects.size !== 1 ? 's' : ''} selected
                   </p>

@@ -63,10 +63,6 @@ export default function AccountantDashboard() {
           .order('created_at', { ascending: false })
           .limit(10)
 
-        setStudents(studentsData || [])
-        setStaff(staffData || [])
-        setStudents(studentsData || [])
-        setStaff(staffData || [])
         setPayments(paymentsData || [])
 
         // Calculate stats
@@ -82,7 +78,7 @@ export default function AccountantDashboard() {
           totalRevenue,
           pendingPayments,
           totalExpenses: 0,
-          totalStaff: staffData?.length || 0,
+          totalStaff: 0,
         })
       }
     } catch (error) {
@@ -99,11 +95,6 @@ export default function AccountantDashboard() {
     } catch (error) {
       console.error('Logout error:', error)
     }
-  }
-
-  const handleAddPayment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    // Payment logic would go here
   }
 
   if (loading) {
@@ -322,7 +313,7 @@ export default function AccountantDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {payments.filter(p => filterType === 'all' || filterType === 'student').map((payment) => (
+                    {payments.map((payment) => (
                       <tr key={payment.id} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-2">{payment.payer_name || '-'}</td>
                         <td className="px-4 py-2 font-bold">₦{payment.amount.toLocaleString()}</td>
@@ -361,7 +352,7 @@ export default function AccountantDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {payments.filter(p => filterType === 'all' || filterType === 'staff').map((payment) => (
+                    {payments.map((payment) => (
                       <tr key={payment.id} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-2">{payment.payer_name || '-'}</td>
                         <td className="px-4 py-2 font-bold">₦{payment.amount.toLocaleString()}</td>
