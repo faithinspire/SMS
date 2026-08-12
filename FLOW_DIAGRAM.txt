@@ -1,0 +1,296 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║         SCHOOL ADMIN REGISTRATION & LOGIN FLOW - VISUAL DIAGRAM             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BEFORE FIX (❌ BROKEN)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+REGISTRATION FLOW:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ User fills form & clicks "Register"                                    │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 1: Create School Record in Database                              │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ INSERT schools (name, admin_email, admin_password, ...)         │ │
+│ │ → School ID returned                                            │ │
+│ │ → ✅ SUCCESS                                                    │ │
+│ └───────────────────────────────────────────────────────────────┼─┘ │
+└────────────────────────────────────────────┬──────────────────────────┘
+                                            │
+                                            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 2: Create Supabase Auth User                                      │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ POST /auth/v1/admin/users (with SERVICE_KEY)                    │ │
+│ │ → Network timeout / API error                                   │ │
+│ │ → ❌ FAILS SILENTLY (caught in try-catch)                      │ │
+│ │ → Returns warning but doesn't block registration                │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────┬─────────────────────────────────────────────┘
+                           │ (Continues anyway...)
+                           ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 3: Return Success to User                                         │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ School created ✅                                               │ │
+│ │ Auth user NOT created ❌                                        │ │
+│ │ User sees: "School registered successfully!"                    │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────┬─────────────────────────────────────────────┘
+                           │
+                           ▼
+       ┌───────────────────────────────────────┐
+       │    STATE: INCONSISTENT ❌              │
+       │  School exists in DB: YES             │
+       │  Auth user exists: NO                 │
+       │  Can login: NO ❌                     │
+       └───────────────────────────────────────┘
+
+LOGIN FLOW (With School Created But No Auth User):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ User enters credentials & clicks "Login"                               │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 1: Try Supabase Auth Login                                        │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ POST /auth/v1/token (grant_type=password)                       │ │
+│ │ → User not found (auth user was never created)                  │ │
+│ │ → Response: 400 Bad Request                                     │ │
+│ │ → Error: "Invalid email or password"                            │ │
+│ │ → ❌ FAILS                                                      │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────┬─────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 2: Try Fallback Login (School Credentials)                        │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ Query schools table for admin_email & admin_password           │ │
+│ │ → Works in theory                                               │ │
+│ │ → ✅ Gets school credentials                                  │ │
+│ │ BUT user has no dashboard access because...                    │ │
+│ │ ...fallback is just credentials, not proper auth               │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────┬─────────────────────────────────────────────┘
+                           │
+                           ▼
+       ┌───────────────────────────────────────┐
+       │  USER SEES: "Invalid email or        │
+       │  password" ❌ ❌ ❌                    │
+       │                                       │
+       │  THEY CAN'T LOGIN                    │
+       └───────────────────────────────────────┘
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AFTER FIX (✅ WORKING)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+REGISTRATION FLOW (NEW ORDER):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ User fills form & clicks "Register"                                    │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 1: Create Supabase Auth User FIRST ⭐ (NEW ORDER)                 │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ POST /auth/v1/admin/users (with SERVICE_KEY)                    │ │
+│ │ Retry Logic: Up to 3 attempts with exponential backoff          │ │
+│ │ ├─ Attempt 1: Immediate                                         │ │
+│ │ ├─ Attempt 2: After 1 second                                    │ │
+│ │ └─ Attempt 3: After 2 seconds                                   │ │
+│ │ → Auth user created with email_confirm=true                    │ │
+│ │ → Auth User ID returned                                         │ │
+│ │ → ✅ SUCCESS (or ❌ FAILS with clear error)                   │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 2: Create School Record in Database                              │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ INSERT schools (name, admin_email, admin_password, ...)         │ │
+│ │ Retry Logic: Up to 3 attempts                                   │ │
+│ │ → School ID returned                                            │ │
+│ │ → ✅ SUCCESS                                                    │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 3: Update Auth User with School ID                               │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ PUT /auth/v1/admin/users/{auth_user_id}                        │ │
+│ │ Add school_id to user_metadata                                  │ │
+│ │ → ✅ SUCCESS (optional - doesn't block if fails)               │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 4: Create User Record in users table                             │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ INSERT users (id=auth_user_id, school_id, email, ...)         │ │
+│ │ → User record created for tracking                              │ │
+│ │ → ✅ SUCCESS (optional - doesn't block if fails)               │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 5: Return Success to User                                         │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ Auth user created ✅                                            │ │
+│ │ School created ✅                                              │ │
+│ │ User sees: "School registered successfully!"                    │ │
+│ │ Shows response with auth_user_id and school_id                  │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────┬─────────────────────────────────────────────┘
+                           │
+                           ▼
+       ┌───────────────────────────────────────┐
+       │    STATE: CONSISTENT ✅               │
+       │  School exists in DB: YES            │
+       │  Auth user exists: YES               │
+       │  Can login: YES ✅                   │
+       └───────────────────────────────────────┘
+
+LOGIN FLOW (With Both School & Auth User):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ User enters credentials & clicks "Login"                               │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Step 1: Try Supabase Auth Login                                        │
+│ ┌───────────────────────────────────────────────────────────────────┐ │
+│ │ POST /auth/v1/token (grant_type=password)                       │ │
+│ │ Retry Logic: Up to 3 attempts with exponential backoff          │ │
+│ │ → Auth user FOUND (created during registration) ✅             │ │
+│ │ → Password matches ✅                                           │ │
+│ │ → Session token returned                                        │ │
+│ │ → ✅ SUCCESS                                                    │ │
+│ └───────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────┬─────────────────────────────────────────────┘
+                           │
+                           ▼
+       ┌───────────────────────────────────────┐
+       │  USER LOGGED IN ✅                    │
+       │  Redirected to Dashboard ✅           │
+       │  Can use system ✅                    │
+       │  IMMEDIATE SUCCESS ✅                 │
+       └───────────────────────────────────────┘
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KEY DIFFERENCE SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BEFORE:
+  1. Create School FIRST
+  2. Try to Create Auth User (fails silently)
+  3. Return success
+  → School exists but Auth user doesn't
+  → Login fails immediately
+
+AFTER:
+  1. Create Auth User FIRST (with retries)
+  2. Create School
+  3. Link them together
+  → Both exist and are consistent
+  → Login works immediately
+
+The KEY: Auth user is created BEFORE school, not after!
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RETRY LOGIC ILLUSTRATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Network Request with Retry:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Attempt 1: Immediate                                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Send request                                                             │
+│ ├─ Timeout / Network Error ❌                                          │
+│ └─ → Retry                                                              │
+│                                                                          │
+│ Wait: 1 second ⏱                                                        │
+│                                                                          │
+│ Attempt 2: After 1 second                                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Send request                                                             │
+│ ├─ Success ✅ → Continue                                               │
+│ ├─ Timeout / Network Error ❌ → Retry                                  │
+│ └─ 4xx Error ❌ → Fail immediately (don't retry)                      │
+│                                                                          │
+│ Wait: 2 seconds ⏱                                                       │
+│                                                                          │
+│ Attempt 3: After 2 seconds                                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Send request (last attempt)                                              │
+│ ├─ Success ✅ → Continue                                               │
+│ └─ Any Error ❌ → Return error, don't retry again                      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Result:
+  • Temporary network issues don't break registration
+  • Exponential backoff prevents hammering API
+  • Permanent errors fail fast (no wasted retries)
+  • Gives API time to recover from glitches
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FALLBACK MECHANISM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IF Supabase Auth Fails:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Login Request                                                            │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Attempt 1: Try Supabase Auth Login                                     │
+│ POST /auth/v1/token (grant_type=password)                             │
+│ Result: Failed ❌                                                      │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Check Error Type                                                         │
+│ Is it "Invalid login credentials"? YES ✅                             │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Attempt 2: Try Fallback Login (School Credentials)                     │
+│ Query schools table: WHERE admin_email=? AND admin_password=?         │
+│ Result: Found ✅                                                       │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+       ┌───────────────────────────────────────┐
+       │  LOGIN SUCCEEDS via Fallback ✅       │
+       │  User gets dashboard access ✅       │
+       │  System continues working ✅         │
+       └───────────────────────────────────────┘
+
+Note: Fallback is ONLY used if:
+  • Primary auth fails with "Invalid credentials"
+  • School credentials are stored (admin_email, admin_password)
+  • This is a safety net, not the primary method
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+END OF DIAGRAM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
