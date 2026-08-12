@@ -61,6 +61,11 @@ export default function TeacherRegistrationModal({
   const loadData = async () => {
     setDataLoading(true)
     setError('')
+    console.log('🔍 [REGISTRATION DEBUG] TeacherRegistrationModal.loadData() called')
+    console.log('🔍 [REGISTRATION DEBUG] schoolId:', schoolId)
+    console.log('🔍 [REGISTRATION DEBUG] schoolId type:', typeof schoolId)
+    console.log('🔍 [REGISTRATION DEBUG] schoolId is empty?', !schoolId)
+    
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
       const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -69,8 +74,9 @@ export default function TeacherRegistrationModal({
       
       const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+      console.log('📡 [REGISTRATION DEBUG] Fetching class_arm_combos for schoolId:', schoolId)
       // Fetch class_arm_combos with joined data
-      const { data: combosData } = await supabase
+      const { data: combosData, error: combosError } = await supabase
         .from('class_arm_combos')
         .select(`
           id,
@@ -81,26 +87,48 @@ export default function TeacherRegistrationModal({
         `)
         .eq('school_id', schoolId)
 
-      if (combosData) {
-        setClasses(
-          combosData.map((c: any) => ({
-            id: c.id,
-            class: c.classes,
-            arm: c.arms,
-          }))
-        )
+      console.log('📡 [REGISTRATION DEBUG] class_arm_combos response:', {
+        count: combosData?.length,
+        error: combosError?.message,
+      })
+      
+      if (combosError) {
+        console.error('❌ [REGISTRATION DEBUG] combos error:', combosError)
       }
 
+      if (combosData) {
+        const mapped = combosData.map((c: any) => ({
+          id: c.id,
+          class: c.classes,
+          arm: c.arms,
+        }))
+        console.log('✅ [REGISTRATION DEBUG] Mapped classes:', mapped.length, 'classes')
+        setClasses(mapped)
+      } else {
+        console.warn('⚠️ [REGISTRATION DEBUG] combosData is null')
+      }
+
+      console.log('📡 [REGISTRATION DEBUG] Fetching subjects for schoolId:', schoolId)
       // Fetch subjects
-      const { data: subjectsData } = await supabase
+      const { data: subjectsData, error: subjectsError } = await supabase
         .from('subjects')
         .select('id, name, code, applicable_to_levels')
         .eq('school_id', schoolId)
         .order('name')
 
+      console.log('📡 [REGISTRATION DEBUG] subjects response:', {
+        count: subjectsData?.length,
+        error: subjectsError?.message,
+      })
+
+      if (subjectsError) {
+        console.error('❌ [REGISTRATION DEBUG] subjects error:', subjectsError)
+      }
+
       setSubjects(subjectsData || [])
+      console.log('✅ [REGISTRATION DEBUG] Set subjects:', subjectsData?.length || 0, 'subjects')
     } catch (err: any) {
-      console.error('Error loading data:', err)
+      console.error('❌ [REGISTRATION DEBUG] Exception in loadData:', err)
       setError('Failed to load classes and subjects')
     } finally {
       setDataLoading(false)
