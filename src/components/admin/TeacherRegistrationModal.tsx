@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { UserRegistrationService, TeacherRegistrationData } from '@/services/user-registration.service'
-import { supabase } from '@/lib/supabase-client'
 
 interface TeacherRegistrationModalProps {
   schoolId: string
@@ -62,21 +61,47 @@ export default function TeacherRegistrationModal({
     setDataLoading(true)
     setError('')
     try {
-      console.log('Loading data for schoolId:', schoolId)
+      console.log('🔍 TeacherRegistrationModal: Starting data load for schoolId:', schoolId)
 
-      // Load classes
+      // Create Supabase client directly
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Supabase credentials missing')
+      }
+
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+      // Load ALL class_arm_combos to test database access
+      console.log('📦 Fetching ALL class_arm_combos (no filter)...')
+      const { data: allCombos, error: allCombosError } = await supabase
+        .from('class_arm_combos')
+        .select('id, class_id, arm_id, school_id')
+        .order('id')
+        .limit(100)
+
+      console.log('📊 Total combos in database:', allCombos?.length, 'Error:', allCombosError)
+
+      // Now load for this school
+      console.log('📦 Fetching class_arm_combos for schoolId:', schoolId)
       const { data: combosData, error: combosError } = await supabase
         .from('class_arm_combos')
         .select('id, class_id, arm_id, class_teacher_id')
         .eq('school_id', schoolId)
 
-      console.log('Combos:', combosData, 'Error:', combosError)
+      console.log('✅ Combos response:', { count: combosData?.length, error: combosError })
+
+      if (combosError) {
+        console.error('❌ Combos error:', combosError)
+      }
 
       if (combosData && combosData.length > 0) {
         const classIds = [...new Set(combosData.map((c: any) => c.class_id))]
         const armIds = [...new Set(combosData.map((c: any) => c.arm_id))]
 
-        console.log('Class IDs:', classIds, 'Arm IDs:', armIds)
+        console.log('📚 Fetching classes:', classIds.length, 'Fetching arms:', armIds.length)
 
         const { data: classesData, error: classError } = await supabase
           .from('classes')
@@ -88,7 +113,7 @@ export default function TeacherRegistrationModal({
           .select('id, name')
           .in('id', armIds)
 
-        console.log('Classes:', classesData, 'Arms:', armsData)
+        console.log('✅ Classes:', classesData?.length, 'Arms:', armsData?.length)
 
         const merged = combosData.map((combo: any) => ({
           id: combo.id,
@@ -97,21 +122,34 @@ export default function TeacherRegistrationModal({
           arm: armsData?.find((a: any) => a.id === combo.arm_id),
         }))
 
-        console.log('Merged classes:', merged)
+        console.log('✅ Merged classes:', merged.length)
         setClasses(merged)
+      } else {
+        console.warn('⚠️ No combos found for schoolId:', schoolId)
       }
 
-      // Load subjects - ALWAYS load all subjects regardless of level
+      // Load ALL subjects to test database
+      console.log('📚 Fetching ALL subjects (no filter)...')
+      const { data: allSubjects, error: allSubjectsError } = await supabase
+        .from('subjects')
+        .select('id, name, code, school_id')
+        .order('name')
+        .limit(50)
+
+      console.log('📊 Total subjects in database:', allSubjects?.length, 'Error:', allSubjectsError)
+
+      // Load subjects for this school
+      console.log('📚 Fetching subjects for schoolId:', schoolId)
       const { data: subjectsData, error: subjectsError } = await supabase
         .from('subjects')
         .select('id, name, code, applicable_to_levels')
         .eq('school_id', schoolId)
         .order('name')
 
-      console.log('Subjects:', subjectsData, 'Error:', subjectsError)
+      console.log('✅ Subjects response:', { count: subjectsData?.length, error: subjectsError })
       setSubjects(subjectsData || [])
     } catch (err: any) {
-      console.error('Load error:', err)
+      console.error('❌ Exception in loadData:', err)
       setError(`Error loading data: ${err.message}`)
     } finally {
       setDataLoading(false)

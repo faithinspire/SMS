@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { UserRegistrationService, StudentRegistrationData } from '@/services/user-registration.service'
-import { supabase } from '@/lib/supabase-client'
+import { createClient } from '@supabase/supabase-js'
 import { generateAdmissionNumber } from '@/constants/nigerian-subjects'
 
 interface StudentRegistrationModalProps {
@@ -53,10 +53,10 @@ export default function StudentRegistrationModal({
 
   // Load data when modal opens
   useEffect(() => {
-    if (isOpen && schoolId) {
+    if (isOpen) {
       loadData()
     }
-  }, [isOpen, schoolId])
+  }, [isOpen])
 
   // Auto-generate admission number when class is selected
   useEffect(() => {
@@ -67,22 +67,60 @@ export default function StudentRegistrationModal({
 
   const loadData = async () => {
     setError('')
+    console.log('🔍 StudentRegistrationModal: Starting data load for schoolId:', schoolId)
+    
     try {
-      // Load classes and arms
-      const { data: combosData } = await supabase
+      // Create Supabase client directly
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Supabase credentials missing')
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+      // Load ALL class_arm_combos (no filter) to test data access
+      console.log('📦 Fetching ALL class_arm_combos (no schoolId filter)...')
+      const { data: allCombos, error: allCombosError } = await supabase
+        .from('class_arm_combos')
+        .select('id, class_id, arm_id, school_id')
+        .order('id')
+        .limit(100)
+
+      console.log('📊 All combos count:', allCombos?.length, 'Error:', allCombosError)
+      
+      // Now load for this school
+      console.log('📦 Fetching class_arm_combos for schoolId:', schoolId)
+      const { data: combosData, error: combosError } = await supabase
         .from('class_arm_combos')
         .select('id, class_id, arm_id')
         .eq('school_id', schoolId)
         .order('id')
 
+      console.log('✅ Combos response:', { count: combosData?.length, error: combosError })
+      
+      if (combosError) {
+        console.error('❌ Combos error:', combosError)
+      }
+
       if (combosData && combosData.length > 0) {
         const classIds = [...new Set(combosData.map((c: any) => c.class_id))]
         const armIds = [...new Set(combosData.map((c: any) => c.arm_id))]
 
-        const [{ data: classesData }, { data: armsData }] = await Promise.all([
-          supabase.from('classes').select('id, name, level, type').in('id', classIds),
-          supabase.from('arms').select('id, name').in('id', armIds),
-        ])
+        console.log('📚 Fetching classes:', classIds.length, 'Fetching arms:', armIds.length)
+
+        const { data: classesData, error: classError } = await supabase
+          .from('classes')
+          .select('id, name, level, type')
+          .in('id', classIds)
+
+        const { data: armsData, error: armError } = await supabase
+          .from('arms')
+          .select('id, name')
+          .in('id', armIds)
+
+        console.log('✅ Classes:', classesData?.length, 'Arms:', armsData?.length)
 
         const merged = combosData.map((combo: any) => ({
           id: combo.id,
@@ -90,18 +128,34 @@ export default function StudentRegistrationModal({
           arm: armsData?.find((a: any) => a.id === combo.arm_id),
         }))
 
+        console.log('✅ Merged classes:', merged.length)
         setClasses(merged)
+      } else {
+        console.warn('⚠️ No combos found for schoolId:', schoolId)
       }
 
-      // Load subjects
-      const { data: subjectsData } = await supabase
+      // Load ALL subjects to check database
+      console.log('📚 Fetching ALL subjects (no schoolId filter)...')
+      const { data: allSubjects, error: allSubjectsError } = await supabase
+        .from('subjects')
+        .select('id, name, code, school_id')
+        .order('name')
+        .limit(50)
+
+      console.log('📊 All subjects count:', allSubjects?.length, 'Error:', allSubjectsError)
+
+      // Load subjects for this school
+      console.log('📚 Fetching subjects for schoolId:', schoolId)
+      const { data: subjectsData, error: subjectsError } = await supabase
         .from('subjects')
         .select('id, name, code, applicable_to_levels')
         .eq('school_id', schoolId)
         .order('name')
 
+      console.log('✅ Subjects response:', { count: subjectsData?.length, error: subjectsError })
       setSubjects(subjectsData || [])
     } catch (err: any) {
+      console.error('❌ Exception:', err)
       setError(`Error loading data: ${err.message}`)
     }
   }
