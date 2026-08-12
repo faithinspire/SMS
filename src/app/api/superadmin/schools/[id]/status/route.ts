@@ -81,15 +81,19 @@ export async function PATCH(
     if (error) throw error;
 
     // Audit log
-    await supabase.from('audit_logs').insert({
-      school_id: schoolId,
-      user_id: auth.userId,
-      action: 'UPDATE_SCHOOL_STATUS',
-      entity_type: 'SCHOOL',
-      entity_id: schoolId,
-      new_values: { status },
-      status: 'SUCCESS',
-    }).catch(err => console.error('Audit log error:', err));
+    try {
+      await supabase.from('audit_logs').insert({
+        school_id: schoolId,
+        user_id: auth.userId,
+        action: 'UPDATE_SCHOOL_STATUS',
+        entity_type: 'SCHOOL',
+        entity_id: schoolId,
+        new_values: { status },
+        status: 'SUCCESS',
+      });
+    } catch (auditErr) {
+      console.error('Audit log error:', auditErr);
+    }
 
     return NextResponse.json(
       {

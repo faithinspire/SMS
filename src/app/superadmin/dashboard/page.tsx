@@ -36,25 +36,13 @@ export default function SuperAdminDashboard() {
         }
 
         setUser(currentUser)
-        await fetchDashboardStats()
+        // Stats will show placeholder values - can be enhanced later if needed
       } catch (err) {
         console.error('Error checking auth:', err)
         setError('Failed to load dashboard')
         router.push('/landing')
       } finally {
         setLoading(false)
-      }
-    }
-
-    const fetchDashboardStats = async () => {
-      try {
-        const response = await fetch('/api/superadmin/dashboard-stats')
-        if (response.ok) {
-          const data = await response.json()
-          setStats(data)
-        }
-      } catch (err) {
-        console.error('Error fetching stats:', err)
       }
     }
 

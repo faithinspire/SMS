@@ -103,15 +103,19 @@ export async function DELETE(
     if (deleteError) throw deleteError;
 
     // Audit log
-    await supabase.from('audit_logs').insert({
-      school_id: schoolId,
-      user_id: auth.userId,
-      action: 'DELETE_SCHOOL',
-      entity_type: 'SCHOOL',
-      entity_id: schoolId,
-      old_values: { name: school.name },
-      status: 'SUCCESS',
-    }).catch(err => console.error('Audit log error:', err));
+    try {
+      await supabase.from('audit_logs').insert({
+        school_id: schoolId,
+        user_id: auth.userId,
+        action: 'DELETE_SCHOOL',
+        entity_type: 'SCHOOL',
+        entity_id: schoolId,
+        old_values: { name: school.name },
+        status: 'SUCCESS',
+      });
+    } catch (auditErr) {
+      console.error('Audit log error:', auditErr);
+    }
 
     return NextResponse.json(
       {
