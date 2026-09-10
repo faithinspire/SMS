@@ -4,7 +4,7 @@
  * NOTE: Subjects are now seeded automatically via migration 049
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-client'
 
 // Standard Nigerian school classes (replaces deleted nigerian-subjects.ts)
 const SCHOOL_CLASSES = [
@@ -24,8 +24,8 @@ const SCHOOL_CLASSES = [
 
 // Use service key for seeding to ensure write permissions
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
 export interface SeedingResult {

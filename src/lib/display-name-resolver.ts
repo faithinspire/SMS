@@ -4,12 +4,9 @@
  * Caches results to minimize database queries
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-client'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabase = createClient()
 
 // Simple in-memory cache for display names
 const displayNameCache = new Map<string, string>()

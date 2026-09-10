@@ -4,7 +4,7 @@
  * Helps identify where data is disappearing or queries are failing
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-client'
 
 interface DiagnosticResult {
   timestamp: string
