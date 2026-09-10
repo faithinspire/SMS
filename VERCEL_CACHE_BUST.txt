@@ -1,0 +1,5 @@
+Force bust Vercel cache - timestamp 09:31
+Build #4 deployment trigger
+All fixes applied to:
+- src/app/auth/student/register/page.tsx (line 346 - className syntax)
+- src/app/student/view-results/page.tsx (line 62 - duplicate state removed)
