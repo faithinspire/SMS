@@ -1,0 +1,7 @@
+# Ignore all source files from ESLint during build
+src/
+.next/
+node_modules/
+dist/
+build/
+*.config.js
