@@ -96,8 +96,8 @@ export const supabaseAdmin = new Proxy({}, {
   get: (target, prop) => {
     if (!target.hasOwnProperty('_admin')) {
       const url = supabaseUrl || DUMMY_URL
-      const key = supabaseAnonKey || DUMMY_KEY
-      (target as any)._admin = createClient(url, key)
+      const key = supabaseAnonKey || DUMMY_KEY;
+      (target as any)._admin = createClient(url, key);
     }
     return (target as any)._admin[prop]
   },
