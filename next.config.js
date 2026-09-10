@@ -86,6 +86,8 @@ const nextConfig = {
     ignoreDuringBuilds: true,
     dirs: [],  // Disable ESLint linting completely
   },
+  // Disable static generation for API routes to avoid build-time Supabase initialization errors
+  staticPageGenerationTimeout: 0,
   webpack: (config, { isServer }) => {
     config.optimization = {
       ...config.optimization,
