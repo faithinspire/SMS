@@ -3,10 +3,6 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Supabase URL and Anon Key are required')
-}
-
 // Custom fetch with retry logic and error handling
 async function customFetch(url: string | Request, options?: RequestInit): Promise<Response> {
   const maxRetries = 3
@@ -58,28 +54,59 @@ async function customFetch(url: string | Request, options?: RequestInit): Promis
   throw lastError || new Error('Fetch failed after retries')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-  global: {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  },
-  fetch: customFetch,
-})
+// Lazy initialization - only create client if env vars are available
+let supabaseInstance: any = null
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseAnonKey)
+function getSupabaseClient() {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase URL and Anon Key are required')
+  }
+  
+  if (!supabaseInstance) {
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+      global: {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+      fetch: customFetch,
+    })
+  }
+  
+  return supabaseInstance
+}
+
+export const supabase = new Proxy({}, {
+  get: (target, prop) => {
+    return getSupabaseClient()[prop]
+  },
+}) as any
+
+export const supabaseAdmin = new Proxy({}, {
+  get: (target, prop) => {
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase URL and Anon Key are required')
+    }
+    if (!target.hasOwnProperty('_admin')) {
+      (target as any)._admin = createClient(supabaseUrl, supabaseAnonKey)
+    }
+    return (target as any)._admin[prop]
+  },
+}) as any
 
 export async function getSupabaseUser() {
-  const { data, error } = await supabase.auth.getUser()
+  const client = getSupabaseClient()
+  const { data, error } = await client.auth.getUser()
   return { user: data?.user, error }
 }
 
 export async function getSupabaseSession() {
-  const { data, error } = await supabase.auth.getSession()
+  const client = getSupabaseClient()
+  const { data, error } = await client.auth.getSession()
   return { session: data?.session, error }
 }
