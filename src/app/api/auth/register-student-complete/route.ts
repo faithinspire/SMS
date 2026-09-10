@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { UserRegistrationService } from '@/services/user-registration.service'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * POST /api/auth/register-student-complete
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!email || !full_name || !school_id || !class_arm_combo_id || !admission_number) {
-      console.error('❌ Missing required fields:', {
+      console.error('âŒ Missing required fields:', {
         email: !!email,
         full_name: !!full_name,
         school_id: !!school_id,
@@ -52,9 +54,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ✅ FIX: Call UserRegistrationService which handles:
+    // âœ… FIX: Call UserRegistrationService which handles:
     // 1. User record creation
-    // 2. Student record creation with class_arm_combo_id ← CRITICAL
+    // 2. Student record creation with class_arm_combo_id â† CRITICAL
     // 3. Student-subject linking with teacher_id population (BLOCKER 1 FIX)
     // 4. Academic session tracking (BLOCKER 2 FIX)
 
@@ -64,20 +66,20 @@ export async function POST(request: NextRequest) {
       full_name,
       password: password || 'temp-password',
       school_id,
-      class_arm_combo_id, // ✅ CRITICAL: Passing class ID (this must reach the service)
+      class_arm_combo_id, // âœ… CRITICAL: Passing class ID (this must reach the service)
       admission_number,
       subject_ids,
       date_of_birth,
       department,
     })
 
-    console.log('[API] ✅ UserRegistrationService completed successfully')
+    console.log('[API] âœ… UserRegistrationService completed successfully')
     console.log('[API] Result:', {
       student_id: result.id,
       email: result.email,
     })
 
-    // ✅ NEW: VERIFY that the student was actually created with class_arm_combo_id
+    // âœ… NEW: VERIFY that the student was actually created with class_arm_combo_id
     // This is critical for diagnosing if the registration service is working
     const { data: verifyStudent, error: verifyError } = await supabase
       .from('students')
@@ -88,14 +90,14 @@ export async function POST(request: NextRequest) {
     if (verifyError) {
       console.warn('[API] Warning: Could not verify student record:', verifyError)
     } else {
-      console.log('[API] ✅ VERIFIED student record:', {
+      console.log('[API] âœ… VERIFIED student record:', {
         student_id: verifyStudent?.id,
         class_arm_combo_id: verifyStudent?.class_arm_combo_id,
         admission_number: verifyStudent?.admission_number,
       })
 
       if (!verifyStudent?.class_arm_combo_id) {
-        console.error('[API] ❌ CRITICAL: class_arm_combo_id was NOT saved! Value is NULL')
+        console.error('[API] âŒ CRITICAL: class_arm_combo_id was NOT saved! Value is NULL')
         return NextResponse.json(
           {
             success: false,
@@ -121,7 +123,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error: any) {
-    console.error('❌ Error in register-student-complete:', {
+    console.error('âŒ Error in register-student-complete:', {
       message: error.message,
       stack: error.stack,
       code: error.code,
@@ -135,3 +137,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
 import { createClient } from '@supabase/supabase-js'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * DIAGNOSTIC ENDPOINT FOR PHOTO DISPLAY ISSUES
@@ -84,7 +86,7 @@ export async function GET(request: NextRequest) {
                 buckets?.map(b => b.name).join(', '),
       }
       diagnostics.recommendations.push(
-        '1. Go to Supabase Dashboard → Storage',
+        '1. Go to Supabase Dashboard â†’ Storage',
         '2. Click "New Bucket"',
         '3. Name it "student-documents"',
         '4. Set Public = ON',
@@ -107,7 +109,7 @@ export async function GET(request: NextRequest) {
       }
       diagnostics.recommendations.push(
         'CRITICAL FIX: In Supabase Dashboard:',
-        '1. Storage → student-documents',
+        '1. Storage â†’ student-documents',
         '2. Click Edit/Settings',
         '3. Set Public: ON',
         '4. Click Save'
@@ -116,7 +118,7 @@ export async function GET(request: NextRequest) {
     } else {
       diagnostics.checks.bucketPublic = {
         status: 'success',
-        details: 'Bucket is PUBLIC ✓',
+        details: 'Bucket is PUBLIC âœ“',
       }
     }
 
@@ -133,7 +135,7 @@ export async function GET(request: NextRequest) {
       diagnostics.recommendations.push(
         'POSSIBLE RLS ISSUE:',
         'In Supabase Dashboard:',
-        '1. Storage → student-documents',
+        '1. Storage â†’ student-documents',
         '2. Click Edit/Settings',
         '3. Set Row Level Security: OFF',
         '4. Click Save'
@@ -192,7 +194,7 @@ export async function GET(request: NextRequest) {
 
     // Check 7: Query database for actual photo URLs
     try {
-      console.log('🔍 Querying students table for photo URLs...')
+      console.log('ðŸ” Querying students table for photo URLs...')
       const { data: students, error: studentsError } = await supabaseAdmin
         .from('students')
         .select('id, admission_number, photo_url, user_id')
@@ -200,14 +202,14 @@ export async function GET(request: NextRequest) {
         .limit(10)
 
       if (studentsError) {
-        console.error('❌ Student query error:', studentsError)
+        console.error('âŒ Student query error:', studentsError)
         diagnostics.checks.databasePhotoUrls = {
           status: 'failed',
           details: `Failed to query students table: ${studentsError.message}`,
           samples: [],
         }
       } else if (students && students.length > 0) {
-        console.log(`✅ Found ${students.length} students with photos`)
+        console.log(`âœ… Found ${students.length} students with photos`)
         diagnostics.checks.databasePhotoUrls = {
           status: 'success',
           details: `Found ${students.length} students with photo_url set`,
@@ -231,7 +233,7 @@ export async function GET(request: NextRequest) {
           }
         }
       } else {
-        console.log('ℹ️ No students with photo_url found')
+        console.log('â„¹ï¸ No students with photo_url found')
         diagnostics.checks.databasePhotoUrls = {
           status: 'warning',
           details: 'No students found with photo_url set in database',
@@ -240,7 +242,7 @@ export async function GET(request: NextRequest) {
         diagnostics.recommendations.push('Upload a photo to test the system')
       }
     } catch (err: any) {
-      console.error('❌ Database error:', err)
+      console.error('âŒ Database error:', err)
       diagnostics.checks.databasePhotoUrls = {
         status: 'failed',
         details: `Error querying database: ${err.message}`,
@@ -256,7 +258,7 @@ export async function GET(request: NextRequest) {
 
     // Add final recommendations
     if (diagnostics.status === 'success') {
-      diagnostics.recommendations.push('✅ Storage configuration looks correct!')
+      diagnostics.recommendations.push('âœ… Storage configuration looks correct!')
       diagnostics.recommendations.push('If photos still not showing: try hard refresh (Ctrl+Shift+R)')
       diagnostics.recommendations.push('Check browser console for specific error messages')
       diagnostics.recommendations.push(`Database shows ${diagnostics.checks.databasePhotoUrls.samples.length} photos stored`)
@@ -278,3 +280,4 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+

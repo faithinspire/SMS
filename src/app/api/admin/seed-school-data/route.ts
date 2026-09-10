@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +14,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('🌱 [SEED] Starting school data seeding for:', schoolId)
+    console.log('ðŸŒ± [SEED] Starting school data seeding for:', schoolId)
 
     // Call the auto-seeding function directly
     const { data, error } = await supabase.rpc('create_default_school_data', {
@@ -20,14 +22,14 @@ export async function POST(request: NextRequest) {
     })
 
     if (error) {
-      console.error('❌ [SEED] Error calling create_default_school_data:', error)
+      console.error('âŒ [SEED] Error calling create_default_school_data:', error)
       return NextResponse.json(
         { error: error.message || 'Failed to seed school data' },
         { status: 500 }
       )
     }
 
-    console.log('✅ [SEED] School data seeding completed')
+    console.log('âœ… [SEED] School data seeding completed')
 
     // Verify the seeding worked
     const { data: classes, error: classError } = await supabase
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
     const subjectCount = !subjectError ? (subjects?.length || 0) : 0
     const comboCount = !comboError ? (combos?.length || 0) : 0
 
-    console.log('📊 [SEED] Verification - Classes:', classCount, 'Subjects:', subjectCount, 'Combos:', comboCount)
+    console.log('ðŸ“Š [SEED] Verification - Classes:', classCount, 'Subjects:', subjectCount, 'Combos:', comboCount)
 
     return NextResponse.json({
       success: true,
@@ -61,10 +63,11 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error: any) {
-    console.error('❌ [SEED] Exception:', error)
+    console.error('âŒ [SEED] Exception:', error)
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     )
   }
 }
+

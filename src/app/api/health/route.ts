@@ -1,10 +1,13 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic'
+
 
 export async function GET() {
   return NextResponse.json({
     success: true,
-    message: 'Server is running ✅',
+    message: 'Server is running âœ…',
     timestamp: new Date().toISOString(),
     port: 'Detected by client',
   })
 }
+

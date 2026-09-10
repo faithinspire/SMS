@@ -1,5 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
+﻿import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic'
+
 
 // Always use service role key for admin operations
 const supabaseAdmin = createClient(
@@ -14,10 +16,10 @@ const supabaseAdmin = createClient(
  */
 export async function GET() {
   try {
-    console.log('📡 [GET SCHOOLS] Fetching all schools from database...')
+    console.log('ðŸ“¡ [GET SCHOOLS] Fetching all schools from database...')
     
     if (!process.env.SUPABASE_SERVICE_KEY) {
-      console.error('❌ [GET SCHOOLS] SUPABASE_SERVICE_KEY is not set!')
+      console.error('âŒ [GET SCHOOLS] SUPABASE_SERVICE_KEY is not set!')
       return NextResponse.json(
         { error: 'Server configuration error: missing service key' },
         { status: 500 }
@@ -31,14 +33,14 @@ export async function GET() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('❌ [GET SCHOOLS] Database error:', error)
+      console.error('âŒ [GET SCHOOLS] Database error:', error)
       return NextResponse.json(
         { error: `Database error: ${error.message}` },
         { status: 500 }
       )
     }
 
-    console.log(`📊 [GET SCHOOLS] Retrieved ${schools?.length || 0} schools from database`)
+    console.log(`ðŸ“Š [GET SCHOOLS] Retrieved ${schools?.length || 0} schools from database`)
 
     // Fetch admin credentials from users table for each school
     const schoolsWithDetails = await Promise.all(
@@ -52,7 +54,7 @@ export async function GET() {
             .single()
 
           if (userError && userError.code !== 'PGRST116') {
-            console.warn(`⚠️ [GET SCHOOLS] Error fetching admin for school ${school.id}:`, userError)
+            console.warn(`âš ï¸ [GET SCHOOLS] Error fetching admin for school ${school.id}:`, userError)
           }
 
           return {
@@ -61,19 +63,20 @@ export async function GET() {
             admin_name: adminUser?.full_name || null,
           }
         } catch (err) {
-          console.warn(`⚠️ [GET SCHOOLS] Exception fetching admin for school ${school.id}:`, err)
+          console.warn(`âš ï¸ [GET SCHOOLS] Exception fetching admin for school ${school.id}:`, err)
           return school
         }
       })
     )
 
-    console.log(`✅ [GET SCHOOLS] Successfully returning ${schoolsWithDetails?.length || 0} schools with details`)
+    console.log(`âœ… [GET SCHOOLS] Successfully returning ${schoolsWithDetails?.length || 0} schools with details`)
     return NextResponse.json(schoolsWithDetails || [])
   } catch (error: any) {
-    console.error('❌ [GET SCHOOLS] Fatal error:', error)
+    console.error('âŒ [GET SCHOOLS] Fatal error:', error)
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     )
   }
 }
+

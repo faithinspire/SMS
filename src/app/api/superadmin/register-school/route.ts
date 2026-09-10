@@ -1,4 +1,4 @@
-/**
+﻿/**
  * API Endpoint: POST /api/superadmin/register-school
  * Registers a new school and auto-seeds it with Nigerian curriculum
  * 
@@ -22,6 +22,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { seedSchoolCurriculum } from '@/lib/school-seeding'
+export const dynamic = 'force-dynamic'
+
 
 // Create service client for admin operations
 const supabaseAdmin = createClient(
@@ -113,7 +115,7 @@ export async function POST(req: NextRequest) {
 
     console.log('School created:', school.id)
 
-    // 🔐 CREATE SUPABASE AUTH USER FOR SCHOOL ADMIN
+    // ðŸ” CREATE SUPABASE AUTH USER FOR SCHOOL ADMIN
     try {
       console.log('Creating Supabase Auth user for school admin:', admin_email)
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -137,10 +139,10 @@ export async function POST(req: NextRequest) {
           throw new Error(`Failed to create auth user: ${authError.message}`)
         }
       } else {
-        console.log('✅ Supabase Auth user created:', authUser?.user?.id)
+        console.log('âœ… Supabase Auth user created:', authUser?.user?.id)
       }
     } catch (err: any) {
-      console.error('❌ Auth user creation failed:', err.message)
+      console.error('âŒ Auth user creation failed:', err.message)
       // Don't fail the entire registration if auth creation fails
       // The school is still created, but admin won't be able to login
       console.warn('Continuing registration without auth user...')
@@ -174,14 +176,14 @@ export async function POST(req: NextRequest) {
 
     console.log('School registration successful:', school.id)
 
-    // 🌱 AUTO-SEED SCHOOL WITH NIGERIAN CURRICULUM
+    // ðŸŒ± AUTO-SEED SCHOOL WITH NIGERIAN CURRICULUM
     console.log('Starting auto-seeding of Nigerian curriculum...')
     const seedingResult = await seedSchoolCurriculum(school.id)
     
     if (!seedingResult.success) {
       console.warn('Seeding completed with warnings:', seedingResult.error)
     } else {
-      console.log(`✅ Seeding complete: ${seedingResult.classesCreated} classes, ${seedingResult.armsCreated} arms, ${seedingResult.subjectsCreated} subjects`)
+      console.log(`âœ… Seeding complete: ${seedingResult.classesCreated} classes, ${seedingResult.armsCreated} arms, ${seedingResult.subjectsCreated} subjects`)
     }
 
     // Return success with school credentials and seeding info
@@ -204,3 +206,4 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+

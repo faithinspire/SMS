@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * POST /api/student/cbt/submit
@@ -193,20 +195,20 @@ export async function POST(request: NextRequest) {
     })
 
     if (!student) {
-      console.error('[CBT Submit] ❌ No student found for ID:', student_id)
+      console.error('[CBT Submit] âŒ No student found for ID:', student_id)
     }
     if (!exam.subject_id) {
-      console.error('[CBT Submit] ❌ No subject_id on exam:', exam.id)
+      console.error('[CBT Submit] âŒ No subject_id on exam:', exam.id)
     }
     if (!exam.assessment_type) {
-      console.error('[CBT Submit] ❌ No assessment_type on exam:', exam.id)
+      console.error('[CBT Submit] âŒ No assessment_type on exam:', exam.id)
     }
     if (!submission.term_id) {
-      console.error('[CBT Submit] ❌ No term_id on submission:', submission_id)
+      console.error('[CBT Submit] âŒ No term_id on submission:', submission_id)
     }
 
     if (student && exam.subject_id && exam.assessment_type && submission.term_id) {
-      console.log('[CBT Submit] ✅ All conditions met - proceeding with score_sheets creation')
+      console.log('[CBT Submit] âœ… All conditions met - proceeding with score_sheets creation')
       
       // BLOCKER 2 FIX: Get academic session from term (use academic_terms)
       let academicSessionId = null
@@ -220,7 +222,7 @@ export async function POST(request: NextRequest) {
       
       if (term?.session_id) {
         academicSessionId = term.session_id
-        console.log('[CBT Submit] ✅ Found academic session:', academicSessionId)
+        console.log('[CBT Submit] âœ… Found academic session:', academicSessionId)
         
         // Get the session_year from academic_sessions
         const { data: session } = await supabase
@@ -230,9 +232,9 @@ export async function POST(request: NextRequest) {
           .single()
         
         sessionYear = session?.session_year || null
-        console.log('[CBT Submit] ✅ Found session year:', sessionYear)
+        console.log('[CBT Submit] âœ… Found session year:', sessionYear)
       } else {
-        console.warn('[CBT Submit] ⚠️ Could not find academic session for term:', submission.term_id)
+        console.warn('[CBT Submit] âš ï¸ Could not find academic session for term:', submission.term_id)
       }
 
       // Convert exam score to appropriate column based on assessment type
@@ -241,8 +243,8 @@ export async function POST(request: NextRequest) {
         student_id,
         subject_id: exam.subject_id,
         term_id: submission.term_id,
-        academic_session_id: academicSessionId, // ✅ NOW TRACKED
-        session_year: sessionYear, // ✅ Backup field
+        academic_session_id: academicSessionId, // âœ… NOW TRACKED
+        session_year: sessionYear, // âœ… Backup field
       }
 
       // Map assessment type to score column
@@ -273,7 +275,7 @@ export async function POST(request: NextRequest) {
           scoreSheetUpdate.exam_source = 'CBT'
           break
         default:
-          console.warn('[CBT Submit] ⚠️ Unknown assessment_type:', exam.assessment_type)
+          console.warn('[CBT Submit] âš ï¸ Unknown assessment_type:', exam.assessment_type)
       }
 
       scoreSheetUpdate.updated_at = now.toISOString()
@@ -290,23 +292,23 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
 
       if (sheetSearchError) {
-        console.error('[CBT Submit] ❌ Error searching for existing score_sheets:', sheetSearchError)
+        console.error('[CBT Submit] âŒ Error searching for existing score_sheets:', sheetSearchError)
       }
 
       if (existingSheet) {
-        console.log('[CBT Submit] ✅ Updating existing score_sheets:', existingSheet.id)
+        console.log('[CBT Submit] âœ… Updating existing score_sheets:', existingSheet.id)
         const { error: updateSheetError } = await supabase
           .from('score_sheets')
           .update(scoreSheetUpdate)
           .eq('id', existingSheet.id)
 
         if (updateSheetError) {
-          console.error('[CBT Submit] ❌ Error updating score_sheets:', updateSheetError)
+          console.error('[CBT Submit] âŒ Error updating score_sheets:', updateSheetError)
         } else {
-          console.log('[CBT Submit] ✅ Score_sheets updated successfully')
+          console.log('[CBT Submit] âœ… Score_sheets updated successfully')
         }
       } else {
-        console.log('[CBT Submit] ✅ Creating new score_sheets entry with data:', scoreSheetUpdate)
+        console.log('[CBT Submit] âœ… Creating new score_sheets entry with data:', scoreSheetUpdate)
         const { data: createdSheet, error: insertSheetError } = await supabase
           .from('score_sheets')
           .insert({
@@ -316,13 +318,13 @@ export async function POST(request: NextRequest) {
           .select()
 
         if (insertSheetError) {
-          console.error('[CBT Submit] ❌ Error creating score_sheets:', insertSheetError)
+          console.error('[CBT Submit] âŒ Error creating score_sheets:', insertSheetError)
         } else {
-          console.log('[CBT Submit] ✅ Score_sheets created successfully:', createdSheet)
+          console.log('[CBT Submit] âœ… Score_sheets created successfully:', createdSheet)
         }
       }
     } else {
-      console.warn('[CBT Submit] ⚠️ Skipping score_sheets creation - missing required fields')
+      console.warn('[CBT Submit] âš ï¸ Skipping score_sheets creation - missing required fields')
     }
 
     // Lock submission after successful submission
@@ -353,3 +355,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

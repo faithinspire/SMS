@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -108,7 +110,7 @@ export async function POST(request: NextRequest) {
       throw notifError
     }
 
-    console.log(`[Broadcast] ✅ Successfully sent to ${recipients.length} recipients`)
+    console.log(`[Broadcast] âœ… Successfully sent to ${recipients.length} recipients`)
 
     return NextResponse.json({
       success: true,
@@ -123,3 +125,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

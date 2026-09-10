@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * PHOTO UPLOAD BYPASS ENDPOINT
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const fileName = `${teacherId}-${timestamp}.${fileExt}`
     const filePath = `teacher-photos/${schoolId}/${fileName}`
 
-    console.log('📤 Uploading teacher photo via admin key:', filePath)
+    console.log('ðŸ“¤ Uploading teacher photo via admin key:', filePath)
 
     // Upload using service role key (bypasses RLS)
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
@@ -46,18 +48,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       })
 
     if (uploadError) {
-      console.error('❌ Upload error:', uploadError)
+      console.error('âŒ Upload error:', uploadError)
       return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 })
     }
 
-    console.log('✅ Photo uploaded successfully')
+    console.log('âœ… Photo uploaded successfully')
 
     // Get public URL
     const { data: { publicUrl } } = supabaseAdmin.storage
       .from('student-documents')
       .getPublicUrl(filePath)
 
-    console.log('✅ Photo public URL:', publicUrl)
+    console.log('âœ… Photo public URL:', publicUrl)
 
     return NextResponse.json({
       success: true,
@@ -65,7 +67,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       path: filePath,
     })
   } catch (error: any) {
-    console.error('❌ Upload endpoint error:', error)
+    console.error('âŒ Upload endpoint error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+

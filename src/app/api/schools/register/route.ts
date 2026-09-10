@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic'
+
 
 async function retryFetch(url: string, options: any, maxRetries: number = 3) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -30,14 +32,14 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
-    console.log('📝 School registration request:', {
+    console.log('ðŸ“ School registration request:', {
       name: body.name,
       admin_email: body.admin_email,
     })
 
     // Validate required fields
     if (!body.name || !body.admin_email || !body.admin_password) {
-      console.error('❌ Missing required fields')
+      console.error('âŒ Missing required fields')
       return NextResponse.json(
         { error: 'Missing required fields: name, admin_email, admin_password' },
         { status: 400 }
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest) {
 
     // Validate password length
     if (body.admin_password.length < 6) {
-      console.error('❌ Password too short')
+      console.error('âŒ Password too short')
       return NextResponse.json(
         { error: 'Password must be at least 6 characters' },
         { status: 400 }
@@ -58,14 +60,14 @@ export async function POST(req: NextRequest) {
     const serviceKey = process.env.SUPABASE_SERVICE_KEY
 
     if (!supabaseUrl || !anonKey || !serviceKey) {
-      console.error('❌ Missing Supabase configuration')
+      console.error('âŒ Missing Supabase configuration')
       return NextResponse.json(
         { error: 'Server configuration error' },
         { status: 500 }
       )
     }
 
-    console.log('🔌 Step 1: Creating Supabase Auth user FIRST...')
+    console.log('ðŸ”Œ Step 1: Creating Supabase Auth user FIRST...')
     
     // CREATE AUTH USER FIRST - This ensures the user exists before school is created
     let authUserId: string | null = null
@@ -93,12 +95,12 @@ export async function POST(req: NextRequest) {
         }
       )
 
-      console.log('📊 Auth creation response status:', authResponse.status)
+      console.log('ðŸ“Š Auth creation response status:', authResponse.status)
 
       const authResponseText = await authResponse.text()
       
       if (!authResponse.ok) {
-        console.error('❌ Auth user creation failed:', {
+        console.error('âŒ Auth user creation failed:', {
           status: authResponse.status,
           error: authResponseText,
         })
@@ -117,15 +119,15 @@ export async function POST(req: NextRequest) {
       } else {
         const authData = JSON.parse(authResponseText)
         authUserId = authData.user?.id
-        console.log('✅ Supabase Auth user created with ID:', authUserId)
+        console.log('âœ… Supabase Auth user created with ID:', authUserId)
       }
     } catch (e: any) {
-      console.error('❌ Auth creation exception:', e.message)
+      console.error('âŒ Auth creation exception:', e.message)
       authError = e.message
       // Don't block school registration if auth fails - we have fallback
     }
 
-    console.log('🔌 Step 2: Registering school...')
+    console.log('ðŸ”Œ Step 2: Registering school...')
 
     // Insert school using Supabase REST API with anon key
     const schoolResponse = await retryFetch(
@@ -152,11 +154,11 @@ export async function POST(req: NextRequest) {
       }
     )
 
-    console.log('📊 School insert response status:', schoolResponse.status)
+    console.log('ðŸ“Š School insert response status:', schoolResponse.status)
 
     if (!schoolResponse.ok) {
       const errorData = await schoolResponse.text()
-      console.error('❌ School insertion failed:', {
+      console.error('âŒ School insertion failed:', {
         status: schoolResponse.status,
         error: errorData,
       })
@@ -167,10 +169,10 @@ export async function POST(req: NextRequest) {
     }
 
     const responseText = await schoolResponse.text()
-    console.log('📦 Raw school response length:', responseText.length)
+    console.log('ðŸ“¦ Raw school response length:', responseText.length)
 
     if (!responseText || responseText.trim() === '') {
-      console.error('❌ Empty response received')
+      console.error('âŒ Empty response received')
       return NextResponse.json(
         { error: 'Server returned empty response. RLS policies may be blocking the operation.' },
         { status: 500 }
@@ -181,7 +183,7 @@ export async function POST(req: NextRequest) {
     try {
       schools = JSON.parse(responseText)
     } catch (e) {
-      console.error('❌ Failed to parse response:', responseText)
+      console.error('âŒ Failed to parse response:', responseText)
       return NextResponse.json(
         { error: 'Invalid server response' },
         { status: 500 }
@@ -191,18 +193,18 @@ export async function POST(req: NextRequest) {
     const school = Array.isArray(schools) ? schools[0] : schools
 
     if (!school || !school.id) {
-      console.error('❌ No school ID in response:', school)
+      console.error('âŒ No school ID in response:', school)
       return NextResponse.json(
         { error: 'Invalid response: missing school ID' },
         { status: 500 }
       )
     }
 
-    console.log('✅ School registered with ID:', school.id)
+    console.log('âœ… School registered with ID:', school.id)
 
     // Step 3: Update auth user with school ID if auth was successful
     if (authUserId) {
-      console.log('🔌 Step 3: Updating auth user with school ID...')
+      console.log('ðŸ”Œ Step 3: Updating auth user with school ID...')
       try {
         const updateResponse = await retryFetch(
           `${supabaseUrl}/auth/v1/admin/users/${authUserId}`,
@@ -224,16 +226,16 @@ export async function POST(req: NextRequest) {
         )
 
         if (updateResponse.ok) {
-          console.log('✅ Auth user updated with school ID')
+          console.log('âœ… Auth user updated with school ID')
         } else {
-          console.warn('⚠️ Failed to update auth user with school ID')
+          console.warn('âš ï¸ Failed to update auth user with school ID')
         }
       } catch (e: any) {
-        console.warn('⚠️ Auth user update exception:', e.message)
+        console.warn('âš ï¸ Auth user update exception:', e.message)
       }
 
       // Step 4: Create user record in users table
-      console.log('🔌 Step 4: Creating user record in users table...')
+      console.log('ðŸ”Œ Step 4: Creating user record in users table...')
       try {
         const userTableResponse = await retryFetch(
           `${supabaseUrl}/rest/v1/users`,
@@ -257,13 +259,13 @@ export async function POST(req: NextRequest) {
         )
 
         if (userTableResponse.ok) {
-          console.log('✅ User record created in users table')
+          console.log('âœ… User record created in users table')
         } else {
           const userError = await userTableResponse.text()
-          console.warn('⚠️ User table creation warning:', userError)
+          console.warn('âš ï¸ User table creation warning:', userError)
         }
       } catch (e: any) {
-        console.warn('⚠️ User table creation exception:', e.message)
+        console.warn('âš ï¸ User table creation exception:', e.message)
       }
     }
 
@@ -275,18 +277,19 @@ export async function POST(req: NextRequest) {
 
     if (authError) {
       response.auth_note = `Warning: ${authError}. School registered. Login will use backup authentication.`
-      console.warn('⚠️', response.auth_note)
+      console.warn('âš ï¸', response.auth_note)
     } else if (authUserId) {
       response.authUserId = authUserId
-      console.log('✅ Full registration completed successfully')
+      console.log('âœ… Full registration completed successfully')
     }
 
     return NextResponse.json(response, { status: 201 })
   } catch (error: any) {
-    console.error('❌ API error:', error.message)
+    console.error('âŒ API error:', error.message)
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     )
   }
 }
+

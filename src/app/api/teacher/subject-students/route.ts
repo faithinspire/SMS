@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
 import { CanonicalSubjectService } from '@/services/canonical-subject.service'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * GET /api/teacher/subject-students
@@ -268,3 +270,4 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+

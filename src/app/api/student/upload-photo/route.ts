@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * Server-side photo upload endpoint
@@ -62,7 +64,7 @@ export async function POST(request: NextRequest) {
     const fileName = `${student_id}-${timestamp}.${fileExt}`
     const filePath = `student-photos/${school_id}/${fileName}`
 
-    console.log(`📸 Server: Uploading photo for student ${student_id}`)
+    console.log(`ðŸ“¸ Server: Uploading photo for student ${student_id}`)
     console.log(`   Path: ${filePath}`)
     console.log(`   Size: ${file.size} bytes`)
 
@@ -79,14 +81,14 @@ export async function POST(request: NextRequest) {
       })
 
     if (uploadError) {
-      console.error('❌ Upload failed:', uploadError)
+      console.error('âŒ Upload failed:', uploadError)
       return NextResponse.json(
         { error: `Upload failed: ${uploadError.message}` },
         { status: 500 }
       )
     }
 
-    console.log('✅ File uploaded successfully')
+    console.log('âœ… File uploaded successfully')
 
     // Generate public URL
     const { data: publicUrlData } = supabaseAdmin.storage
@@ -96,14 +98,14 @@ export async function POST(request: NextRequest) {
     const publicUrl = publicUrlData?.publicUrl
 
     if (!publicUrl) {
-      console.error('❌ Failed to generate public URL')
+      console.error('âŒ Failed to generate public URL')
       return NextResponse.json(
         { error: 'Failed to generate public URL' },
         { status: 500 }
       )
     }
 
-    console.log('✅ Public URL generated:', publicUrl.substring(0, 80) + '...')
+    console.log('âœ… Public URL generated:', publicUrl.substring(0, 80) + '...')
 
     // Update student record with photo URL using service role
     const { data: updateData, error: updateError } = await supabaseAdmin
@@ -112,14 +114,14 @@ export async function POST(request: NextRequest) {
       .eq('id', student_id)
 
     if (updateError) {
-      console.error('❌ Database update failed:', updateError)
+      console.error('âŒ Database update failed:', updateError)
       return NextResponse.json(
         { error: `Database update failed: ${updateError.message}` },
         { status: 500 }
       )
     }
 
-    console.log('✅ Database updated with photo URL')
+    console.log('âœ… Database updated with photo URL')
 
     return NextResponse.json(
       {
@@ -130,10 +132,11 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     )
   } catch (error: any) {
-    console.error('❌ Server error:', error)
+    console.error('âŒ Server error:', error)
     return NextResponse.json(
       { error: `Server error: ${error.message}` },
       { status: 500 }
     )
   }
 }
+

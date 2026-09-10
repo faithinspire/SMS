@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * GET /api/teacher/cbt-test-scores
@@ -141,7 +143,7 @@ export async function POST(request: NextRequest) {
       }
 
       result = updated
-      console.log(`[CBT Test Scores] ✅ Updated score: ${body.student_id}`)
+      console.log(`[CBT Test Scores] âœ… Updated score: ${body.student_id}`)
     } else {
       // Create new score
       const { data: created, error } = await supabase
@@ -165,7 +167,7 @@ export async function POST(request: NextRequest) {
       }
 
       result = created
-      console.log(`[CBT Test Scores] ✅ Created score: ${body.student_id}`)
+      console.log(`[CBT Test Scores] âœ… Created score: ${body.student_id}`)
     }
 
     return NextResponse.json({
@@ -180,3 +182,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

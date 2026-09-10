@@ -91,6 +91,18 @@ const nextConfig = {
   experimental: {
     staticPageGenerationTimeout: undefined,
   },
+  // NUCLEAR BYPASS: Use rewrites to prevent static generation of API routes
+  async rewrites() {
+    return {
+      beforeFiles: [
+        // All /api/* routes are dynamic - never statically generate them
+        {
+          source: '/api/:path*',
+          destination: '/api/:path*',
+        },
+      ],
+    }
+  },
   webpack: (config, { isServer }) => {
     config.optimization = {
       ...config.optimization,

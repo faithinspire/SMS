@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * GET /api/teacher/cbt-test-slots
@@ -166,7 +168,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`[CBT Test Slots] ✅ Created test slot: ${slot.id} (Test ${slot.test_number})`)
+    console.log(`[CBT Test Slots] âœ… Created test slot: ${slot.id} (Test ${slot.test_number})`)
 
     return NextResponse.json({
       success: true,
@@ -180,3 +182,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

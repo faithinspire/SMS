@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * POST /api/results/validate-scores
@@ -105,3 +107,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

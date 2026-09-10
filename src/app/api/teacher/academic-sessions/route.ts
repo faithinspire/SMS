@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * GET /api/teacher/academic-sessions
@@ -126,3 +128,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

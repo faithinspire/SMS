@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { RegistrationDiagnosticService } from '@/services/registration-diagnostic.service'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * REGISTRATION DATA PIPELINE DIAGNOSTIC
@@ -23,7 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('\n' + '='.repeat(80))
-    console.log('🔍 REGISTRATION DATA PIPELINE DIAGNOSTIC')
+    console.log('ðŸ” REGISTRATION DATA PIPELINE DIAGNOSTIC')
     console.log('='.repeat(80))
     console.log('School ID:', schoolId)
     console.log('='.repeat(80) + '\n')
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     console.log('\n' + report)
     console.log('\n' + '='.repeat(80))
-    console.log('PIPELINE STATUS:', isHealthy ? '✅ HEALTHY' : '❌ BROKEN')
+    console.log('PIPELINE STATUS:', isHealthy ? 'âœ… HEALTHY' : 'âŒ BROKEN')
     console.log('='.repeat(80) + '\n')
 
     return NextResponse.json({
@@ -59,3 +61,4 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+

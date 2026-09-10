@@ -1,4 +1,4 @@
-/**
+﻿/**
  * API Endpoint: POST /api/upload/student-photo
  * Handles student photo upload to Supabase Storage
  * 
@@ -12,6 +12,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { uploadFile } from '@/lib/file-upload';
+export const dynamic = 'force-dynamic'
+
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -264,3 +266,4 @@ export async function OPTIONS() {
     }
   );
 }
+

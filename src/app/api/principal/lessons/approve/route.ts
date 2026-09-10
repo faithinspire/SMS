@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * PUT /api/principal/lessons/[lessonId]/approve
@@ -78,3 +80,4 @@ export async function PUT(
     )
   }
 }
+

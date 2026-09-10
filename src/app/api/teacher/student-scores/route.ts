@@ -1,13 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
 import { CanonicalSubjectService } from '@/services/canonical-subject.service'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * GET /api/teacher/student-scores
  * 
  * Fetch scores for a specific student's subjects from CANONICAL source
  * 
- * ⭐ Reads from: score_sheets table (single source of truth)
+ * â­ Reads from: score_sheets table (single source of truth)
  * 
  * QUERY PARAMS:
  * - school_id: UUID (required)
@@ -168,7 +170,7 @@ export async function GET(request: NextRequest) {
  * 
  * Save scores for a student's subjects into CANONICAL score_sheets table
  * 
- * ⭐ Writes to: score_sheets (single source of truth)
+ * â­ Writes to: score_sheets (single source of truth)
  * - Sets source='MANUAL' for manual teacher entry
  * - Handles both INSERT and UPDATE operations
  */
@@ -328,3 +330,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

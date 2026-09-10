@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 export async function DELETE(req: NextRequest) {
   try {
@@ -56,3 +58,4 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 })
   }
 }
+

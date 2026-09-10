@@ -1,12 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * GET /api/student/report-card
  * 
  * Generate report card for a student for a specific term
  * 
- * ⭐ CANONICAL DATA SOURCE: Reads ONLY from score_sheets table
+ * â­ CANONICAL DATA SOURCE: Reads ONLY from score_sheets table
  * - All scores flow through score_sheets (MANUAL entry by subject teachers or AUTO from CBT)
  * - Includes source tracking (MANUAL vs CBT) for transparency
  * - No duplicate data - single source of truth
@@ -295,3 +297,4 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+

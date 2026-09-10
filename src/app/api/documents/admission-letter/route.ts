@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 export async function GET(req: NextRequest) {
   try {
@@ -238,7 +240,7 @@ export async function GET(req: NextRequest) {
 
         <!-- Title -->
         <div class="letter-title">
-          📜 Letter of Admission
+          ðŸ“œ Letter of Admission
         </div>
 
         <!-- Recipient Info -->
@@ -263,7 +265,7 @@ export async function GET(req: NextRequest) {
           <div class="info-item">
             <span class="info-label">Subjects Enrolled:</span>
             <span class="info-value">
-              ${subjects.map((s: any) => `<strong>${s.name}</strong> (${s.code})`).join(' • ')}
+              ${subjects.map((s: any) => `<strong>${s.name}</strong> (${s.code})`).join(' â€¢ ')}
             </span>
           </div>
           ` : ''}
@@ -327,7 +329,7 @@ export async function GET(req: NextRequest) {
         <!-- Footer -->
         <div class="footer">
           <p style="margin: 5px 0;">
-            © ${new Date().getFullYear()} ${school.name}. All rights reserved.
+            Â© ${new Date().getFullYear()} ${school.name}. All rights reserved.
           </p>
           <p style="margin: 5px 0;">
             This is an electronically generated letter and is valid without a signature.
@@ -406,3 +408,4 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+

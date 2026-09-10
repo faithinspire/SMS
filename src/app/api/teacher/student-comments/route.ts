@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * GET /api/teacher/student-comments
@@ -105,7 +107,7 @@ export async function POST(request: NextRequest) {
 
       if (error) throw error
       result = updated
-      console.log(`[Teacher Comments] ✅ Updated comment for student ${body.student_id}`)
+      console.log(`[Teacher Comments] âœ… Updated comment for student ${body.student_id}`)
     } else {
       // Create new comment
       const { data: created, error } = await supabase
@@ -123,7 +125,7 @@ export async function POST(request: NextRequest) {
 
       if (error) throw error
       result = created
-      console.log(`[Teacher Comments] ✅ Created comment for student ${body.student_id}`)
+      console.log(`[Teacher Comments] âœ… Created comment for student ${body.student_id}`)
     }
 
     return NextResponse.json({
@@ -138,3 +140,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

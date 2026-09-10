@@ -1,4 +1,4 @@
-/**
+﻿/**
  * API Endpoint: POST /api/superadmin/seed-school
  * Manually seed a school with Nigerian curriculum
  * Used to seed existing schools that don't have classes/subjects
@@ -9,6 +9,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { seedSchoolCurriculum } from '@/lib/school-seeding'
+export const dynamic = 'force-dynamic'
+
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,7 +24,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    console.log(`🌱 Seeding school ${school_id}...`)
+    console.log(`ðŸŒ± Seeding school ${school_id}...`)
     
     const result = await seedSchoolCurriculum(school_id)
 
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    console.log(`✅ Seeding complete for ${school_id}`)
+    console.log(`âœ… Seeding complete for ${school_id}`)
 
     return NextResponse.json(
       {
@@ -59,3 +61,4 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+

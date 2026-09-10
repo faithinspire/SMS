@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * PATCH /api/results/update-comment
@@ -73,3 +75,4 @@ export async function PATCH(request: NextRequest) {
     )
   }
 }
+

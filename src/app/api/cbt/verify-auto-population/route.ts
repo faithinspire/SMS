@@ -1,16 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * GET /api/cbt/verify-auto-population?submission_id=UUID
  * 
  * Verify that a CBT submission has been auto-populated into score_sheets
- * This is for testing and debugging the CBT → score_sheets sync flow
+ * This is for testing and debugging the CBT â†’ score_sheets sync flow
  * 
  * RETURNS:
  * - submission: the cbt_submissions record
  * - score_sheet: the related score_sheets record (if exists)
- * - mapping: the assessment_type → score column mapping
+ * - mapping: the assessment_type â†’ score column mapping
  * - success: whether auto-population was successful
  */
 export async function GET(request: NextRequest) {
@@ -144,14 +146,14 @@ export async function GET(request: NextRequest) {
 
       if (actualScore !== null && actualSource === 'CBT') {
         autoPopulationStatus.success = true
-        autoPopulationStatus.reason = `✅ CBT score auto-populated: ${expectedScoreColumn}=${actualScore} from submission`
+        autoPopulationStatus.reason = `âœ… CBT score auto-populated: ${expectedScoreColumn}=${actualScore} from submission`
       } else if (actualScore === null) {
-        autoPopulationStatus.reason = `❌ ${expectedScoreColumn} is NULL (not populated)`
+        autoPopulationStatus.reason = `âŒ ${expectedScoreColumn} is NULL (not populated)`
       } else if (actualSource !== 'CBT') {
-        autoPopulationStatus.reason = `❌ ${expectedSourceColumn} is '${actualSource}' (expected 'CBT')`
+        autoPopulationStatus.reason = `âŒ ${expectedSourceColumn} is '${actualSource}' (expected 'CBT')`
       }
     } else {
-      autoPopulationStatus.reason = `❌ Unknown assessment type: ${assessmentType}`
+      autoPopulationStatus.reason = `âŒ Unknown assessment type: ${assessmentType}`
     }
 
     return NextResponse.json(autoPopulationStatus, { status: 200 })
@@ -165,3 +167,4 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+

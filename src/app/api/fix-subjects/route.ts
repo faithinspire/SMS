@@ -1,5 +1,7 @@
-import { supabase } from '@/lib/supabase-client'
+﻿import { supabase } from '@/lib/supabase-client'
 import { NextRequest, NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * POST /api/fix-subjects?schoolId=YOUR_SCHOOL_ID
@@ -26,7 +28,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`🔧 [FIX SUBJECTS] Starting repair for school: ${schoolId}`)
+    console.log(`ðŸ”§ [FIX SUBJECTS] Starting repair for school: ${schoolId}`)
 
     // Step 1: Get all subjects for the school
     const { data: allSubjects, error: fetchError } = await supabase
@@ -41,14 +43,14 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    console.log(`📊 [FIX SUBJECTS] Found ${allSubjects?.length || 0} total subjects`)
+    console.log(`ðŸ“Š [FIX SUBJECTS] Found ${allSubjects?.length || 0} total subjects`)
 
     // Step 2: Identify broken subjects (empty or null applicable_to_levels)
     const brokenSubjects = (allSubjects || []).filter(s => 
       !s.applicable_to_levels || s.applicable_to_levels.length === 0
     )
 
-    console.log(`❌ [FIX SUBJECTS] Found ${brokenSubjects.length} subjects with empty applicable_to_levels`)
+    console.log(`âŒ [FIX SUBJECTS] Found ${brokenSubjects.length} subjects with empty applicable_to_levels`)
 
     if (brokenSubjects.length === 0) {
       return NextResponse.json({
@@ -109,7 +111,7 @@ export async function POST(request: NextRequest) {
         newLevels: newLevels
       })
 
-      console.log(`🔨 Fixing "${subject.name}": ${newLevels.join(', ')}`)
+      console.log(`ðŸ”¨ Fixing "${subject.name}": ${newLevels.join(', ')}`)
     }
 
     // Step 4: Apply updates to database
@@ -133,7 +135,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    console.log(`✅ [FIX SUBJECTS] Successfully fixed ${updates.length} subjects`)
+    console.log(`âœ… [FIX SUBJECTS] Successfully fixed ${updates.length} subjects`)
 
     // Step 5: Verify the fix by checking subjects per class
     const { data: classes } = await supabase
@@ -184,7 +186,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('❌ [FIX SUBJECTS] Error:', error)
+    console.error('âŒ [FIX SUBJECTS] Error:', error)
     return NextResponse.json({
       error: 'Internal server error',
       details: error.message
@@ -208,7 +210,7 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`🔍 [SUBJECTS DIAGNOSTIC] Scanning school: ${schoolId}`)
+    console.log(`ðŸ” [SUBJECTS DIAGNOSTIC] Scanning school: ${schoolId}`)
 
     // Get all subjects
     const { data: subjects } = await supabase
@@ -250,7 +252,7 @@ export async function GET(request: NextRequest) {
           issue: 'applicable_to_levels is empty or null'
         })),
         subjectsPerClass,
-        status: brokenSubjects.length === 0 ? '✅ All subjects configured' : `❌ ${brokenSubjects.length} subjects need fixing`
+        status: brokenSubjects.length === 0 ? 'âœ… All subjects configured' : `âŒ ${brokenSubjects.length} subjects need fixing`
       },
       recommendation: brokenSubjects.length > 0 
         ? `Run: POST /api/fix-subjects?schoolId=${schoolId}`
@@ -263,3 +265,4 @@ export async function GET(request: NextRequest) {
     }, { status: 500 })
   }
 }
+

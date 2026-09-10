@@ -1,4 +1,4 @@
-/**
+﻿/**
  * API Endpoint: POST /api/upload/school-logo
  * Handles school logo upload to Supabase Storage
  * 
@@ -11,6 +11,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+export const dynamic = 'force-dynamic'
+
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -119,3 +121,4 @@ export async function OPTIONS() {
     }
   )
 }
+

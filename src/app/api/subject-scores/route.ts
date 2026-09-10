@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+export const dynamic = 'force-dynamic'
+
 
 /**
  * POST /api/subject-scores
@@ -131,7 +133,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[API] ✓ Student verified:', student_id)
+    console.log('[API] âœ“ Student verified:', student_id)
 
     // ========================================================================
     // STEP 4: VERIFY STUDENT IS ENROLLED IN THIS SUBJECT
@@ -153,7 +155,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[API] ✓ Student enrollment verified:', subject_id)
+    console.log('[API] âœ“ Student enrollment verified:', subject_id)
 
     // ========================================================================
     // STEP 5: VERIFY TERM/SESSION
@@ -204,7 +206,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid term' }, { status: 400 })
     }
 
-    console.log('[API] ✓ Term verified:', currentTermId)
+    console.log('[API] âœ“ Term verified:', currentTermId)
 
     // ========================================================================
     // STEP 6: GET ACADEMIC SESSION (required for multi-year support)
@@ -223,7 +225,7 @@ export async function POST(request: NextRequest) {
       sessionYear = session?.session_year || null
     }
 
-    console.log('[API] ✓ Academic session resolved:', academicSessionId, sessionYear)
+    console.log('[API] âœ“ Academic session resolved:', academicSessionId, sessionYear)
 
     // ========================================================================
     // STEP 7: CHECK FOR EXISTING SCORE (prevent duplicates via UNIQUE constraint)
@@ -244,7 +246,7 @@ export async function POST(request: NextRequest) {
       throw checkError
     }
 
-    console.log('[API] ✓ Existing score check:', existingScore?.id ? 'FOUND' : 'NEW')
+    console.log('[API] âœ“ Existing score check:', existingScore?.id ? 'FOUND' : 'NEW')
 
     // ========================================================================
     // STEP 8: PREPARE SCORE DATA FOR UPSERT
@@ -256,8 +258,8 @@ export async function POST(request: NextRequest) {
       subject_id,
       term_id: currentTermId,
       class_arm_combo_id: student.class_arm_combo_id, // Use student's actual class
-      academic_session_id: academicSessionId, // ✅ Track for multi-year support
-      session_year: sessionYear, // ✅ Backup denormalization
+      academic_session_id: academicSessionId, // âœ… Track for multi-year support
+      session_year: sessionYear, // âœ… Backup denormalization
       test1: test1 ?? null,
       test2: test2 ?? null,
       test3: test3 ?? null,
@@ -302,7 +304,7 @@ export async function POST(request: NextRequest) {
         throw result.error
       }
 
-      console.log('[API] ✓ Score updated successfully')
+      console.log('[API] âœ“ Score updated successfully')
     } else {
       console.log('[API] Mode: INSERT new score')
 
@@ -320,14 +322,14 @@ export async function POST(request: NextRequest) {
         throw result.error
       }
 
-      console.log('[API] ✓ Score created successfully')
+      console.log('[API] âœ“ Score created successfully')
     }
 
     // ========================================================================
     // STEP 10: RESPONSE SUCCESS
     // ========================================================================
 
-    console.log('[API] ✓ Request completed successfully')
+    console.log('[API] âœ“ Request completed successfully')
 
     return NextResponse.json({
       success: true,
@@ -345,3 +347,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
