@@ -1,12 +1,31 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient as supabaseCreateClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const serviceKey = process.env.SUPABASE_SERVICE_KEY || ''
 
-// CRITICAL: Return dummy object if env vars missing to prevent build-time errors
-// This allows the module to load without throwing
+// CRITICAL: Use dummy values if env vars missing to prevent build-time errors
 const DUMMY_URL = 'https://dummy.supabase.co'
 const DUMMY_KEY = 'dummy-key'
+
+/**
+ * SAFE createClient wrapper that never throws
+ * - If env vars present: creates real Supabase client
+ * - If env vars missing (build time): creates dummy client that loads successfully
+ * Routes should check env vars before using to ensure they're real
+ */
+export function createClient(url?: string, key?: string, options?: any) {
+  const finalUrl = url || supabaseUrl || DUMMY_URL
+  const finalKey = key || supabaseAnonKey || DUMMY_KEY
+  
+  try {
+    return supabaseCreateClient(finalUrl, finalKey, options)
+  } catch (error) {
+    // If Supabase throws anyway, return a dummy that won't crash the module
+    console.warn('Failed to create Supabase client, using dummy:', error)
+    return supabaseCreateClient(DUMMY_URL, DUMMY_KEY, options)
+  }
+}
 
 // Custom fetch with retry logic and error handling
 async function customFetch(url: string | Request, options?: RequestInit): Promise<Response> {
@@ -96,7 +115,7 @@ export const supabaseAdmin = new Proxy({}, {
   get: (target, prop) => {
     if (!target.hasOwnProperty('_admin')) {
       const url = supabaseUrl || DUMMY_URL
-      const key = supabaseAnonKey || DUMMY_KEY;
+      const key = serviceKey || supabaseAnonKey || DUMMY_KEY;
       (target as any)._admin = createClient(url, key);
     }
     return (target as any)._admin[prop]

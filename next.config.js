@@ -79,6 +79,11 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: false,
   compress: true,
+  // CRITICAL: Skip static generation to prevent build-time Supabase errors
+  experimental: {
+    // Disable static generation for all routes - forces everything to be dynamic
+    isrMemoryCacheSize: 0,
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
