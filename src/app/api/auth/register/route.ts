@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// Force dynamic rendering - this route must run at request time, not build time
+export const dynamic = 'force-dynamic'
+
 // Create admin client with service role key for bypassing auth restrictions
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',

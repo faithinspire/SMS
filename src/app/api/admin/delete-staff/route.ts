@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
 
+// Force dynamic rendering - this route must run at request time, not build time
+export const dynamic = 'force-dynamic'
+
 export async function DELETE(req: NextRequest) {
   try {
     const { staffId } = await req.json()
