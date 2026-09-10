@@ -1,19 +1,25 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AuthService } from '@/services/auth.service'
 
 export default function Home() {
   const router = useRouter()
+  const [isRedirecting, setIsRedirecting] = useState(true)
 
   useEffect(() => {
+    let mounted = true
+
     const checkAndRedirect = async () => {
       try {
         const user = await AuthService.getCurrentUser()
         
+        if (!mounted) return
+
         if (!user) {
           // No user logged in, show landing page
+          setIsRedirecting(false)
           router.push('/landing')
           return
         }
@@ -57,6 +63,10 @@ export default function Home() {
     }
 
     checkAndRedirect()
+
+    return () => {
+      mounted = false
+    }
   }, [router])
 
   return (

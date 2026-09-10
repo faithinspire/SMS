@@ -4,28 +4,34 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
-import {
-  SCHOOL_CLASSES,
-  DEPARTMENTS,
-  getSubjectsForClass,
-  getClassById,
-  generateAdmissionNumber,
-} from '@/constants/nigerian-subjects'
+import { RegistrationConfigService } from '@/services/registration-config.service'
+
+// Simple admission number generator (replaces deleted nigerian-subjects.ts)
+const generateAdmissionNumber = (classId?: string, sequence?: number): string => {
+  const seq = sequence || Math.floor(Math.random() * 10000)
+  const timestamp = Date.now().toString().slice(-4)
+  return `ADM-${timestamp}-${seq.toString().padStart(5, '0')}`
+}
 
 export default function StudentRegisterPage() {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingData, setLoadingData] = useState(true)
   const [error, setError] = useState<string>('')
   const [success, setSuccess] = useState<string>('')
   const [darkMode, setDarkMode] = useState(false)
   const [showDepartment, setShowDepartment] = useState(false)
   const [availableSubjects, setAvailableSubjects] = useState<any[]>([])
+  const [schools, setSchools] = useState<any[]>([])
+  const [classes, setClasses] = useState<any[]>([])
+  const [streams, setStreams] = useState<any[]>([])
 
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     dateOfBirth: '',
+    school_id: '',
     className: '',
     department: '',
     subjects: [] as string[],
@@ -40,15 +46,89 @@ export default function StudentRegisterPage() {
     setMounted(true)
   }, [])
 
+  // Load schools and classes
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setLoadingData(true)
+        const schoolsList = await AuthService.getAllSchools()
+        setSchools(schoolsList)
+      } catch (err) {
+        console.error('Error loading schools:', err)
+        setError('Failed to load schools')
+      } finally {
+        setLoadingData(false)
+      }
+    }
+
+    loadInitialData()
+  }, [])
+
+  // Load classes and streams when school is selected
+  useEffect(() => {
+    const loadClassData = async () => {
+      if (!formData.school_id) {
+        setClasses([])
+        setStreams([])
+        setFormData((prev) => ({ ...prev, className: '', department: '', subjects: [] }))
+        setAvailableSubjects([])
+        return
+      }
+
+      try {
+        const [classesData, streamsData] = await Promise.all([
+          RegistrationConfigService.getClassArmCombos(formData.school_id),
+          RegistrationConfigService.getStreams(formData.school_id),
+        ])
+
+        // Group classes by class (not by arm)
+        const uniqueClasses = Array.from(
+          new Map(
+            classesData.map((c) => [c.class_id, c.classes])
+          ).values()
+        )
+
+        setClasses(uniqueClasses)
+        setStreams(streamsData)
+      } catch (err) {
+        console.error('Error loading class data:', err)
+        setError('Failed to load classes and departments')
+      }
+    }
+
+    loadClassData()
+  }, [formData.school_id])
+
   // Update available subjects when class changes
   useEffect(() => {
-    if (formData.className) {
-      const subjects = getSubjectsForClass(formData.className)
-      setAvailableSubjects(subjects)
-    } else {
-      setAvailableSubjects([])
+    const loadSubjects = async () => {
+      if (!formData.className || !formData.school_id) {
+        setAvailableSubjects([])
+        setFormData((prev) => ({ ...prev, department: '', subjects: [] }))
+        return
+      }
+
+      try {
+        const selectedClass = classes.find((c) => c.id === formData.className)
+        if (!selectedClass) {
+          setAvailableSubjects([])
+          return
+        }
+
+        const allSubjects = await RegistrationConfigService.getSubjects(formData.school_id)
+        const filtered = RegistrationConfigService.filterSubjectsByLevel(
+          allSubjects,
+          selectedClass.level?.toString() || ''
+        )
+        setAvailableSubjects(filtered)
+      } catch (err) {
+        console.error('Error loading subjects:', err)
+        setAvailableSubjects([])
+      }
     }
-  }, [formData.className])
+
+    loadSubjects()
+  }, [formData.className, formData.school_id, classes])
 
   // Check if department should be shown (SS1-SS3)
   useEffect(() => {
@@ -169,30 +249,64 @@ export default function StudentRegisterPage() {
     setLoading(true)
 
     try {
-      // Generate admission number (using a sequence - in production, this would come from backend)
+      // Generate admission number
       const sequence = Math.floor(Math.random() * 10000)
       const admissionNumber = generateAdmissionNumber(formData.className, sequence)
 
-      // Register with auth service (basic fields only)
+      // ✅ FIX: Get class_arm_combo_id from selected class
+      const selectedClass = classes.find(c => c.id === formData.className)
+      if (!selectedClass) {
+        setError('Please select a valid class')
+        setLoading(false)
+        return
+      }
+
+      // Create the class arm combo for this student
+      const allClassCombos = await RegistrationConfigService.getClassArmCombos(formData.school_id)
+      const classArmComboId = allClassCombos.find(c => c.class_id === formData.className)?.id
+
+      if (!classArmComboId) {
+        setError('Class configuration not found. Please contact administrator.')
+        setLoading(false)
+        return
+      }
+
+      // ✅ FIX: Now register with FULL information including class and subjects
       await AuthService.registerStudent({
         fullName: formData.fullName,
         email: formData.email,
         password: formData.password,
-        schoolId: '', // Note: In production, this should be obtained from context/session
+        school_id: formData.school_id,
       })
 
-      // TODO: In production, also save extended student info to the database:
-      // - dateOfBirth: formData.dateOfBirth
-      // - className: formData.className
-      // - department: formData.department
-      // - subjects: formData.subjects
-      // - admissionNumber: admissionNumber
+      // ✅ CRITICAL FIX: Also create the complete student record with class and subjects
+      // This was the missing TODO - now implemented
+      const response = await fetch('/api/auth/register-student-complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email,
+          full_name: formData.fullName,
+          school_id: formData.school_id,
+          class_arm_combo_id: classArmComboId, // ✅ CRUCIAL: Now passing class ID
+          admission_number: admissionNumber,
+          subject_ids: formData.subjects, // ✅ Also pass selected subjects
+          date_of_birth: formData.dateOfBirth,
+          department: formData.department,
+        }),
+      })
 
-      setSuccess('✅ Student account created successfully!')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to complete student registration')
+      }
+
+      setSuccess('✅ Student account created successfully! Check your email to verify.')
       setFormData({
         fullName: '',
         email: '',
         dateOfBirth: '',
+        school_id: '',
         className: '',
         department: '',
         subjects: [],
@@ -204,6 +318,7 @@ export default function StudentRegisterPage() {
         router.push('/auth/student/login')
       }, 2000)
     } catch (err: any) {
+      console.error('❌ Registration error:', err)
       setError(err.message || 'Registration failed. Please try again.')
     } finally {
       setLoading(false)
@@ -254,7 +369,6 @@ export default function StudentRegisterPage() {
           </button>
         </div>
 
-        <div className={`${cardClass} rounded-xl shadow-2xl p-8 md:p-10`}>
           {/* Form Header */}
           <div className="text-center mb-8">
             <p className={`text-lg ${subTextClass}`}>
@@ -276,7 +390,10 @@ export default function StudentRegisterPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          {loadingData ? (
+            <div className={`text-center py-8 ${subTextClass}`}>Loading schools and classes...</div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-5">
             {/* Full Name */}
             <div>
               <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
@@ -311,6 +428,31 @@ export default function StudentRegisterPage() {
               />
             </div>
 
+            {/* School Selection */}
+            <div>
+              <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
+                School <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="school_id"
+                value={formData.school_id}
+                onChange={handleInputChange}
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-all ${inputClass}`}
+                required
+                aria-label="School"
+              >
+                <option value="">Select your school...</option>
+                {schools.map((school) => (
+                  <option key={school.id} value={school.id}>
+                    {school.name}
+                  </option>
+                ))}
+              </select>
+              <p className={`text-xs ${subTextClass} mt-1`}>
+                🏫 Select your school to continue
+              </p>
+            </div>
+
             {/* Date of Birth */}
             <div>
               <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
@@ -328,32 +470,34 @@ export default function StudentRegisterPage() {
             </div>
 
             {/* Class/Grade Selection */}
-            <div>
-              <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                Class/Grade <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="className"
-                value={formData.className}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-all ${inputClass}`}
-                required
-                aria-label="Class/Grade"
-              >
-                <option value="">Select your class...</option>
-                {SCHOOL_CLASSES.map((cls) => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.name} ({cls.type})
-                  </option>
-                ))}
-              </select>
-              <p className={`text-xs ${subTextClass} mt-1`}>
-                📚 From Prep to SS3 (Grades 0-12)
-              </p>
-            </div>
+            {formData.school_id && (
+              <div>
+                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
+                  Class/Grade <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="className"
+                  value={formData.className}
+                  onChange={handleInputChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-all ${inputClass}`}
+                  required
+                  aria-label="Class/Grade"
+                >
+                  <option value="">Select your class...</option>
+                  {classes.map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name} ({cls.type})
+                    </option>
+                  ))}
+                </select>
+                <p className={`text-xs ${subTextClass} mt-1`}>
+                  📚 From Prep to SS3 (Grades 0-12)
+                </p>
+              </div>
+            )}
 
             {/* Department Selection (SS1-SS3 only) */}
-            {showDepartment && (
+            {showDepartment && formData.school_id && (
               <div>
                 <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
                   Department <span className="text-red-500">*</span>
@@ -367,9 +511,9 @@ export default function StudentRegisterPage() {
                   aria-label="Department"
                 >
                   <option value="">Select your department...</option>
-                  {DEPARTMENTS.map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name} - {dept.description}
+                  {streams.map((stream) => (
+                    <option key={stream.id} value={stream.id}>
+                      {stream.name}
                     </option>
                   ))}
                 </select>

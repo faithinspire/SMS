@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { UserRegistrationService } from '@/services/user-registration.service'
 import { User } from '@/types'
-import TeacherRegistrationModal from '@/components/admin/TeacherRegistrationModal'
+import { TeacherRegistrationModal } from '@/components/admin/TeacherRegistrationModal'
 import StudentRegistrationModal from '@/components/admin/StudentRegistrationModal'
 
 export default function SchoolRecordsPage() {
@@ -41,10 +41,10 @@ export default function SchoolRecordsPage() {
 
       setUser(currentUser)
 
-      if (currentUser.schoolId) {
+      if (currentUser.school_id) {
         const [studentList, staffList] = await Promise.all([
-          UserRegistrationService.getSchoolStudents(currentUser.schoolId),
-          UserRegistrationService.getSchoolStaff(currentUser.schoolId),
+          UserRegistrationService.getSchoolStudents(currentUser.school_id),
+          UserRegistrationService.getSchoolStaff(currentUser.school_id),
         ])
 
         setStudents(studentList || [])
@@ -409,7 +409,7 @@ export default function SchoolRecordsPage() {
 
       {/* Teacher Registration Modal */}
       <TeacherRegistrationModal
-        schoolId={user?.schoolId || ''}
+        schoolId={user?.school_id || ''}
         isOpen={showTeacherModal}
         onClose={() => setShowTeacherModal(false)}
         onSuccess={() => loadData()}
@@ -417,7 +417,7 @@ export default function SchoolRecordsPage() {
 
       {/* Student Registration Modal */}
       <StudentRegistrationModal
-        schoolId={user?.schoolId || ''}
+        schoolId={user?.school_id || ''}
         isOpen={showStudentModal}
         onClose={() => setShowStudentModal(false)}
         onSuccess={() => loadData()}

@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CBTService } from '@/services/cbt.service'
 import { TeacherService } from '@/services/teacher.service'
-import { useAuth } from '@/lib/useAuth'
+import { AuthService } from '@/services/auth.service'
+import { supabase } from '@/lib/supabase-client'
 
 interface Exam {
   id: string
@@ -30,7 +31,8 @@ interface SubjectClass {
 
 export default function CBTExamsPage() {
   const router = useRouter()
-  const { user, school } = useAuth()
+  const [user, setUser] = useState<any>(null)
+  const [school, setSchool] = useState<any>(null)
 
   const [exams, setExams] = useState<Exam[]>([])
   const [selectedSubjectClass, setSelectedSubjectClass] = useState<SubjectClass | null>(null)
@@ -53,19 +55,48 @@ export default function CBTExamsPage() {
   const [success, setSuccess] = useState<string>('')
 
   useEffect(() => {
-    if (!user || user.role !== 'TEACHER' || !school) {
-      router.push('/landing')
-      return
+    const checkAuth = async () => {
+      try {
+        const currentUser = await AuthService.getCurrentUser()
+
+        if (!currentUser || currentUser.role !== 'TEACHER') {
+          router.push('/landing')
+          return
+        }
+
+        setUser(currentUser)
+
+        // Load school data
+        if (currentUser.school_id) {
+          const { data: schoolData } = await supabase
+            .from('schools')
+            .select('*')
+            .eq('id', currentUser.school_id)
+            .single()
+          setSchool(schoolData)
+        }
+      } catch (err) {
+        console.error('Error checking auth:', err)
+        router.push('/landing')
+      }
     }
 
-    loadTeacherData()
+    checkAuth()
+  }, [router])
+
+  useEffect(() => {
+    if (user && school) {
+      loadTeacherData()
+    }
   }, [user, school])
 
   const loadTeacherData = async () => {
     try {
       if (!user || !school) return
 
+      console.log('🔄 Loading teacher dashboard data...')
       const dashboardData = await TeacherService.getTeacherDashboard(user.id, school.id)
+      console.log('✅ Dashboard data:', dashboardData)
 
       const classes: SubjectClass[] = []
 
@@ -76,20 +107,31 @@ export default function CBTExamsPage() {
             subjectId: subject.subjects.id,
             subjectName: subject.subjects.name,
             classArmComboId: classInfo.id,
-            className: `${classInfo.classes.name} ${classInfo.arms.name}`,
+            className: `${classInfo.classes?.name || 'Unknown'} - ${classInfo.arms?.name || 'Unknown'}`,
+          })
+          console.log('✅ Added class-subject combo:', {
+            subject: subject.subjects.name,
+            class: classInfo.classes?.name,
+            arm: classInfo.arms?.name,
           })
         }
       }
 
+      console.log('✅ Total subject-class combos:', classes.length)
       setSubjectClasses(classes)
+      
       if (classes.length > 0) {
+        console.log('✅ Setting first combo as selected')
         setSelectedSubjectClass(classes[0])
         await loadExams(classes[0])
+      } else {
+        console.warn('⚠️ No subject-class combos found for this teacher')
+        setError('No subjects or classes assigned to you. Contact your administrator.')
       }
 
       setLoading(false)
     } catch (err) {
-      console.error('Error loading teacher data:', err)
+      console.error('❌ Error loading teacher data:', err)
       setError('Failed to load exam data')
       setLoading(false)
     }
@@ -97,10 +139,12 @@ export default function CBTExamsPage() {
 
   const loadExams = async (subjectClass: SubjectClass) => {
     try {
-      if (!school) return
+      if (!user || !school) return
+
+      const schoolId = school.id || (user as any).school_id
 
       const examsData = await CBTService.getExamsForTeacher(
-        school.id,
+        schoolId,
         subjectClass.subjectId,
         subjectClass.classArmComboId
       )
@@ -138,11 +182,14 @@ export default function CBTExamsPage() {
     setSuccess('')
 
     try {
+      const schoolId = school.id || (user as any).school_id
+      const userId = user.id
+
       await CBTService.createExam({
-        schoolId: school.id,
+        schoolId: schoolId,
         subjectId: selectedSubjectClass.subjectId,
         classArmComboId: selectedSubjectClass.classArmComboId,
-        createdBy: user.id,
+        createdBy: userId,
         title: formData.title,
         description: formData.description,
         examType: formData.examType,
@@ -238,11 +285,16 @@ export default function CBTExamsPage() {
             onChange={handleSubjectClassChange}
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {subjectClasses.map(sc => (
-              <option key={`${sc.subjectId}-${sc.classArmComboId}`} value={sc.subjectId}>
-                {sc.subjectName} - {sc.className}
-              </option>
-            ))}
+            <option value="">Select Subject - Class</option>
+            {subjectClasses.length > 0 ? (
+              subjectClasses.map(sc => (
+                <option key={`${sc.subjectId}-${sc.classArmComboId}`} value={sc.subjectId}>
+                  {sc.subjectName} - {sc.className}
+                </option>
+              ))
+            ) : (
+              <option disabled>Loading classes...</option>
+            )}
           </select>
 
           <button

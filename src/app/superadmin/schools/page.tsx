@@ -61,6 +61,7 @@ export default function SchoolsManagementPage() {
     const fetchSchools = async () => {
       try {
         setError(null)
+        console.log('🔄 [DASHBOARD] Starting to fetch schools...')
         
         // Get a fresh token from Supabase session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession()
@@ -71,22 +72,31 @@ export default function SchoolsManagementPage() {
         }
 
         const token = session.access_token
+        console.log('✅ [DASHBOARD] Got valid session token')
 
         // Fetch all schools from the correct endpoint
+        console.log('📡 [DASHBOARD] Calling /api/schools endpoint...')
         const response = await fetch('/api/schools', {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
         })
         
+        console.log(`📊 [DASHBOARD] Response status: ${response.status}`)
+        
         if (!response.ok) {
           throw new Error(`Failed to fetch schools (${response.status})`)
         }
         
         const data = await response.json()
+        console.log('✅ [DASHBOARD] Received data from /api/schools:', data)
+        
         if (!Array.isArray(data)) {
+          console.error('❌ [DASHBOARD] Invalid data format, expected array:', typeof data, data)
           throw new Error('Invalid schools data format')
         }
+        
+        console.log(`📋 [DASHBOARD] Got ${data.length} schools`)
         
         // Fetch counts for each school
         const schoolsWithCounts = await Promise.all(
@@ -107,9 +117,10 @@ export default function SchoolsManagementPage() {
             return school
           })
         )
+        console.log(`✅ [DASHBOARD] Set ${schoolsWithCounts.length} schools in state`)
         setSchools(schoolsWithCounts)
       } catch (err) {
-        console.error('Error fetching schools:', err)
+        console.error('❌ [DASHBOARD] Error fetching schools:', err)
         setError(err instanceof Error ? err.message : 'Failed to load schools. Please try again.')
       }
     }

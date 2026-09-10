@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Populate Schools with Classes & Subjects</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .school-list {
+            margin-bottom: 30px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .school-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            gap: 10px;
+        }
+
+        .school-item:last-child {
+            border-bottom: none;
+        }
+
+        .school-info {
+            flex: 1;
+        }
+
+        .school-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .school-id {
+            font-size: 12px;
+            color: #999;
+            font-family: monospace;
+        }
+
+        .status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .status.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.loading {
+            background: #cfe2ff;
+            color: #084298;
+        }
+
+        .status.success {
+            background: #d1e7dd;
+            color: #0f5132;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #842029;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-populate {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-populate:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-populate:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-refresh {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-refresh:hover {
+            background: #d0d0d0;
+        }
+
+        .stats {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .log-area {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
+            line-height: 1.4;
+        }
+
+        .log-line {
+            margin-bottom: 4px;
+        }
+
+        .log-info { color: #00ff00; }
+        .log-success { color: #00ff00; }
+        .log-warn { color: #ffff00; }
+        .log-error { color: #ff6b6b; }
+
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #667eea;
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 Populate Schools</h1>
+        <p class="subtitle">Add classes and subjects to all schools for teacher and student registration</p>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="totalSchools">0</div>
+                <div class="stat-label">Total Schools</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="populatedSchools">0</div>
+                <div class="stat-label">Populated</div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-populate" id="populateBtn" onclick="populateAllSchools()">
+                ✅ Populate All Schools
+            </button>
+            <button class="btn-refresh" onclick="loadSchools()">
+                🔄 Refresh
+            </button>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressBar"></div>
+        </div>
+
+        <div class="school-list" id="schoolList">
+            <div class="empty-state">
+                <div class="empty-state-icon">⏳</div>
+                <p>Loading schools...</p>
+            </div>
+        </div>
+
+        <div class="log-area" id="logArea"></div>
+    </div>
+
+    <script>
+        const apiUrl = 'http://localhost:3000';
+        let schools = [];
+        let populatedCount = 0;
+
+        function log(message, type = 'info') {
+            const logArea = document.getElementById('logArea');
+            const line = document.createElement('div');
+            line.className = `log-line log-${type}`;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logArea.appendChild(line);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        async function loadSchools() {
+            try {
+                log('Loading schools...', 'info');
+                document.getElementById('populateBtn').disabled = true;
+
+                const response = await fetch(`${apiUrl}/api/schools`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                schools = await response.json();
+                log(`✅ Found ${schools.length} schools`, 'success');
+                document.getElementById('totalSchools').textContent = schools.length;
+
+                renderSchools();
+            } catch (error) {
+                log(`❌ Error loading schools: ${error.message}`, 'error');
+                showEmptyState();
+            }
+        }
+
+        function renderSchools() {
+            const schoolList = document.getElementById('schoolList');
+            
+            if (schools.length === 0) {
+                schoolList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🏫</div>
+                        <p>No schools found. Create a school first!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            schoolList.innerHTML = schools.map((school, index) => `
+                <div class="school-item" id="school-${school.id}">
+                    <div class="school-info">
+                        <div class="school-name">${school.name}</div>
+                        <div class="school-id">${school.id}</div>
+                    </div>
+                    <div class="status pending" id="status-${school.id}">Pending</div>
+                </div>
+            `).join('');
+        }
+
+        function showEmptyState() {
+            const schoolList = document.getElementById('schoolList');
+            schoolList.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">⚠️</div>
+                    <p>Could not load schools. Make sure the API is running.</p>
+                </div>
+            `;
+        }
+
+        async function populateAllSchools() {
+            if (schools.length === 0) {
+                log('❌ No schools to populate', 'error');
+                return;
+            }
+
+            log(`🚀 Starting population for ${schools.length} schools...`, 'info');
+            document.getElementById('populateBtn').disabled = true;
+            populatedCount = 0;
+            document.getElementById('populatedSchools').textContent = '0';
+
+            for (let i = 0; i < schools.length; i++) {
+                const school = schools[i];
+                const progress = ((i + 1) / schools.length) * 100;
+                document.getElementById('progressBar').style.width = progress + '%';
+
+                await populateSchool(school, i + 1);
+            }
+
+            log('✅ All schools processed!', 'success');
+            document.getElementById('populateBtn').disabled = false;
+        }
+
+        async function populateSchool(school, index) {
+            try {
+                const statusEl = document.getElementById(`status-${school.id}`);
+                statusEl.textContent = 'Loading...';
+                statusEl.className = 'status loading';
+
+                log(`[${index}/${schools.length}] Populating: ${school.name}...`, 'info');
+
+                const response = await fetch(`${apiUrl}/api/setup/init-school-data`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ schoolId: school.id })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    statusEl.textContent = '✅ Done';
+                    statusEl.className = 'status success';
+                    populatedCount++;
+                    log(`✅ ${school.name}: ${result.data.stats.classCount} classes, ${result.data.stats.subjectCount} subjects`, 'success');
+                } else if (result.status === 'already_exists') {
+                    statusEl.textContent = '⏭️ Exists';
+                    statusEl.className = 'status pending';
+                    populatedCount++;
+                    log(`⏭️ ${school.name}: Already populated (${result.classCount} classes)`, 'warn');
+                } else {
+                    statusEl.textContent = '❌ Error';
+                    statusEl.className = 'status error';
+                    log(`❌ ${school.name}: ${result.message}`, 'error');
+                }
+
+                document.getElementById('populatedSchools').textContent = populatedCount;
+            } catch (error) {
+                const statusEl = document.getElementById(`status-${school.id}`);
+                statusEl.textContent = '❌ Error';
+                statusEl.className = 'status error';
+                log(`❌ ${school.name}: ${error.message}`, 'error');
+            }
+        }
+
+        // Load schools on page load
+        window.addEventListener('load', loadSchools);
+    </script>
+</body>
+</html>

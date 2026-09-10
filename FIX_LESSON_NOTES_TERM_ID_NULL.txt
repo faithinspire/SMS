@@ -1,0 +1,225 @@
+================================================================================
+         FIX: LESSON NOTE - NULL VALUE IN COLUMN TERM_ID
+================================================================================
+
+ERROR:
+  "Null value in column 'term_id' of relation 'lesson_notes' 
+   violates not-null constraint"
+
+CAUSE:
+  The database requires term_id but teacher is creating lesson notes 
+  without selecting a term. term_id should be OPTIONAL.
+
+✅ SOLUTION:
+  1. Run Migration 099 (make term_id nullable)
+  2. Code already fixed (removed null term_id from insert)
+
+================================================================================
+                       STEP 1: RUN MIGRATION 099
+================================================================================
+
+File: database/migrations/099_make_lesson_notes_term_id_optional.sql
+
+This migration:
+  ✅ Removes NOT NULL constraint from term_id column
+  ✅ Makes term_id OPTIONAL in lesson_notes table
+  ✅ Teachers can now create notes without selecting term
+  ✅ term_id will default to NULL
+
+Steps:
+  1. Go to Supabase SQL Editor
+  2. Create new query
+  3. Copy-paste ENTIRE content of migration 099
+  4. Click Run
+  5. Done! ✅
+
+Expected Output:
+  ✅ Query successful
+  No errors
+
+Migration 099 Content (if needed):
+
+  BEGIN;
+  
+  ALTER TABLE lesson_notes 
+    ALTER COLUMN term_id DROP NOT NULL;
+  
+  COMMIT;
+
+================================================================================
+                    STEP 2: RESTART DEV SERVER
+================================================================================
+
+After running migration 099:
+
+1. Kill dev server: Ctrl+C
+2. Restart: npm run dev
+3. Wait for "Ready on http://localhost:3000"
+
+================================================================================
+                   STEP 3: TEST LESSON NOTE CREATION
+================================================================================
+
+Now test if lesson note creation works:
+
+1. Go to /teacher/lesson-notes
+2. Click "✚ Create Lesson Note"
+3. Fill out form:
+   - Topic/Title: "Introduction to Algebra"
+   - Subject: (select any)
+   - Class: (select any)
+   - Content: (write something)
+   - Upload File: (optional - select PDF or document)
+
+4. Click "✚ Create Lesson Note"
+
+Expected Result:
+  ✅ "Lesson note created successfully!"
+  ✅ No errors
+  ✅ New note appears in list
+  ✅ No "term_id" error
+
+If Error Still Shows:
+  ❌ Check browser console (F12 → Console tab)
+  ❌ Run migration 099 again
+  ❌ Restart dev server again
+
+================================================================================
+                      WHAT WAS FIXED
+================================================================================
+
+CODE CHANGE:
+  File: src/app/teacher/lesson-notes/page.tsx
+  
+  BEFORE:
+    term_id: null,  // This caused error!
+  
+  AFTER:
+    // Don't include term_id - let it be NULL naturally
+    (field omitted from insert)
+
+DATABASE CHANGE:
+  Migration 099 makes term_id NULLABLE:
+    BEFORE: term_id UUID NOT NULL
+    AFTER: term_id UUID (nullable)
+
+RESULT:
+  ✅ Teachers can create lesson notes without assigning term
+  ✅ No NOT NULL constraint violation
+  ✅ term_id defaults to NULL in database
+  ✅ Headteacher can optionally assign term when reviewing
+
+================================================================================
+                        QUICK CHECKLIST
+================================================================================
+
+Do this NOW:
+
+☐ 1. Open migration 099_make_lesson_notes_term_id_optional.sql
+☐ 2. Copy entire content
+☐ 3. Go to Supabase SQL Editor
+☐ 4. Paste it in
+☐ 5. Click Run
+☐ 6. Wait for "Query successful"
+☐ 7. Close SQL editor
+☐ 8. Restart dev server (Ctrl+C, npm run dev)
+☐ 9. Go to /teacher/lesson-notes
+☐ 10. Try creating lesson note WITHOUT selecting term
+☐ 11. Should work! ✅
+
+================================================================================
+                  VERIFY MIGRATION RAN SUCCESSFULLY
+================================================================================
+
+In Supabase SQL Editor, run this query to verify:
+
+  SELECT column_name, is_nullable, data_type
+  FROM information_schema.columns
+  WHERE table_name = 'lesson_notes' 
+    AND column_name = 'term_id'
+  ORDER BY ordinal_position;
+
+You should see:
+  column_name: term_id
+  is_nullable: YES  ← This is what we want!
+  data_type: uuid
+
+If is_nullable is "NO", migration didn't work - run it again.
+
+================================================================================
+                    WHAT HAPPENED IN CODE
+================================================================================
+
+Before (causing error):
+
+  const { error: insertError } = await supabase
+    .from('lesson_notes')
+    .insert([
+      {
+        school_id: user?.school_id,
+        teacher_id: user?.id,
+        ...
+        term_id: null,  // ❌ ERROR: NOT NULL constraint violation!
+        ...
+      },
+    ])
+
+After (fixed):
+
+  const insertData: any = {
+    school_id: user?.school_id,
+    teacher_id: user?.id,
+    ...
+    // Don't include term_id - let it be NULL naturally
+  }
+  
+  const { error: insertError } = await supabase
+    .from('lesson_notes')
+    .insert([insertData])  // ✅ term_id will be NULL, no error
+
+================================================================================
+                     THEN TEST CREATION
+================================================================================
+
+After migration and restart:
+
+✅ Go to /teacher/lesson-notes
+✅ Click "✚ Create Lesson Note"
+✅ Fill form (no term required)
+✅ Click "✚ Create Lesson Note"
+✅ Should see: "Lesson note created successfully!"
+✅ No "term_id" error
+✅ Note appears in list
+
+Done! ✅
+
+================================================================================
+                    IF STILL FAILING
+================================================================================
+
+1. Check exact error in browser console:
+   - F12 → Console tab
+   - Look for red error
+   - Tell me the error message
+
+2. Verify migration ran:
+   - Run the verification query above
+   - Check is_nullable column
+   - It must say "YES"
+
+3. Restart dev server:
+   - Make sure you restarted
+   - Should say "Ready on http://localhost:3000"
+
+4. Try again:
+   - Go to /teacher/lesson-notes
+   - Create new lesson note
+   - Check if works
+
+If still problem:
+  ✅ Migration 099 might not have run
+  ✅ Run it again in Supabase
+  ✅ Make sure you see "Query successful"
+  ✅ Then restart dev server
+
+================================================================================

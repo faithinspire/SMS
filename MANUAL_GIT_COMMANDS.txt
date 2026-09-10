@@ -1,0 +1,42 @@
+MANUAL GIT COMMANDS - Terminal Hard Fix
+========================================
+
+If the scripts don't work, run these commands ONE BY ONE in Git Bash:
+
+STEP 1: Navigate to project
+cd "c:\Users\OLU\Desktop\SMS"
+
+STEP 2: Check status
+git status
+
+STEP 3: Stage all changes
+git add .
+
+STEP 4: Commit the fix
+git commit -m "fix: remove invalid functions pattern from vercel.json"
+
+STEP 5: Push to GitHub
+git push -u origin main
+
+STEP 6: Verify push succeeded
+git status
+(Should say: "Your branch is up to date with 'origin/main'")
+
+========================================
+DONE! Your code is now on GitHub.
+
+Next:
+1. Go to https://vercel.com/dashboard
+2. Check your project deployment status
+3. Wait for green checkmark (takes 2-3 minutes)
+4. Click the URL when ready
+5. Test the app!
+
+========================================
+
+If you get stuck:
+- Try running the .bat or .ps1 scripts
+- Or copy-paste commands one at a time
+- Make sure you're in the right directory
+
+========================================

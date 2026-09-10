@@ -169,6 +169,12 @@ export async function validateFile(
  * Validates image dimensions
  */
 async function validateImageDimensions(file: File, fileType: FileType): Promise<boolean> {
+  // On server-side, skip dimension validation (it requires browser Image API)
+  if (typeof document === 'undefined') {
+    // Server-side: only check file size
+    return file.size > 0;
+  }
+
   return new Promise((resolve) => {
     try {
       const reader = new FileReader();
@@ -188,18 +194,29 @@ async function validateImageDimensions(file: File, fileType: FileType): Promise<
   });
 }
 
-// ============================================================================
-// IMAGE COMPRESSION & OPTIMIZATION
-// ============================================================================
+/**
+ * Image Compression & Optimization - DISABLED ON SERVER
+ * These functions should not be called from server-side API routes
+ * as they depend on browser APIs (document, canvas, FileReader, Image)
+ * 
+ * For server-side compression, use 'sharp' library (requires npm install sharp)
+ */
 
 /**
- * Compresses and optimizes image file
+ * Compresses and optimizes image file - CLIENT SIDE ONLY
  * Returns compressed image as Blob
+ * @deprecated Use on client-side only, not in server-side routes
  */
 export async function compressImage(
   file: File,
   options?: ImageCompressionOptions
 ): Promise<Blob> {
+  // Check if we're in a browser environment
+  if (typeof document === 'undefined') {
+    // Server-side: return original file as blob
+    return file;
+  }
+
   return new Promise((resolve, reject) => {
     try {
       const reader = new FileReader();
@@ -266,12 +283,19 @@ export async function compressImage(
 }
 
 /**
- * Generates thumbnail from image
+ * Generates thumbnail from image - CLIENT SIDE ONLY
+ * @deprecated Use on client-side only, not in server-side routes
  */
 export async function generateThumbnail(
   file: File,
   thumbSize: number = 150
 ): Promise<Blob> {
+  // Check if we're in a browser environment
+  if (typeof document === 'undefined') {
+    // Server-side: return original file as blob
+    return file;
+  }
+
   return new Promise((resolve, reject) => {
     try {
       const reader = new FileReader();
@@ -474,7 +498,7 @@ export async function getFileUploads(
 
 /**
  * Main upload function - handles entire workflow
- * Validates → Compresses → Uploads → Records in DB
+ * Validates → Compresses (client-side only) → Uploads → Records in DB
  */
 export async function uploadFile(
   file: File,
@@ -499,16 +523,24 @@ export async function uploadFile(
     let finalFileName = file.name;
     let compressionUsed = false;
 
-    // Step 2: Compress if needed
-    if (config.compressionOptions && fileType.includes('PHOTO') || fileType === 'SCHOOL_LOGO') {
-      try {
-        const compressed = await compressImage(file, config.compressionOptions);
-        fileToUpload = compressed;
-        compressionUsed = true;
-        const ext = config.compressionOptions.format;
-        finalFileName = `${file.name.split('.')[0]}.${ext}`;
-      } catch (error) {
-        console.warn('Compression failed, using original file:', error);
+    // Step 2: Compression is skipped on server-side
+    // If compression is needed, it should be done on client-side before upload
+    // For now, we'll upload original file
+    if (typeof document === 'undefined') {
+      // We're on server-side, skip compression
+      compressionUsed = false;
+    } else {
+      // Client-side: Attempt compression if needed
+      if (config.compressionOptions && (fileType.includes('PHOTO') || fileType === 'SCHOOL_LOGO')) {
+        try {
+          const compressed = await compressImage(file, config.compressionOptions);
+          fileToUpload = compressed;
+          compressionUsed = true;
+          const ext = config.compressionOptions.format;
+          finalFileName = `${file.name.split('.')[0]}.${ext}`;
+        } catch (error) {
+          console.warn('Compression failed, using original file:', error);
+        }
       }
     }
 
@@ -520,9 +552,9 @@ export async function uploadFile(
       schoolId
     );
 
-    // Step 4: Generate thumbnail if applicable
+    // Step 4: Thumbnail generation skipped on server-side
     let thumbnailUrl: string | undefined;
-    if (fileType.includes('PHOTO') || fileType === 'SCHOOL_LOGO') {
+    if (typeof document !== 'undefined' && (fileType.includes('PHOTO') || fileType === 'SCHOOL_LOGO')) {
       try {
         const thumbnail = await generateThumbnail(file);
         const thumbFileName = `thumb_${finalFileName}`;

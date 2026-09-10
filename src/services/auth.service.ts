@@ -7,8 +7,9 @@ export interface User {
   id: string
   email: string
   name: string
+  full_name?: string // Alias for name (for backwards compatibility)
   role: 'SUPER_ADMIN' | 'ADMIN' | 'SCHOOL_ADMIN' | 'PRINCIPAL' | 'HEAD_TEACHER' | 'TEACHER' | 'ACCOUNTANT' | 'STAFF' | 'STUDENT'
-  schoolId?: string
+  school_id?: string
   createdAt: string
   loginMethod?: 'auth' | 'fallback'
 }
@@ -29,14 +30,14 @@ export interface RegisterSchoolAdminInput {
   email: string
   password: string
   fullName: string
-  schoolId: string
+  school_id: string
 }
 
 export interface RegisterStaffInput {
   email: string
   password: string
   fullName: string
-  schoolId: string
+  school_id: string
   role?: 'TEACHER' | 'PRINCIPAL' | 'HEAD_TEACHER' | 'ACCOUNTANT'
 }
 
@@ -44,7 +45,7 @@ export interface RegisterStudentInput {
   email: string
   password: string
   fullName: string
-  schoolId: string
+  school_id: string
 }
 
 export interface LoginInput {
@@ -125,7 +126,7 @@ export class AuthService {
           data: {
             name: input.fullName,
             role: 'ADMIN',
-            schoolId: input.schoolId,
+            school_id: input.school_id,
           },
         },
       })
@@ -138,7 +139,7 @@ export class AuthService {
         email: data.user.email || '',
         name: input.fullName,
         role: 'ADMIN',
-        schoolId: input.schoolId,
+        school_id: input.school_id,
         createdAt: new Date().toISOString(),
       }
     } catch (error: any) {
@@ -158,7 +159,7 @@ export class AuthService {
           data: {
             name: input.fullName,
             role: staffRole,
-            schoolId: input.schoolId,
+            school_id: input.school_id,
           },
         },
       })
@@ -171,7 +172,7 @@ export class AuthService {
         email: data.user.email || '',
         name: input.fullName,
         role: staffRole as any,
-        schoolId: input.schoolId,
+        school_id: input.school_id,
         createdAt: new Date().toISOString(),
       }
     } catch (error: any) {
@@ -210,7 +211,7 @@ export class AuthService {
           data: {
             name: input.fullName,
             role: 'STUDENT',
-            schoolId: input.schoolId,
+            school_id: input.school_id,
           },
         },
       })
@@ -223,7 +224,7 @@ export class AuthService {
         email: data.user.email || '',
         name: input.fullName,
         role: 'STUDENT',
-        schoolId: input.schoolId,
+        school_id: input.school_id,
         createdAt: new Date().toISOString(),
       }
     } catch (error: any) {
@@ -297,7 +298,7 @@ export class AuthService {
             email: data.user.email || '',
             name: data.user.user_metadata?.name || '',
             role: data.user.user_metadata?.role || 'STUDENT',
-            schoolId: data.user.user_metadata?.schoolId,
+            school_id: data.user.user_metadata?.school_id,
             createdAt: data.user.created_at,
             loginMethod: 'auth',
           },
@@ -315,11 +316,11 @@ export class AuthService {
           console.log('✅ Fallback login successful')
           return {
             user: {
-              id: `fallback_${fallbackResult.schoolId}`,
+              id: `fallback_${fallbackResult.school_id}`,
               email: fallbackResult.adminEmail || input.email,
               name: `${fallbackResult.schoolName} Admin`,
               role: 'ADMIN',
-              schoolId: fallbackResult.schoolId,
+              school_id: fallbackResult.school_id,
               createdAt: new Date().toISOString(),
               loginMethod: 'fallback',
             },
@@ -368,11 +369,12 @@ export class AuthService {
       if (fallbackSession) {
         console.log('📋 Using fallback session for user:', fallbackSession.adminEmail)
         return {
-          id: `fallback_${fallbackSession.schoolId}`,
+          id: `fallback_${fallbackSession.school_id}`,
           email: fallbackSession.adminEmail,
           name: `${fallbackSession.schoolName} Admin`,
+          full_name: `${fallbackSession.schoolName} Admin`, // Add this
           role: 'SCHOOL_ADMIN',
-          schoolId: fallbackSession.schoolId,
+          school_id: fallbackSession.school_id,
           createdAt: fallbackSession.loginTime,
           loginMethod: 'fallback',
         }
@@ -385,39 +387,57 @@ export class AuthService {
       console.log('👤 Auth user:', data.user.id, 'Email:', data.user.email)
       
       // PRIMARY: Get role and school_id from users table (authoritative source)
+      // Note: User might not exist in users table yet (created in auth.users only)
       try {
-        const { data: userRecord, error: userError } = await supabase
+        const { data: userRecords, error: userError } = await supabase
           .from('users')
           .select('role, school_id, full_name')
           .eq('id', data.user.id)
-          .single()
 
-        if (!userError && userRecord) {
+        if (!userError && userRecords && userRecords.length > 0) {
+          const userRecord = userRecords[0]
           console.log('✅ User record found:', userRecord.role, 'School:', userRecord.school_id)
           return {
             id: data.user.id,
             email: data.user.email || '',
             name: userRecord.full_name || data.user.user_metadata?.name || '',
+            full_name: userRecord.full_name || data.user.user_metadata?.name || '', // Add this
             role: (userRecord.role || 'STUDENT') as any,
-            schoolId: userRecord.school_id,
+            school_id: userRecord.school_id,
             createdAt: data.user.created_at,
             loginMethod: 'auth',
           }
+        } else if (userError) {
+          // Log the specific error for debugging
+          console.warn('⚠️ User table query error:', userError.message || userError)
+        } else {
+          // User exists in auth but not in users table - use metadata
+          console.warn('⚠️ User not found in users table, falling back to metadata')
         }
       } catch (dbError) {
         console.warn('Could not fetch user record from database:', dbError)
       }
 
       // FALLBACK: Use metadata if database lookup fails
+      // This handles cases where the trigger hasn't created the users table record yet
       const role = data.user.user_metadata?.role as string
-      console.log('⚠️ Using metadata role:', role)
+      const school_id = data.user.user_metadata?.school_id as string
+      
+      console.log('⚠️ Using metadata role:', role, 'school_id:', school_id)
+      
+      // Map 'ADMIN' role from old system to 'SCHOOL_ADMIN'
+      let mappedRole = role || 'STUDENT'
+      if (mappedRole === 'ADMIN') {
+        mappedRole = 'SCHOOL_ADMIN'
+      }
       
       return {
         id: data.user.id,
         email: data.user.email || '',
         name: data.user.user_metadata?.name || '',
-        role: (role || 'STUDENT') as any,
-        schoolId: data.user.user_metadata?.schoolId,
+        full_name: data.user.user_metadata?.name || '', // Add this
+        role: (mappedRole || 'STUDENT') as any,
+        school_id: school_id,
         createdAt: data.user.created_at,
         loginMethod: 'auth',
       }

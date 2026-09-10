@@ -38,7 +38,7 @@ export default function StudentLoginPage() {
         password: formData.password,
       })
 
-      router.push('/dashboard')
+      router.push('/student/dashboard')
     } catch (err: any) {
       setError(err.message || 'Login failed')
     } finally {

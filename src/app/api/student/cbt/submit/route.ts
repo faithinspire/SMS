@@ -1,251 +1,355 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabase } from '@/lib/supabase-client'
+
 /**
- * API Endpoint: POST /api/student/cbt/submit
- * Handles CBT submission and auto-grading
- * Calculates score, stores answers, records attempt
+ * POST /api/student/cbt/submit
+ * Submit a completed CBT exam
  * 
- * Authentication: Required
- * Authorization: STUDENT only
+ * STEPS:
+ * 1. Mark submission as SUBMITTED
+ * 2. Auto-grade MCQ/True-False questions
+ * 3. Calculate total score and percentage
+ * 4. Create/update score_sheets entry
+ * 5. Lock submission
  * 
- * Request: {
- *   cbt_exam_id,
- *   answers: { [question_id]: answer_text },
- *   time_spent: number (seconds),
- *   auto_submitted?: boolean
- * }
- * Response: { success, submission, score, message }
+ * REQUIRED FIELDS:
+ * - school_id: UUID
+ * - submission_id: UUID
+ * - student_id: UUID
+ * 
+ * RETURNS:
+ * - Final score, percentage, and result
  */
-
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-async function verifyStudent(token: string) {
-  try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    
-    if (userError || !user) {
-      return { authorized: false, error: 'Unauthorized' };
-    }
-
-    const { data: userProfile, error: profileError } = await supabase
-      .from('users')
-      .select('id, role, school_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !userProfile) {
-      return { authorized: false, error: 'User not found' };
-    }
-
-    if (userProfile.role !== 'STUDENT') {
-      return { authorized: false, error: 'Only students can submit CBT' };
-    }
-
-    return { authorized: true, userId: user.id, schoolId: userProfile.school_id };
-  } catch (error) {
-    return { authorized: false, error: 'Authorization failed' };
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const body = await request.json()
+
+    const { school_id, submission_id, student_id } = body
+
+    if (!school_id || !submission_id || !student_id) {
       return NextResponse.json(
-        { success: false, error: 'Missing authorization' },
-        { status: 401 }
-      );
+        { error: 'Missing required fields: school_id, submission_id, student_id' },
+        { status: 400 }
+      )
     }
 
-    const token = authHeader.substring(7);
-    const body = await request.json();
-    const { cbt_exam_id: cbtExamId, answers, time_spent: timeSpent, auto_submitted } = body;
-
-    // Verify student
-    const auth = await verifyStudent(token);
-    if (!auth.authorized) {
-      return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: 403 }
-      );
-    }
-
-    // Get student ID
-    const { data: student, error: studentError } = await supabase
-      .from('students')
-      .select('id')
-      .eq('user_id', auth.userId)
-      .eq('school_id', auth.schoolId)
-      .single();
-
-    if (studentError || !student) {
-      return NextResponse.json(
-        { success: false, error: 'Student record not found' },
-        { status: 404 }
-      );
-    }
-
-    // Get CBT exam details
-    const { data: cbtExam, error: examError } = await supabase
-      .from('cbt_exams')
-      .select('id, total_marks, passing_percentage')
-      .eq('id', cbtExamId)
-      .single();
-
-    if (examError || !cbtExam) {
-      return NextResponse.json(
-        { success: false, error: 'CBT exam not found' },
-        { status: 404 }
-      );
-    }
-
-    // Get all questions for this exam
-    const { data: questions, error: questionsError } = await supabase
-      .from('cbt_questions')
-      .select(`
-        id,
-        question_type,
-        marks,
-        cbt_options (
-          id,
-          option_text,
-          is_correct
-        )
-      `)
-      .eq('cbt_exam_id', cbtExamId);
-
-    if (questionsError) throw questionsError;
-
-    // Calculate score
-    let totalScore = 0;
-    const scoreDetails: Record<string, { marks: number; awarded: number }> = {};
-
-    for (const question of questions || []) {
-      const studentAnswer = answers[question.id];
-      let marksAwarded = 0;
-
-      if (studentAnswer !== undefined && studentAnswer !== null) {
-        if (question.question_type === 'MULTIPLE_CHOICE') {
-          // Check if selected option is correct
-          const correctOption = question.cbt_options?.find(opt => opt.is_correct);
-          if (correctOption && studentAnswer === correctOption.id) {
-            marksAwarded = question.marks;
-          }
-        } else if (question.question_type === 'TRUE_FALSE') {
-          // Check true/false answer
-          const correctAnswer = question.cbt_options?.find(opt => opt.is_correct);
-          if (correctAnswer && studentAnswer === correctAnswer.option_text.toLowerCase()) {
-            marksAwarded = question.marks;
-          }
-        } else if (question.question_type === 'THEORY') {
-          // Theory questions are manually graded - default to 0, teacher grades later
-          marksAwarded = 0;
-        }
-      }
-
-      totalScore += marksAwarded;
-      scoreDetails[question.id] = {
-        marks: question.marks,
-        awarded: marksAwarded,
-      };
-    }
-
-    // Create submission record
+    // Get submission with exam details
     const { data: submission, error: submissionError } = await supabase
       .from('cbt_submissions')
-      .insert([
-        {
-          school_id: auth.schoolId,
-          cbt_exam_id: cbtExamId,
-          student_id: student.id,
-          started_at: new Date(Date.now() - (timeSpent || 0) * 1000).toISOString(),
-          submitted_at: new Date().toISOString(),
-          auto_submitted: auto_submitted || false,
-          score: totalScore,
-          answers: answers,
-          device_info: {
-            user_agent: request.headers.get('user-agent'),
-          },
-        },
-      ])
-      .select()
-      .single();
+      .select(
+        `
+        id,
+        cbt_exam_id,
+        student_id,
+        status,
+        started_at,
+        total_marks,
+        assessment_type,
+        term_id,
+        cbt_exams (
+          id,
+          subject_id,
+          class_arm_combo_id,
+          total_marks,
+          passing_percentage,
+          assessment_type
+        )
+      `
+      )
+      .eq('id', submission_id)
+      .eq('school_id', school_id)
+      .single()
 
-    if (submissionError) throw submissionError;
+    if (submissionError || !submission) {
+      return NextResponse.json(
+        { error: 'Submission not found' },
+        { status: 404 }
+      )
+    }
 
-    // Record individual question scores
-    for (const question of questions || []) {
-      const scoreDetail = scoreDetails[question.id];
-      if (scoreDetail) {
+    if (submission.status === 'SUBMITTED' || submission.status === 'LOCKED') {
+      return NextResponse.json(
+        { error: 'Exam has already been submitted' },
+        { status: 409 }
+      )
+    }
+
+    // Get all answers for this submission
+    const { data: answers, error: answersError } = await supabase
+      .from('cbt_answers')
+      .select(
+        `
+        id,
+        question_id,
+        selected_option_id,
+        answer_text,
+        cbt_questions (
+          id,
+          question_type,
+          marks,
+          cbt_options (
+            id,
+            is_correct
+          )
+        )
+      `
+      )
+      .eq('submission_id', submission_id)
+
+    if (answersError) {
+      console.error('Error fetching answers:', answersError)
+      return NextResponse.json(
+        { error: 'Failed to retrieve answers' },
+        { status: 500 }
+      )
+    }
+
+    // Auto-grade MCQ and True-False questions
+    let totalScore = 0
+    let markedCount = 0
+    const exam = submission.cbt_exams as any
+
+    for (const answer of answers || []) {
+      const question = answer.cbt_questions as any
+      const marks = question.marks || 0
+
+      if (
+        question.question_type === 'MULTIPLE_CHOICE' ||
+        question.question_type === 'TRUE_FALSE'
+      ) {
+        // Check if answer is correct
+        let isCorrect = false
+
+        if (answer.selected_option_id && question.cbt_options) {
+          const selectedOption = question.cbt_options.find(
+            (opt: any) => opt.id === answer.selected_option_id
+          )
+          isCorrect = selectedOption?.is_correct || false
+        }
+
+        // Award marks if correct
+        if (isCorrect) {
+          totalScore += marks
+        }
+
+        // Update answer with correctness and marks
         await supabase
-          .from('cbt_submission_scores')
-          .insert([
-            {
-              submission_id: submission.id,
-              question_id: question.id,
-              student_answer: answers[question.id],
-              is_correct: scoreDetail.awarded > 0,
-              marks_awarded: scoreDetail.awarded,
-            },
-          ])
-          .catch(err => console.error('Error recording question score:', err));
+          .from('cbt_answers')
+          .update({
+            is_correct: isCorrect,
+            marks_awarded: isCorrect ? marks : 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', answer.id)
+
+        markedCount++
       }
+      // Theory questions left unmarked for now (manual grading)
     }
 
     // Calculate percentage
-    const percentageScore = (totalScore / cbtExam.total_marks) * 100;
-    const isPassed = percentageScore >= cbtExam.passing_percentage;
+    const examTotalMarks = exam.total_marks || 0
+    const percentage = examTotalMarks > 0 ? (totalScore / examTotalMarks) * 100 : 0
+    const passed = percentage >= (exam.passing_percentage || 50)
 
-    // Audit log
-    await supabase.from('audit_logs').insert({
-      school_id: auth.schoolId,
-      user_id: auth.userId,
-      action: 'SUBMIT_CBT',
-      entity_type: 'CBT_SUBMISSION',
-      entity_id: submission.id,
-      new_values: {
+    // Update submission with final scores
+    const now = new Date()
+    const { data: updatedSubmission, error: updateError } = await supabase
+      .from('cbt_submissions')
+      .update({
+        submitted_at: now.toISOString(),
+        status: 'GRADED',
         score: totalScore,
-        percentage: percentageScore.toFixed(2),
-        passed: isPassed,
-      },
-      status: 'SUCCESS',
-    }).catch(err => console.error('Audit log error:', err));
+        percentage: Math.round(percentage * 100) / 100,
+        passed,
+        graded_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq('id', submission_id)
+      .select()
+      .single()
 
-    return NextResponse.json(
-      {
-        success: true,
-        submission: {
-          id: submission.id,
-          score: totalScore,
-          percentage: percentageScore.toFixed(2),
-          passed: isPassed,
-          submitted_at: submission.submitted_at,
-        },
-        message: `CBT submitted! Score: ${totalScore}/${cbtExam.total_marks} (${percentageScore.toFixed(1)}%) - ${isPassed ? 'PASSED' : 'FAILED'}`,
+    if (updateError) {
+      console.error('Error updating submission:', updateError)
+      return NextResponse.json(
+        { error: `Failed to finalize submission: ${updateError.message}` },
+        { status: 500 }
+      )
+    }
+
+    // Get student and create/update score sheet
+    const { data: student } = await supabase
+      .from('students')
+      .select('class_arm_combo_id')
+      .eq('id', student_id)
+      .single()
+
+    // DEBUG: Log all conditions for score_sheets creation
+    console.log('[CBT Submit] Score sheet creation conditions:', {
+      hasStudent: !!student,
+      hasSubjectId: !!exam.subject_id,
+      hasAssessmentType: !!exam.assessment_type,
+      hasTermId: !!submission.term_id,
+    })
+
+    if (!student) {
+      console.error('[CBT Submit] ❌ No student found for ID:', student_id)
+    }
+    if (!exam.subject_id) {
+      console.error('[CBT Submit] ❌ No subject_id on exam:', exam.id)
+    }
+    if (!exam.assessment_type) {
+      console.error('[CBT Submit] ❌ No assessment_type on exam:', exam.id)
+    }
+    if (!submission.term_id) {
+      console.error('[CBT Submit] ❌ No term_id on submission:', submission_id)
+    }
+
+    if (student && exam.subject_id && exam.assessment_type && submission.term_id) {
+      console.log('[CBT Submit] ✅ All conditions met - proceeding with score_sheets creation')
+      
+      // BLOCKER 2 FIX: Get academic session from term (use academic_terms)
+      let academicSessionId = null
+      let sessionYear = null
+      
+      const { data: term } = await supabase
+        .from('academic_terms')
+        .select('session_id')
+        .eq('id', submission.term_id)
+        .single()
+      
+      if (term?.session_id) {
+        academicSessionId = term.session_id
+        console.log('[CBT Submit] ✅ Found academic session:', academicSessionId)
+        
+        // Get the session_year from academic_sessions
+        const { data: session } = await supabase
+          .from('academic_sessions')
+          .select('session_year')
+          .eq('id', term.session_id)
+          .single()
+        
+        sessionYear = session?.session_year || null
+        console.log('[CBT Submit] ✅ Found session year:', sessionYear)
+      } else {
+        console.warn('[CBT Submit] ⚠️ Could not find academic session for term:', submission.term_id)
+      }
+
+      // Convert exam score to appropriate column based on assessment type
+      const scoreSheetUpdate: any = {
+        school_id,
+        student_id,
+        subject_id: exam.subject_id,
+        term_id: submission.term_id,
+        academic_session_id: academicSessionId, // ✅ NOW TRACKED
+        session_year: sessionYear, // ✅ Backup field
+      }
+
+      // Map assessment type to score column
+      switch (exam.assessment_type) {
+        case 'CA1':
+          scoreSheetUpdate.test1 = Math.round((totalScore / examTotalMarks) * 10 * 100) / 100
+          scoreSheetUpdate.test1_cbt_source = submission_id
+          scoreSheetUpdate.test1_source = 'CBT'
+          break
+        case 'CA2':
+          scoreSheetUpdate.test2 = Math.round((totalScore / examTotalMarks) * 10 * 100) / 100
+          scoreSheetUpdate.test2_cbt_source = submission_id
+          scoreSheetUpdate.test2_source = 'CBT'
+          break
+        case 'CA3':
+          scoreSheetUpdate.test3 = Math.round((totalScore / examTotalMarks) * 10 * 100) / 100
+          scoreSheetUpdate.test3_cbt_source = submission_id
+          scoreSheetUpdate.test3_source = 'CBT'
+          break
+        case 'CA4':
+          scoreSheetUpdate.test4 = Math.round((totalScore / examTotalMarks) * 10 * 100) / 100
+          scoreSheetUpdate.test4_cbt_source = submission_id
+          scoreSheetUpdate.test4_source = 'CBT'
+          break
+        case 'EXAM':
+          scoreSheetUpdate.exam = Math.round((totalScore / examTotalMarks) * 60 * 100) / 100
+          scoreSheetUpdate.exam_cbt_source = submission_id
+          scoreSheetUpdate.exam_source = 'CBT'
+          break
+        default:
+          console.warn('[CBT Submit] ⚠️ Unknown assessment_type:', exam.assessment_type)
+      }
+
+      scoreSheetUpdate.updated_at = now.toISOString()
+      scoreSheetUpdate.class_arm_combo_id = student.class_arm_combo_id
+
+      // Try to update existing score sheet, otherwise insert
+      const { data: existingSheet, error: sheetSearchError } = await supabase
+        .from('score_sheets')
+        .select('id')
+        .eq('school_id', school_id)
+        .eq('student_id', student_id)
+        .eq('subject_id', exam.subject_id)
+        .eq('term_id', submission.term_id)
+        .maybeSingle()
+
+      if (sheetSearchError) {
+        console.error('[CBT Submit] ❌ Error searching for existing score_sheets:', sheetSearchError)
+      }
+
+      if (existingSheet) {
+        console.log('[CBT Submit] ✅ Updating existing score_sheets:', existingSheet.id)
+        const { error: updateSheetError } = await supabase
+          .from('score_sheets')
+          .update(scoreSheetUpdate)
+          .eq('id', existingSheet.id)
+
+        if (updateSheetError) {
+          console.error('[CBT Submit] ❌ Error updating score_sheets:', updateSheetError)
+        } else {
+          console.log('[CBT Submit] ✅ Score_sheets updated successfully')
+        }
+      } else {
+        console.log('[CBT Submit] ✅ Creating new score_sheets entry with data:', scoreSheetUpdate)
+        const { data: createdSheet, error: insertSheetError } = await supabase
+          .from('score_sheets')
+          .insert({
+            ...scoreSheetUpdate,
+            created_at: now.toISOString(),
+          })
+          .select()
+
+        if (insertSheetError) {
+          console.error('[CBT Submit] ❌ Error creating score_sheets:', insertSheetError)
+        } else {
+          console.log('[CBT Submit] ✅ Score_sheets created successfully:', createdSheet)
+        }
+      }
+    } else {
+      console.warn('[CBT Submit] ⚠️ Skipping score_sheets creation - missing required fields')
+    }
+
+    // Lock submission after successful submission
+    await supabase
+      .from('cbt_submissions')
+      .update({ status: 'LOCKED' })
+      .eq('id', submission_id)
+
+    return NextResponse.json({
+      success: true,
+      result: {
+        score: totalScore,
+        total_marks: examTotalMarks,
+        percentage: updatedSubmission.percentage,
+        passed,
+        status: 'GRADED',
+        submitted_at: updatedSubmission.submitted_at,
+        message: passed
+          ? `Congratulations! You scored ${totalScore}/${examTotalMarks}`
+          : `You scored ${totalScore}/${examTotalMarks}. Please try again.`,
       },
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error('Error submitting CBT:', error);
+    })
+  } catch (error: any) {
+    console.error('Exception in CBT submit:', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to submit CBT',
-      },
+      { error: error.message || 'Internal server error' },
       { status: 500 }
-    );
+    )
   }
-}
-
-export async function OPTIONS() {
-  return NextResponse.json({}, {
-    headers: {
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
 }

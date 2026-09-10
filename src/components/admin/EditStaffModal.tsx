@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase-client'
+import { TeacherService } from '@/services/teacher.service'
 
 interface EditStaffModalProps {
   staffId: string
@@ -72,9 +73,9 @@ export default function EditStaffModal({
       })
       setOriginalEmail(staff.email)
 
-      // Get staff subjects
+      // Get staff subjects - use canonical subject_teacher_assignments table
       const { data: staffSubjects } = await supabase
-        .from('teacher_subjects')
+        .from('subject_teacher_assignments')
         .select('subject_id')
         .eq('teacher_id', staffId)
 
@@ -153,57 +154,24 @@ export default function EditStaffModal({
     setSuccess('')
 
     try {
-      // Update basic staff information
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          full_name: staffData.full_name,
+      // Use TeacherService.updateTeacherProfile() - unified update method
+      // This handles: user updates, class assignments, subject assignments (no duplicates)
+      const updatedTeacher = await TeacherService.updateTeacherProfile(
+        staffId,
+        schoolId,
+        {
+          fullName: staffData.full_name,
           email: staffData.email,
           phone: staffData.phone,
-          employment_date: staffData.employment_date,
-          bank_name: staffData.bank_name,
-          account_number: staffData.account_number,
-          account_holder_name: staffData.account_holder_name,
-          salary_amount: staffData.salary_amount ? parseFloat(staffData.salary_amount) : null,
-        })
-        .eq('id', staffId)
-
-      if (updateError) throw updateError
-
-      // Update subjects
-      // First delete existing
-      await supabase.from('teacher_subjects').delete().eq('teacher_id', staffId)
-
-      // Then insert new
-      if (selectedSubjects.size > 0) {
-        const subjectsToInsert = Array.from(selectedSubjects).map(subjectId => ({
-          teacher_id: staffId,
-          subject_id: subjectId,
-        }))
-
-        const { error: subjectError } = await supabase
-          .from('teacher_subjects')
-          .insert(subjectsToInsert)
-
-        if (subjectError) throw subjectError
-      }
-
-      // Update class teacher assignment
-      // First remove from any existing class
-      await supabase
-        .from('class_arm_combos')
-        .update({ class_teacher_id: null })
-        .eq('class_teacher_id', staffId)
-
-      // Then assign to new class if selected
-      if (selectedClass) {
-        const { error: classError } = await supabase
-          .from('class_arm_combos')
-          .update({ class_teacher_id: staffId })
-          .eq('id', selectedClass)
-
-        if (classError) throw classError
-      }
+          employmentDate: staffData.employment_date,
+          bankName: staffData.bank_name,
+          accountNumber: staffData.account_number,
+          accountHolderName: staffData.account_holder_name,
+          salaryAmount: staffData.salary_amount ? parseFloat(staffData.salary_amount) : null,
+          classArmComboId: selectedClass || null,
+          subjectIds: Array.from(selectedSubjects),
+        }
+      )
 
       setSuccess('✅ Staff profile updated successfully!')
       setTimeout(() => {

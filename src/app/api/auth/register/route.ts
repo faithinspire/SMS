@@ -25,6 +25,7 @@ interface RegisterRequest {
 /**
  * Server-side user registration
  * Uses admin client to bypass email validation restrictions
+ * Handles existing users gracefully
  */
 export async function POST(request: NextRequest) {
   try {
@@ -42,6 +43,31 @@ export async function POST(request: NextRequest) {
     const email = body.email.trim().toLowerCase()
 
     console.log('[Auth Register] Creating user:', { email, role: body.role })
+
+    // ✅ CHECK IF USER ALREADY EXISTS
+    console.log('[Auth Register] Checking if user exists:', email)
+    const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers()
+    
+    let existingUser = null
+    if (!listError && existingUsers) {
+      existingUser = existingUsers.users.find(u => u.email?.toLowerCase() === email)
+    }
+
+    // If user already exists, return their data instead of failing
+    if (existingUser) {
+      console.log('[Auth Register] User already exists:', existingUser.id)
+      return NextResponse.json(
+        {
+          user: {
+            id: existingUser.id,
+            email: existingUser.email,
+            role: body.role,
+            message: 'User already exists - using existing account',
+          },
+        },
+        { status: 200 } // 200 OK because we're returning valid user data
+      )
+    }
 
     // Use admin API to create user (bypasses email validation)
     const { data, error } = await supabaseAdmin.auth.admin.createUser({

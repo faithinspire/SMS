@@ -33,17 +33,31 @@ export default function StudentLessonsPage() {
   const [error, setError] = useState<string>('')
 
   useEffect(() => {
-    if (!user || user.role !== 'STUDENT' || !school) {
-      router.push('/landing')
-      return
-    }
-
     loadStudentData()
-  }, [user, school])
+  }, [])
 
   const loadStudentData = async () => {
     try {
-      if (!user || !school) return
+      // Get current auth user
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      
+      if (!authUser) {
+        router.push('/landing')
+        return
+      }
+
+      // Get user profile
+      const { data: userProfile, error: userError } = await supabase
+        .from('users')
+        .select('id, school_id, role')
+        .eq('id', authUser.id)
+        .single()
+
+      if (userError || !userProfile || userProfile.role !== 'STUDENT') {
+        setError('Unauthorized: Student access required')
+        setLoading(false)
+        return
+      }
 
       // Get student record
       const { data: students, error: studentError } = await supabase

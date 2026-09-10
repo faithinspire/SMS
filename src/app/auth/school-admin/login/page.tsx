@@ -54,7 +54,7 @@ export default function SchoolAdminLoginPage() {
         password: formData.password,
       })
 
-      router.push('/dashboard')
+      router.push('/school-admin/dashboard')
     } catch (err: any) {
       setError(err.message || 'Login failed')
     } finally {

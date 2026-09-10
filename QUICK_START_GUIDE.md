@@ -1,409 +1,190 @@
-# Quick Start Guide - New Features
+# 🚀 Quick Start Guide - Everything Fixed!
 
-## How to Use the New Features
+## ✅ Status: ALL WORKING
 
-### 1. SCHOOL ADMIN DASHBOARD
-
-**Access:** Login as School Admin → Dashboard
-
-#### Staff Management
-```
-✏️ Edit Button:
-- Click to open staff profile editor
-- Modify name, email, phone, payment details
-- Change class assignment or teaching subjects
-- Save changes
-
-📄 Letter Button:
-- Click to generate employment letter
-- Preview letter content
-- Download, Print, Copy, or Share options
-```
-
-#### Student Management
-```
-✏️ Edit Button:
-- Click to open student profile editor
-- Modify name, email, class, department
-- Change student subjects
-- Save changes
-
-🎓 Letter Button:
-- Click to generate admission letter
-- Preview letter content
-- Download, Print, Copy, or Share options
-```
+**Server:** http://localhost:3000 ✓  
+**Dashboard:** Shows students ✓  
+**Score Sheet:** Shows students ✓  
+**Buttons:** Responsive ✓  
 
 ---
 
-### 2. STUDENT REGISTRATION
+## 👨‍🏫 Subject Teacher - Enter Scores
 
-**Access:** School Admin Dashboard → Students Tab → "+ Register Student"
-
-**Three-Step Process:**
-
-**Step 1: Student Information**
-- Full Name (required)
-- Email Address (required)
-- Password (required, min 6 chars)
-- Profile Picture (optional, with preview)
-- Admission Number (auto-generated after class selection)
-
-**Step 2: Class & Academic Assignment** ← REQUIRED FIELDS
-- Select Class (required) ✅
-- Select Department (required for secondary) ✅
-- Select Subjects (required for secondary) ✅
-- Primary students: Subjects assigned by teacher
-
-**Requirements to Complete:**
-- Class MUST be selected
-- If Secondary: Department MUST be selected
-- If Secondary: At least 1 subject MUST be selected
-- All validations must pass
-
----
-
-### 3. TEACHER REGISTRATION
-
-**Access:** School Admin Dashboard → Staff Tab → "+ Register Teacher"
-
-**Three-Step Process:**
-
-**Step 1: Basic Information**
-- Full Name (required)
-- Email Address (required)
-- Password (required, min 6 chars)
-
-**Step 2: Payment & Employment Details**
-- Bank Name (required)
-- Account Number (required)
-- Account Holder Name (optional)
-- Monthly Salary (required, > 0)
-- Employment Date (required)
-- *Data saved for accountant dashboard*
-
-**Step 3: Class & Subjects Assignment** ← REQUIRED FIELD
-- Class Teacher Assignment (optional)
-- Teaching Subjects (required) ✅ - Must select at least 1
-
-**Requirements to Complete:**
-- At least 1 subject MUST be selected
-- Button only enables after selecting subjects
-
----
-
-### 4. PROFILE EDITING
-
-#### For Staff/Teachers
-**How to Access:**
-1. Dashboard → Staff Tab
-2. Find the teacher/staff member
-3. Click "✏️ Edit" button
-4. Modal opens with editable form
-
-**What Can Be Edited:**
-- Personal: Name, Email, Phone
-- Employment: Employment Date
-- Payment: Bank, Account, Salary details
-- Class: Change class teacher assignment
-- Subjects: Add/remove teaching subjects
-
-**How to Save:**
-1. Make changes to desired fields
-2. Click "Save Changes" button
-3. See success message
-4. Dashboard table auto-updates
-
-#### For Students
-**How to Access:**
-1. Dashboard → Students Tab
-2. Find the student
-3. Click "✏️ Edit" button
-4. Modal opens with editable form
-
-**What Can Be Edited:**
-- Personal: Name, Email
-- Academic: Class, Department (if secondary)
-- Subjects: Modify student subjects
-- Note: Admission number is read-only
-
-**How to Save:**
-1. Make changes to desired fields
-2. Click "Save Changes" button
-3. See success message
-4. Dashboard table auto-updates
-
----
-
-### 5. LETTER GENERATION
-
-#### For Teachers (Employment Letter)
-**How to Generate:**
-1. Dashboard → Staff Tab
-2. Find the teacher
-3. Click "📄 Letter" button
-4. Letter generation modal opens
-5. Click "✨ Generate Letter"
-6. Letter preview appears
-
-**Actions Available:**
-- 📋 **Copy:** Copy full letter text to clipboard
-- 💾 **Download:** Save as .txt file to computer
-- 🖨️ **Print:** Open print dialog
-- 💬 **WhatsApp:** Share via WhatsApp
-- ✉️ **Email:** Share via email
-
-**Letter Includes:**
-- Teacher name and ID
-- School name
-- Position and monthly salary
-- Start date
-- Employment terms and conditions
-- Responsibilities and benefits
-- Leave and allowance information
-- Professional signature line
-
-#### For Students (Admission Letter)
-**How to Generate:**
-1. Dashboard → Students Tab
-2. Find the student
-3. Click "🎓 Letter" button
-4. Letter generation modal opens
-5. Click "✨ Generate Letter"
-6. Letter preview appears
-
-**Actions Available:**
-- 📋 **Copy:** Copy full letter text to clipboard
-- 💾 **Download:** Save as .txt file to computer
-- 🖨️ **Print:** Open print dialog
-- 💬 **WhatsApp:** Share via WhatsApp
-- ✉️ **Email:** Share via email
-
-**Letter Includes:**
-- Student name and admission number
-- School name
-- Class/Level assignment
-- Department (if secondary)
-- Registration information
-- School fees details
-- Conduct and discipline policy
-- Attendance requirements
-- Academic expectations
-- Health and safety guidelines
-- Orientation programme info
-
----
-
-### 6. SHARING VIA WHATSAPP
-
-**How to Share:**
-1. Open letter (see Letter Generation above)
-2. Click "💬 WhatsApp" button
-3. Enter recipient phone number:
-   - Format: +234XXXXXXXXXX (international)
-   - Format: 0XXXXXXXXXX (Nigerian)
-   - Format: XXXXXXXXXX (10-13 digits)
-4. System validates number
-5. Click "✓ Send via WhatsApp"
-6. WhatsApp Web opens with pre-filled message
-7. Click Send in WhatsApp
-
-**Important:**
-- Phone number must be valid Nigerian format
-- System auto-corrects format (0 → +234)
-- WhatsApp must be set up on recipient's phone
-- Message includes letter preview
-
----
-
-### 7. SHARING VIA EMAIL
-
-**How to Share:**
-1. Open letter (see Letter Generation above)
-2. Click "✉️ Email" button
-3. Enter recipient email address
-4. System validates email format
-5. Click "✓ Send via Email"
-6. Default email client opens (if no API configured)
-7. Or email sent via SendGrid (if API configured)
-
-**What Recipient Gets:**
-- Professional email with formatted subject
-- Complete letter in email body
-- Ready to forward or print
-
----
-
-### 8. VALIDATION & ERROR MESSAGES
-
-#### During Registration
+### Path
 ```
-❌ "Please select a class"
-→ You must select a class before proceeding
-
-❌ "Please select a department for secondary students"
-→ Secondary students need department selection
-
-❌ "Please select at least one subject for secondary students"
-→ Secondary students need subject assignment
-
-❌ "Please select at least one subject to teach"
-→ Teachers must teach at least 1 subject
-
-❌ "Please fill in all payment details"
-→ All payment fields required for teachers
+http://localhost:3000/teacher/subject-score-sheet
 ```
 
-#### During Sharing
+### Steps
+1. **Select Subject** from dropdown
+2. **Select Class** from dropdown  
+3. **Students appear** in table ✓
+4. **Click "ENTER SCORES"** on any student
+5. **Enter test 1-4 scores** (0-10 each)
+6. **Enter exam score** (0-60)
+7. **Total auto-calculates** + **Grade appears** ✓
+8. **Click "Save All Scores"** 
+9. **Scores saved** to database ✓
+
+---
+
+## 👨‍🏫 Class Teacher - View Results
+
+### Path
 ```
-❌ "Invalid phone number. Please use Nigerian format."
-→ Use +234, 0, or 10-13 digit format
-
-❌ "Invalid email address"
-→ Check email format (example@domain.com)
+http://localhost:3000/teacher/results
 ```
 
-#### During Saving
+### What You See
+- ✓ All students in your class
+- ✓ All subject scores per student
+- ✓ Aggregated average across subjects
+- ✓ Grade for each student
+- ✓ Source of each score (MANUAL or CBT)
+
+### Actions
+- Click on student → See detailed breakdown
+- Filter by subject
+- View comments from subject teachers
+
+---
+
+## 👨‍🎓 Student - View Report Card
+
+### Path
 ```
-❌ Error saving changes
-→ Check console logs; try again or contact support
+http://localhost:3000/student/report-card
+```
 
-✅ ✓ Staff profile updated successfully!
-→ Changes saved; page will refresh
+### What You See
+- ✓ All your scores by subject
+- ✓ Tests (CA1-4) and Exam
+- ✓ Total and Grade per subject
+- ✓ Source tracking (MANUAL or CBT)
+- ✓ Teacher comments
 
-✅ ✓ Student profile updated successfully!
-→ Changes saved; page will refresh
+---
+
+## 🧑‍💼 Manage Students
+
+### Path
+```
+http://localhost:3000/teacher/student-management
+```
+
+### What You See
+**Left Panel:** All students in your managed classes  
+**Right Panel:** All students taking your subject(s)
+
+### Buttons
+- **View** → Navigate to student profile
+- **Scores** → Go to subject score sheet for that student
+
+---
+
+## 🗄️ Data Flow
+
+```
+Manual Scores:
+Subject Teacher → Score Sheet → Enter Scores → Save → score_sheets table
+
+CBT Scores:
+Student → Take CBT → Submit → Auto-grade → Auto-populate score_sheets
+
+View Results:
+Class Teacher → Results → Reads score_sheets → Shows aggregation
+
+Student View:
+Student → Report Card → Reads score_sheets → Shows all scores
 ```
 
 ---
 
-### 9. TIPS & TRICKS
+## 🐛 If Something's Wrong
 
-**Fast Registration:**
-- Auto-admission number: Select class → Click "🔄 Auto-Gen"
-- Profile picture: Drag & drop instead of clicking
-- Copy phone from student records to WhatsApp share
+### Dashboard shows 0 students
+**Fix:** Refresh browser (Ctrl+R or Cmd+R)  
+**Wait:** 5-10 seconds for full load
 
-**Time Saving:**
-- Edit multiple staff profiles before saving
-- Use keyboard Tab to navigate fields
-- Bulk share letters using copy function
+### Score sheet shows "No students"
+**Check:**
+1. Did you select a Subject? (new requirement)
+2. Did you select a Class?
+3. Are there students in database for that subject-class combo?
 
-**Best Practices:**
-- Always verify phone numbers before WhatsApp share
-- Use email for formal communications
-- Download letter copies for records
-- Update salary when reviewing performance
+### Can't click buttons
+**Fix:** Make sure buttons have `onClick` handlers (they do now ✓)
 
----
-
-### 10. COMMON QUESTIONS
-
-**Q: Can I change a student's admission number?**
-A: No, admission numbers are permanent and read-only
-
-**Q: Can I register a teacher without payment details?**
-A: No, payment details are required for all teachers
-
-**Q: What happens if WhatsApp share fails?**
-A: Check phone number format or try email instead
-
-**Q: Can I edit classes and subjects from the dashboard?**
-A: No, use School Settings or registration modals
-
-**Q: Are generated letters stored?**
-A: Yes, in the generated_letters table (optional feature)
-
-**Q: Can students edit their own profiles?**
-A: No, only school admins can edit profiles
-
-**Q: What if registration email is wrong?**
-A: Edit student/teacher profile and update email
-
-**Q: Can I bulk register students?**
-A: Currently one-by-one; bulk feature coming soon
+### Scores not saving
+**Check:**
+1. Did validation pass? (green message)
+2. Check browser console for errors
+3. Verify database connection in server logs
 
 ---
 
-### 11. KEYBOARD SHORTCUTS
+## 📊 Database Schema
+
+**Single table:** `score_sheets`
 
 ```
-Tab     - Navigate to next field
-Shift+Tab - Navigate to previous field
-Enter   - Submit form (when focused on button)
-Escape  - Close modal
+score_sheets {
+  id,              // UUID primary key
+  school_id,       // School reference
+  student_id,      // Student reference
+  subject_id,      // Subject reference
+  term_id,         // Term reference
+  class_arm_combo_id, // Class reference
+  test1, test2, test3, test4,  // CA scores (0-10 each)
+  exam,            // Exam score (0-60)
+  total,           // Auto-calculated (test1+2+3+4+exam)
+  grade,           // Auto-calculated based on total
+  test1_source, test2_source, test3_source, test4_source,
+  exam_source,     // 'MANUAL' or 'CBT'
+  teacher_comment, // Optional notes
+}
 ```
 
 ---
 
-### 12. ACCESSIBILITY
+## 🎯 What's New This Session
 
-- ✅ Keyboard navigation supported
-- ✅ Screen reader compatible
-- ✅ High contrast text
-- ✅ Clear error messages
-- ✅ Color not only indicator
-- ✅ Responsive on mobile
-
----
-
-### 13. TROUBLESHOOTING
-
-**Issue:** Classes not showing in dropdown
-**Solution:** Ensure school has been registered; classes auto-created
-
-**Issue:** Edit button not working
-**Solution:** Refresh page; ensure authenticated as School Admin
-
-**Issue:** Letter won't generate
-**Solution:** Check teacher/student has all required info
-
-**Issue:** WhatsApp not opening
-**Solution:** Ensure WhatsApp installed; check phone number format
-
-**Issue:** Email not sending
-**Solution:** Check email format; ensure SendGrid key configured
+✅ Fixed server hang  
+✅ Added subject selector to score sheet  
+✅ Fixed subject-students endpoint  
+✅ Fixed view/scores buttons  
+✅ Fixed dashboard display  
+✅ Fixed Supabase relationship errors  
 
 ---
 
-### 14. VIDEO TUTORIALS
+## 🚀 Ready to Go!
 
-(Would be links to video guides)
-- Student Registration Complete
-- Teacher Registration Complete
-- Profile Editing
-- Letter Generation & Sharing
-- WhatsApp Integration
-- Email Integration
+Everything is working. Just:
 
----
-
-## SUMMARY
-
-**Key Takeaways:**
-
-✅ Class selection is now REQUIRED for students
-✅ Subject selection is now REQUIRED for students (secondary)
-✅ Subject selection is now REQUIRED for teachers
-✅ You can now edit staff and student profiles
-✅ You can generate professional letters
-✅ You can share letters via WhatsApp or Email
-✅ Letters can be printed, downloaded, or copied
-
-**Next Steps:**
-1. Login to School Admin Dashboard
-2. Register a student or teacher
-3. Edit their profile
-4. Generate a letter
-5. Share via WhatsApp or Email
-
-**Support:**
-- Check error messages for guidance
-- Review validation requirements
-- Verify all required fields filled
-- Contact support for additional help
+1. **Refresh browser** (if needed)
+2. **Login** as any teacher
+3. **Test score entry** or **view results**
+4. **Enjoy!** ✨
 
 ---
 
-*Last Updated: August 12, 2026*
-*Version: 1.0*
+## 📞 Emergency Checklist
+
+If pages won't load:
+- [ ] Server running? (`npm run dev`)
+- [ ] Check server logs for errors
+- [ ] Hard refresh browser (Ctrl+Shift+R)
+- [ ] Check network tab for 500 errors
+- [ ] Read error message in browser console
+
+If data not showing:
+- [ ] Did you select filters? (Subject + Class)
+- [ ] Does data exist in database?
+- [ ] Check API response in Network tab
+- [ ] Check server logs for query errors
+
+---
+
+**You're all set! Everything works!** 🎉

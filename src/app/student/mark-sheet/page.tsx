@@ -5,7 +5,16 @@ import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
 import { User, School } from '@/types'
-import { calculateGrade } from '@/constants/nigerian-subjects'
+
+// Grade calculation function (replaces deleted nigerian-subjects.ts)
+const calculateGrade = (total: number): string => {
+  if (total >= 90) return 'A'
+  if (total >= 80) return 'B'
+  if (total >= 70) return 'C'
+  if (total >= 60) return 'D'
+  if (total >= 50) return 'E'
+  return 'F'
+}
 
 interface SubjectScore {
   subject_id: string

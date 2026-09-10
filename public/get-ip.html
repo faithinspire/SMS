@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your IP Address</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+        
+        .info-box {
+            background: #f0f4ff;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+        
+        .info-box p {
+            color: #555;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .info-box p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .ip-display {
+            background: #667eea;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            font-weight: bold;
+            word-break: break-all;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .ip-display:hover {
+            transform: scale(1.02);
+        }
+        
+        .label {
+            display: block;
+            color: #aaa;
+            font-size: 12px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .instructions {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: left;
+        }
+        
+        .instructions h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .instructions ol {
+            margin-left: 20px;
+            color: #666;
+            line-height: 1.8;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background 0.3s;
+            margin-top: 20px;
+        }
+        
+        .button:hover {
+            background: #764ba2;
+        }
+        
+        .status {
+            margin-top: 30px;
+            padding: 15px;
+            background: #e8f5e9;
+            border-radius: 8px;
+            color: #2e7d32;
+            font-weight: bold;
+        }
+        
+        .code {
+            background: #f5f5f5;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            color: #333;
+            display: inline-block;
+            margin: 5px 0;
+            font-size: 12px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">📱</div>
+        <h1>Your Phone Connection</h1>
+        <p class="subtitle">SMS School Management System</p>
+        
+        <div class="info-box">
+            <p><strong>✅ Server Status:</strong> RUNNING</p>
+            <p><strong>🔌 Port:</strong> 3000</p>
+            <p><strong>🖥️ Server Location:</strong> Your Windows Computer</p>
+        </div>
+        
+        <div>
+            <span class="label">Your Computer's IP Address:</span>
+            <div class="ip-display" id="ip-display" onclick="copyIP()">
+                Loading...
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <h3>📲 How to Connect Your Phone:</h3>
+            <ol>
+                <li>Make sure your <strong>phone WiFi is ON</strong></li>
+                <li>Phone must be on the <strong>SAME WiFi network</strong> as your computer</li>
+                <li>Open <strong>Chrome</strong> or <strong>Safari</strong> on your phone</li>
+                <li>Type the URL shown above in the address bar</li>
+                <li>Press <strong>Enter</strong></li>
+                <li>SMS app will load on your phone! 🎉</li>
+            </ol>
+        </div>
+        
+        <button class="button" onclick="copyIP()">📋 Copy URL to Clipboard</button>
+        
+        <div class="status">
+            ✅ Ready! Your phone can now connect.
+        </div>
+    </div>
+    
+    <script>
+        // Get the computer's IP address from the server
+        async function getIP() {
+            try {
+                const response = await fetch('/api/system/ip');
+                const data = await response.json();
+                
+                if (data.success && data.ip) {
+                    const url = `http://${data.ip}:3000`;
+                    document.getElementById('ip-display').textContent = url;
+                    document.getElementById('ip-display').setAttribute('data-url', url);
+                    console.log('Your IP:', data.ip);
+                } else {
+                    document.getElementById('ip-display').textContent = 'Error getting IP';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('ip-display').textContent = 'Error getting IP';
+            }
+        }
+        
+        function copyIP() {
+            const url = document.getElementById('ip-display').getAttribute('data-url') || 
+                       document.getElementById('ip-display').textContent;
+            
+            if (url && url !== 'Loading...' && url !== 'Error getting IP') {
+                navigator.clipboard.writeText(url).then(() => {
+                    alert('✅ URL copied to clipboard!\n\n' + url);
+                }).catch(() => {
+                    alert('URL: ' + url);
+                });
+            }
+        }
+        
+        // Get IP when page loads
+        getIP();
+        
+        // Refresh every 5 seconds
+        setInterval(getIP, 5000);
+    </script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
 import { User, Student } from '@/types'
+import StaffHeader from '@/components/StaffHeader'
 
 export default function HeadmasterDashboard() {
   const router = useRouter()
@@ -39,36 +40,42 @@ export default function HeadmasterDashboard() {
 
       setUser(currentUser)
 
-      if (currentUser.schoolId) {
+      if (currentUser.school_id) {
         const { data: schoolData } = await supabase
           .from('schools')
           .select('*')
-          .eq('id', currentUser.schoolId)
+          .eq('id', currentUser.school_id)
           .single()
 
         setSchool(schoolData)
 
         const { data: classesData } = await supabase
           .from('class_arm_combos')
-          .select('*')
-          .eq('school_id', currentUser.schoolId)
+          .select(`
+            id,
+            class_id,
+            arm_id,
+            class:class_id (id, name, level),
+            arm:arm_id (id, name)
+          `)
+          .eq('school_id', currentUser.school_id)
 
         const { data: teachers } = await supabase
           .from('users')
           .select('id')
-          .eq('school_id', currentUser.schoolId)
+          .eq('school_id', currentUser.school_id)
           .eq('role', 'TEACHER')
 
         const { data: students } = await supabase
           .from('users')
           .select('id')
-          .eq('school_id', currentUser.schoolId)
+          .eq('school_id', currentUser.school_id)
           .eq('role', 'STUDENT')
 
         const { data: subjects } = await supabase
           .from('subjects')
           .select('id')
-          .eq('school_id', currentUser.schoolId)
+          .eq('school_id', currentUser.school_id)
 
         setStats({
           totalClasses: classesData?.length || 0,
@@ -91,12 +98,28 @@ export default function HeadmasterDashboard() {
     try {
       const { data: students } = await supabase
         .from('students')
-        .select('*')
+        .select('id, user_id, full_name, admission_number, class_arm_combo_id, users(full_name)')
         .eq('class_arm_combo_id', classId)
 
-      setClassStudents(students || [])
+      // Ensure we have full_name from either students table or users table
+      const enrichedStudents = (students || []).map(student => ({
+        ...student,
+        full_name: student.full_name || student.users?.full_name || 'Unknown',
+      }))
+
+      setClassStudents(enrichedStudents)
     } catch (error) {
       console.error('Error loading students:', error)
+      // Fallback to simple select if join fails
+      try {
+        const { data: students } = await supabase
+          .from('students')
+          .select('id, full_name, admission_number, class_arm_combo_id')
+          .eq('class_arm_combo_id', classId)
+        setClassStudents(students || [])
+      } catch (err) {
+        console.error('Fallback error:', err)
+      }
     } finally {
       setLoadingStudents(false)
     }
@@ -132,24 +155,62 @@ export default function HeadmasterDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            {school?.logo_url && (
-              <img src={school.logo_url} alt={school.name} className="h-12 w-12 rounded-full" />
-            )}
-            <div>
-              <h1 className="text-3xl font-bold">📚 Headmaster Dashboard</h1>
-              <p className="text-indigo-100 mt-1">{school?.name}</p>
-            </div>
+      {/* Professional Staff Header */}
+      <StaffHeader
+        staffName={user?.full_name || 'Headteacher'}
+        schoolName={school?.name || 'School'}
+        section="Headteacher Dashboard"
+      />
+
+      {/* Navigation & Quick Links */}
+      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-16 z-30">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`px-4 py-2 rounded-lg font-semibold transition ${
+                activeTab === 'overview'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              📊 Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('academics')}
+              className={`px-4 py-2 rounded-lg font-semibold transition ${
+                activeTab === 'academics'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              📚 Academics
+            </button>
+            <button
+              onClick={() => router.push('/headmaster/lesson-notes-review')}
+              className="px-4 py-2 rounded-lg font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+            >
+              📖 Lesson Notes
+            </button>
+            <button
+              onClick={() => router.push('/headmaster/broadcasts')}
+              className="px-4 py-2 rounded-lg font-semibold bg-purple-100 text-purple-700 hover:bg-purple-200 transition"
+            >
+              📢 Broadcasts
+            </button>
+            <button
+              onClick={() => router.push('/headteacher/results')}
+              className="px-4 py-2 rounded-lg font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+            >
+              📊 Results
+            </button>
+            <button
+              onClick={() => router.push('/headteacher/school-fees')}
+              className="px-4 py-2 rounded-lg font-semibold bg-green-100 text-green-700 hover:bg-green-200 transition"
+            >
+              💰 School Fees
+            </button>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition"
-          >
-            Logout
-          </button>
         </div>
       </div>
 
@@ -279,7 +340,7 @@ export default function HeadmasterDashboard() {
                   <option value="">Choose a class...</option>
                   {classes.map((cls) => (
                     <option key={cls.id} value={cls.id}>
-                      Class {cls.id}
+                      {cls.class?.name || 'Unknown'} - {cls.arm?.name || 'Arm'}
                     </option>
                   ))}
                 </select>
@@ -305,8 +366,8 @@ export default function HeadmasterDashboard() {
                         <tbody>
                           {classStudents.map((student) => (
                             <tr key={student.id} className="border-b hover:bg-gray-50">
-                              <td className="px-4 py-2">{student.id}</td>
-                              <td className="px-4 py-2">{student.admission_number}</td>
+                              <td className="px-4 py-2">{student.full_name || 'N/A'}</td>
+                              <td className="px-4 py-2">{student.admission_number || 'N/A'}</td>
                               <td className="px-4 py-2">
                                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">Active</span>
                               </td>

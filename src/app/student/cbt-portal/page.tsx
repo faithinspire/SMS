@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
 import { User, School } from '@/types'
@@ -75,7 +76,7 @@ export default function StudentCBTPortalPage() {
 
       setUser(currentUser)
 
-      if (!currentUser.schoolId) {
+      if (!currentUser.school_id) {
         console.warn('No school_id for student')
         return
       }
@@ -85,7 +86,7 @@ export default function StudentCBTPortalPage() {
         const { data: schoolData, error: schoolError } = await supabase
           .from('schools')
           .select('id, name, logo_url, status')
-          .eq('id', currentUser.schoolId)
+          .eq('id', currentUser.school_id)
           .single()
 
         if (!schoolError && schoolData) {
@@ -133,7 +134,7 @@ export default function StudentCBTPortalPage() {
               .from('cbt_exams')
               .select('*, subjects(id, name)')
               .in('subject_id', subjectIds)
-              .eq('school_id', currentUser.schoolId)
+              .eq('school_id', currentUser.school_id)
               .order('start_time', { ascending: false })
 
             if (!examsError && examsData) {
@@ -205,11 +206,12 @@ export default function StudentCBTPortalPage() {
   }
 
   const handleStartExam = (examId: string) => {
-    router.push(`/student/cbt-take/${examId}`)
+    // Hard navigation using window.location for absolute certainty
+    window.location.href = `/student/cbt/${examId}`
   }
 
   const handleViewResults = (examId: string) => {
-    router.push(`/student/cbt-results/${examId}`)
+    window.location.href = `/student/cbt/${examId}/results`
   }
 
   const bgClass = darkMode

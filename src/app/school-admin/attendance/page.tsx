@@ -63,11 +63,16 @@ export default function SchoolAdminAttendancePage() {
         // Get all classes
         const { data: classesData } = await supabase
           .from('class_arm_combos')
-          .select('id, name')
+          .select('id, classes (name), arms (name)')
           .eq('school_id', currentUser.school_id)
-          .order('name')
 
-        setClasses(classesData || [])
+        // Format classes
+        const formattedClasses = (classesData || []).map((c: any) => ({
+          id: c.id,
+          name: `${c.classes?.name || ''} - ${c.arms?.name || ''}`,
+        }))
+        
+        setClasses(formattedClasses || [])
 
         // Load attendance records
         await loadAttendance(currentUser.school_id, selectedDate)

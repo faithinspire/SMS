@@ -277,7 +277,7 @@ export class UserRegistrationService {
       } else {
         console.log('✅ Student record created:', studentRecord.id)
 
-        // Auto-link to class teacher
+        // Class teacher is already linked via class_arm_combos.class_teacher_id
         const { data: classData } = await supabase
           .from('class_arm_combos')
           .select('class_teacher_id')
@@ -285,20 +285,40 @@ export class UserRegistrationService {
           .single()
 
         if (classData?.class_teacher_id) {
-          console.log('👨‍🏫 Auto-linking to class teacher:', classData.class_teacher_id)
-          // Class teacher will automatically appear in their dashboard via queries
+          console.log('👨‍🏫 Class teacher:', classData.class_teacher_id)
+          console.log('✅ Student linked to class')
         }
 
         // Register for subjects if provided (for secondary students)
         if (data.subject_ids && data.subject_ids.length > 0) {
           console.log('📚 Registering for subjects:', data.subject_ids)
 
-          const subjectRegistrations = data.subject_ids.map(subjectId => ({
-            student_id: studentRecord.id,
-            subject_id: subjectId,
-            school_id: data.school_id,
-            created_at: new Date().toISOString(),
-          }))
+          // BLOCKER 1 FIX: Populate subject_teacher_id for each subject
+          // Query: which teacher teaches each subject in this student's class?
+          const subjectRegistrations = await Promise.all(
+            data.subject_ids.map(async (subjectId) => {
+              // Find the teacher assigned to teach this subject in this class
+              const { data: teacherAssignment, error: queryError } = await supabase
+                .from('subject_teacher_assignments')
+                .select('teacher_id')
+                .eq('school_id', data.school_id)
+                .eq('subject_id', subjectId)
+                .eq('class_arm_combo_id', data.class_arm_combo_id)
+                .maybeSingle()
+
+              if (queryError && queryError.code !== 'PGRST116') {
+                console.warn(`⚠️ Error querying teacher for subject ${subjectId}:`, queryError)
+              }
+
+              return {
+                student_id: studentRecord.id,
+                subject_id: subjectId,
+                school_id: data.school_id,
+                subject_teacher_id: teacherAssignment?.teacher_id || null, // ✅ NOW POPULATED
+                created_at: new Date().toISOString(),
+              }
+            })
+          )
 
           const { error: subjectRegError } = await supabase
             .from('student_subjects')
@@ -308,9 +328,11 @@ export class UserRegistrationService {
             console.warn('⚠️ Subject registration warning:', subjectRegError)
           } else {
             console.log('✅ Student registered for subjects')
-
-            // Auto-link to subject teachers
-            // This will happen automatically when the query joins subject teachers
+            console.log('✅ Subject teachers linked to each student subject via teacher_id')
+            console.log('📊 Subject-teacher assignments:', subjectRegistrations.map(sr => ({
+              subject_id: sr.subject_id,
+              teacher_id: sr.subject_teacher_id,
+            })))
           }
         }
       }
@@ -349,20 +371,66 @@ export class UserRegistrationService {
   }
 
   /**
-   * Get all students for a school
+   * Get all students for a school (with student record ID)
    */
   static async getSchoolStudents(schoolId: string): Promise<any[]> {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
+      // First get all students
+      const { data: students, error: studentsError } = await supabase
+        .from('students')
+        .select(`
+          id,
+          user_id,
+          admission_number,
+          class_arm_combo_id,
+          department
+        `)
         .eq('school_id', schoolId)
-        .eq('role', 'STUDENT')
-        .eq('status', 'ACTIVE')
-        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
 
-      if (error) throw error
-      return data || []
+      if (studentsError) throw studentsError
+
+      if (!students || students.length === 0) {
+        return []
+      }
+
+      // Then get corresponding user data
+      const userIds = students.map(s => s.user_id)
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select(`
+          id,
+          email,
+          full_name,
+          photo_url,
+          status
+        `)
+        .in('id', userIds)
+        .eq('status', 'ACTIVE')
+
+      if (usersError) throw usersError
+
+      // Create a map of users for fast lookup
+      const userMap = new Map((users || []).map(u => [u.id, u]))
+
+      // Combine student and user data
+      return (students || [])
+        .map((student: any) => {
+          const user = userMap.get(student.user_id)
+          return {
+            id: student.id,  // ← Student record ID (for admission letter)
+            user_id: student.user_id,
+            email: user?.email,
+            full_name: user?.full_name,
+            photo_url: user?.photo_url,
+            admission_number: student.admission_number,
+            class_arm_combo_id: student.class_arm_combo_id,
+            department: student.department,
+            status: user?.status,
+          }
+        })
+        .filter(s => s.status === 'ACTIVE')  // Only active users
+        .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
     } catch (error: any) {
       console.error('Get students error:', error)
       return []

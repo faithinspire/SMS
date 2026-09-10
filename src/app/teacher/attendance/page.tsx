@@ -4,77 +4,76 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
+import TeacherDataService, { ClassStudentData } from '@/services/teacher-data.service'
+import { TeacherContextService } from '@/services/teacher-context.service'
 import { User, School } from '@/types'
 
-interface Student {
+interface AttendanceRecord {
   id: string
   name: string
-  admission_no: string
-  present: boolean
-}
-
-interface ClassData {
-  class_arm_combo_id: string
-  name: string
+  admissionNumber: string
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED'
 }
 
 export default function TeacherAttendancePage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [school, setSchool] = useState<School | null>(null)
-  const [classes, setClasses] = useState<ClassData[]>([])
+  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([])
   const [selectedClass, setSelectedClass] = useState<string>('')
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
-  const [students, setStudents] = useState<Student[]>([])
+  const [students, setStudents] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
+  const [error, setError] = useState<string | null>(null)
 
-  // Load user and school on mount
+  // Load user, school, and classes on mount
   useEffect(() => {
     const loadUserData = async () => {
       try {
         setLoading(true)
+        setError(null)
+
+        // Get current user
         const currentUser = await AuthService.getCurrentUser()
-
-        if (!currentUser) {
+        if (!currentUser || currentUser.role !== 'TEACHER') {
           router.push('/auth/teacher/login')
-          return
-        }
-
-        if (currentUser.role !== 'teacher') {
-          router.push('/landing')
           return
         }
 
         setUser(currentUser)
 
-        // Get school data
+        // Get school
         const { data: schoolData, error: schoolError } = await supabase
           .from('schools')
           .select('*')
           .eq('id', currentUser.school_id)
           .single()
 
-        if (schoolError) throw schoolError
+        if (schoolError || !schoolData) {
+          throw new Error('School not found')
+        }
+
         setSchool(schoolData)
 
-        // Get teacher's classes
-        const { data: classData, error: classError } = await supabase
-          .from('class_arm_combos')
-          .select('id, name')
-          .eq('school_id', currentUser.school_id)
-          .order('name')
+        // Get teacher's context and classes
+        const context = await TeacherContextService.getCurrentTeacherContext()
+        
+        // Format classes
+        const formattedClasses = context.managedClasses.map((cls) => ({
+          id: cls.id,
+          name: `${cls.name} - ${cls.armName}`,
+        }))
 
-        if (classError) throw classError
-        setClasses(classData || [])
+        setClasses(formattedClasses)
 
-        if (classData && classData.length > 0) {
-          setSelectedClass(classData[0].id)
+        if (formattedClasses.length > 0) {
+          setSelectedClass(formattedClasses[0].id)
         }
       } catch (err) {
-        console.error('Error loading user data:', err)
-        router.push('/auth/teacher/login')
+        console.error('[Attendance] Error loading user data:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load data')
       } finally {
         setLoading(false)
       }
@@ -86,58 +85,58 @@ export default function TeacherAttendancePage() {
   // Load students when class is selected
   useEffect(() => {
     const loadStudents = async () => {
-      if (!selectedClass || !user) return
+      if (!selectedClass || !user) {
+        setStudents([])
+        return
+      }
 
       try {
         setLoading(true)
+        setError(null)
 
-        // Get students in the class
-        const { data: classStudents, error: classError } = await supabase
-          .from('class_arm_combo_students')
-          .select('student_id')
-          .eq('class_arm_combo_id', selectedClass)
-
-        if (classError) throw classError
-
-        if (!classStudents || classStudents.length === 0) {
-          setStudents([])
-          return
-        }
-
-        const studentIds = classStudents.map((cs: any) => cs.student_id)
-
-        // Get student details
-        const { data: studentData, error: studentError } = await supabase
-          .from('students')
-          .select('id, first_name, last_name, admission_no')
-          .in('id', studentIds)
-          .order('first_name')
-
-        if (studentError) throw studentError
+        // Use TeacherDataService to get students - SAFE, no ambiguous joins
+        const classStudents = await TeacherDataService.getClassStudents(
+          user.school_id,
+          selectedClass
+        )
 
         // Get existing attendance records for today
-        const { data: attendanceData } = await supabase
+        const { data: attendanceData, error: attendanceError } = await supabase
           .from('attendance')
           .select('student_id, status')
           .eq('class_arm_combo_id', selectedClass)
           .eq('date', selectedDate)
+          .eq('school_id', user.school_id)
+
+        if (attendanceError) {
+          console.warn('[Attendance] Error fetching attendance records:', attendanceError)
+        }
+
+        // Create attendance lookup map
+        const attendanceMap = new Map<string, string>()
+        ;(attendanceData || []).forEach((record: any) => {
+          attendanceMap.set(record.student_id, record.status)
+        })
 
         // Combine data
-        const studentsWithAttendance = (studentData || []).map((student: any) => {
-          const attendance = attendanceData?.find(
-            (a: any) => a.student_id === student.id
-          )
-          return {
+        const studentsWithAttendance: AttendanceRecord[] = classStudents.map(
+          (student: ClassStudentData) => ({
             id: student.id,
-            name: `${student.first_name} ${student.last_name}`,
-            admission_no: student.admission_no,
-            present: attendance?.status === 'PRESENT',
-          }
-        })
+            name: student.name,
+            admissionNumber: student.admissionNumber,
+            status: (attendanceMap.get(student.id) || 'ABSENT') as
+              | 'PRESENT'
+              | 'ABSENT'
+              | 'LATE'
+              | 'EXCUSED',
+          })
+        )
 
         setStudents(studentsWithAttendance)
       } catch (err) {
-        console.error('Error loading students:', err)
+        console.error('[Attendance] Error loading students:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load students')
+        setStudents([])
       } finally {
         setLoading(false)
       }
@@ -146,13 +145,23 @@ export default function TeacherAttendancePage() {
     loadStudents()
   }, [selectedClass, user, selectedDate])
 
-  const toggleAttendance = (studentId: string) => {
-    setStudents(
-      students.map((student) =>
-        student.id === studentId
-          ? { ...student, present: !student.present }
-          : student
-      )
+  const toggleStatus = (studentId: string) => {
+    setStudents((prevStudents) =>
+      prevStudents.map((student) => {
+        if (student.id !== studentId) return student
+
+        // Cycle through: ABSENT -> PRESENT -> LATE -> EXCUSED -> ABSENT
+        const statusCycle: Array<'ABSENT' | 'PRESENT' | 'LATE' | 'EXCUSED'> = [
+          'ABSENT',
+          'PRESENT',
+          'LATE',
+          'EXCUSED',
+        ]
+        const currentIndex = statusCycle.indexOf(student.status)
+        const nextStatus = statusCycle[(currentIndex + 1) % statusCycle.length]
+
+        return { ...student, status: nextStatus }
+      })
     )
   }
 
@@ -160,66 +169,84 @@ export default function TeacherAttendancePage() {
     try {
       setSaving(true)
       setMessage({ type: '', text: '' })
+      setError(null)
 
-      if (!selectedClass) {
-        setMessage({ type: 'error', text: 'Please select a class' })
+      if (!selectedClass || !user || !school) {
+        setMessage({ type: 'error', text: 'Invalid selection' })
+        return
+      }
+
+      if (students.length === 0) {
+        setMessage({ type: 'error', text: 'No students to save' })
         return
       }
 
       // Delete existing records for this date and class
-      await supabase
+      const { error: deleteError } = await supabase
         .from('attendance')
         .delete()
         .eq('class_arm_combo_id', selectedClass)
         .eq('date', selectedDate)
+        .eq('school_id', user.school_id)
+
+      if (deleteError) {
+        throw new Error(`Delete failed: ${deleteError.message}`)
+      }
 
       // Insert new attendance records
       const attendanceRecords = students.map((student) => ({
-        school_id: school?.id,
+        school_id: user.school_id,
         class_arm_combo_id: selectedClass,
         student_id: student.id,
         date: selectedDate,
-        status: student.present ? 'PRESENT' : 'ABSENT',
-        marked_by: user?.id,
-        marked_at: new Date().toISOString(),
+        status: student.status,
+        recorded_by: user.id,
+        recorded_at: new Date().toISOString(),
       }))
 
-      const { error } = await supabase
+      const { error: insertError } = await supabase
         .from('attendance')
         .insert(attendanceRecords)
 
-      if (error) throw error
+      if (insertError) {
+        throw new Error(`Insert failed: ${insertError.message}`)
+      }
 
-      const presentCount = students.filter((s) => s.present).length
-      const absentCount = students.length - presentCount
+      const presentCount = students.filter((s) => s.status === 'PRESENT').length
+      const absentCount = students.filter((s) => s.status === 'ABSENT').length
+      const lateCount = students.filter((s) => s.status === 'LATE').length
+      const excusedCount = students.filter((s) => s.status === 'EXCUSED').length
 
       setMessage({
         type: 'success',
-        text: `✅ Attendance saved! Present: ${presentCount}, Absent: ${absentCount}`,
+        text: `✅ Attendance saved! Present: ${presentCount}, Absent: ${absentCount}, Late: ${lateCount}, Excused: ${excusedCount}`,
       })
 
-      // Clear message after 3 seconds
       setTimeout(() => setMessage({ type: '', text: '' }), 3000)
     } catch (err) {
-      console.error('Error saving attendance:', err)
-      setMessage({ type: 'error', text: '❌ Error saving attendance' })
+      console.error('[Attendance] Error saving:', err)
+      setMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Error saving attendance',
+      })
     } finally {
       setSaving(false)
     }
   }
 
-  const handleSelectAll = () => {
-    setStudents(students.map((s) => ({ ...s, present: true })))
+  const handleSelectAll = (status: 'PRESENT' | 'ABSENT') => {
+    setStudents((prevStudents) =>
+      prevStudents.map((s) => ({ ...s, status }))
+    )
   }
 
-  const handleDeselectAll = () => {
-    setStudents(students.map((s) => ({ ...s, present: false })))
-  }
-
-  if (loading) {
+  if (loading && !user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-xl text-gray-600">Loading...</div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
       </div>
     )
   }
@@ -227,13 +254,23 @@ export default function TeacherAttendancePage() {
   if (!user || !school) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-xl text-red-600">Error loading data</div>
+        <div className="text-center">
+          <p className="text-xl text-red-600 mb-4">Error loading data</p>
+          <button
+            onClick={() => router.push('/auth/teacher/login')}
+            className="px-4 py-2 bg-blue-600 text-white rounded"
+          >
+            Back to Login
+          </button>
+        </div>
       </div>
     )
   }
 
-  const presentCount = students.filter((s) => s.present).length
-  const absentCount = students.length - presentCount
+  const presentCount = students.filter((s) => s.status === 'PRESENT').length
+  const absentCount = students.filter((s) => s.status === 'ABSENT').length
+  const lateCount = students.filter((s) => s.status === 'LATE').length
+  const excusedCount = students.filter((s) => s.status === 'EXCUSED').length
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -242,7 +279,7 @@ export default function TeacherAttendancePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Attendance Management</h1>
+              <h1 className="text-3xl font-bold text-gray-900">📍 Attendance Management</h1>
               <p className="text-gray-600 mt-1">Mark student attendance for class</p>
               <p className="text-sm text-gray-500 mt-2">{school.name}</p>
             </div>
@@ -256,6 +293,12 @@ export default function TeacherAttendancePage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+            {error}
+          </div>
+        )}
+
         {/* Class and Date Selection */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -270,7 +313,7 @@ export default function TeacherAttendancePage() {
               >
                 <option value="">Choose a class</option>
                 {classes.map((cls) => (
-                  <option key={cls.class_arm_combo_id} value={cls.class_arm_combo_id}>
+                  <option key={cls.id} value={cls.id}>
                     {cls.name}
                   </option>
                 ))}
@@ -291,16 +334,16 @@ export default function TeacherAttendancePage() {
 
             <div className="flex items-end gap-2">
               <button
-                onClick={handleSelectAll}
-                className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-medium"
+                onClick={() => handleSelectAll('PRESENT')}
+                className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-medium text-sm"
               >
-                Select All
+                All Present
               </button>
               <button
-                onClick={handleDeselectAll}
-                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium"
+                onClick={() => handleSelectAll('ABSENT')}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium text-sm"
               >
-                Clear All
+                All Absent
               </button>
             </div>
           </div>
@@ -308,18 +351,26 @@ export default function TeacherAttendancePage() {
 
         {/* Statistics */}
         {students.length > 0 && (
-          <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
             <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <div className="text-3xl font-bold text-blue-600">{students.length}</div>
-              <div className="text-sm text-blue-700">Total Students</div>
+              <div className="text-2xl font-bold text-blue-600">{students.length}</div>
+              <div className="text-xs text-blue-700 font-medium">Total</div>
             </div>
             <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-              <div className="text-3xl font-bold text-green-600">{presentCount}</div>
-              <div className="text-sm text-green-700">Present</div>
+              <div className="text-2xl font-bold text-green-600">{presentCount}</div>
+              <div className="text-xs text-green-700 font-medium">Present</div>
             </div>
             <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-              <div className="text-3xl font-bold text-red-600">{absentCount}</div>
-              <div className="text-sm text-red-700">Absent</div>
+              <div className="text-2xl font-bold text-red-600">{absentCount}</div>
+              <div className="text-xs text-red-700 font-medium">Absent</div>
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+              <div className="text-2xl font-bold text-yellow-600">{lateCount}</div>
+              <div className="text-xs text-yellow-700 font-medium">Late</div>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+              <div className="text-2xl font-bold text-orange-600">{excusedCount}</div>
+              <div className="text-xs text-orange-700 font-medium">Excused</div>
             </div>
           </div>
         )}
@@ -340,32 +391,41 @@ export default function TeacherAttendancePage() {
         {/* Attendance List */}
         {students.length > 0 ? (
           <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-6">
               {students.map((student) => (
                 <div
                   key={student.id}
-                  onClick={() => toggleAttendance(student.id)}
-                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                    student.present
+                  onClick={() => toggleStatus(student.id)}
+                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                    student.status === 'PRESENT'
                       ? 'bg-green-50 border-green-500'
-                      : 'bg-gray-50 border-gray-300'
+                      : student.status === 'ABSENT'
+                        ? 'bg-red-50 border-red-300'
+                        : student.status === 'LATE'
+                          ? 'bg-yellow-50 border-yellow-300'
+                          : 'bg-orange-50 border-orange-300'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <div
-                      className={`w-6 h-6 rounded border-2 flex items-center justify-center ${
-                        student.present
-                          ? 'bg-green-500 border-green-600'
-                          : 'bg-white border-gray-400'
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs font-bold ${
+                        student.status === 'PRESENT'
+                          ? 'bg-green-500 border-green-600 text-white'
+                          : student.status === 'ABSENT'
+                            ? 'bg-red-400 border-red-600 text-white'
+                            : student.status === 'LATE'
+                              ? 'bg-yellow-400 border-yellow-600 text-white'
+                              : 'bg-orange-400 border-orange-600 text-white'
                       }`}
                     >
-                      {student.present && (
-                        <span className="text-white text-sm font-bold">✓</span>
-                      )}
+                      {student.status === 'PRESENT' && '✓'}
+                      {student.status === 'ABSENT' && '✗'}
+                      {student.status === 'LATE' && 'L'}
+                      {student.status === 'EXCUSED' && 'E'}
                     </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">{student.name}</p>
-                      <p className="text-xs text-gray-600">{student.admission_no}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{student.name}</p>
+                      <p className="text-xs text-gray-600">{student.admissionNumber}</p>
                     </div>
                   </div>
                 </div>
@@ -378,14 +438,14 @@ export default function TeacherAttendancePage() {
                 onClick={() => router.back()}
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
               >
-                Cancel
+                Back
               </button>
               <button
                 onClick={handleSaveAttendance}
-                disabled={saving}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50"
+                disabled={saving || students.length === 0}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? 'Saving...' : `Save Attendance (${presentCount} Present)`}
+                {saving ? 'Saving...' : `Save (${presentCount} Present)`}
               </button>
             </div>
           </div>

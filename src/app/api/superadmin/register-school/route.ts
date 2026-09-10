@@ -47,16 +47,31 @@ export async function POST(req: NextRequest) {
     } = body
 
     // Validate required fields
-    if (!school_name || !school_email || !admin_email || !admin_password || !admin_name || !phone || !address) {
+    const missingFields = []
+    if (!school_name) missingFields.push('school_name')
+    if (!school_email) missingFields.push('school_email')
+    if (!admin_email) missingFields.push('admin_email')
+    if (!admin_password) missingFields.push('admin_password')
+    if (!admin_name) missingFields.push('admin_name')
+    if (!phone) missingFields.push('phone')
+    if (!address) missingFields.push('address')
+    if (!subscription_plan) missingFields.push('subscription_plan')
+
+    if (missingFields.length > 0) {
+      console.error('Missing fields:', missingFields)
       return NextResponse.json(
-        { success: false, message: 'Missing required fields' },
+        { 
+          success: false, 
+          message: `Missing required fields: ${missingFields.join(', ')}`,
+          missingFields 
+        },
         { status: 400 }
       )
     }
 
     console.log('Starting school registration for:', school_name)
 
-    // Create school record
+    // Create school record WITH admin credentials
     const { data: school, error: schoolError } = await supabaseAdmin
       .from('schools')
       .insert({
@@ -68,22 +83,70 @@ export async function POST(req: NextRequest) {
         subscription_plan: subscription_plan,
         logo_url: logo_url || null,
         status: 'ACTIVE',
+        admin_email: admin_email,
+        admin_password: admin_password,
       })
       .select()
       .single()
 
     if (schoolError) {
       console.error('School creation error:', schoolError)
+      console.error('Request body was:', body)
+      
+      // Handle specific constraint errors
+      let errorMessage = schoolError.message
+      if (schoolError.code === '23505') {
+        // Unique constraint violation
+        errorMessage = 'This email address is already registered in the system'
+      }
+      
       return NextResponse.json(
-        { success: false, message: `Failed to create school: ${schoolError.message}` },
+        { 
+          success: false, 
+          message: errorMessage,
+          details: schoolError.details || schoolError.hint,
+          code: schoolError.code
+        },
         { status: 400 }
       )
     }
 
     console.log('School created:', school.id)
 
-    // Create admin user record in users table without Supabase Auth
-    // This will be used for manual login setup
+    // 🔐 CREATE SUPABASE AUTH USER FOR SCHOOL ADMIN
+    try {
+      console.log('Creating Supabase Auth user for school admin:', admin_email)
+      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: admin_email,
+        password: admin_password,
+        email_confirm: true,
+        user_metadata: {
+          school_id: school.id,
+          school_name: school_name,
+          role: 'SCHOOL_ADMIN',
+          full_name: admin_name,
+        },
+      })
+
+      if (authError) {
+        // If user already exists, that's okay - continue
+        if (authError.message?.includes('already exists')) {
+          console.warn('Auth user already exists:', admin_email)
+        } else {
+          console.error('Auth creation error:', authError)
+          throw new Error(`Failed to create auth user: ${authError.message}`)
+        }
+      } else {
+        console.log('✅ Supabase Auth user created:', authUser?.user?.id)
+      }
+    } catch (err: any) {
+      console.error('❌ Auth user creation failed:', err.message)
+      // Don't fail the entire registration if auth creation fails
+      // The school is still created, but admin won't be able to login
+      console.warn('Continuing registration without auth user...')
+    }
+
+    // CREATE USERS TABLE RECORD
     try {
       const { data: existingUser } = await supabaseAdmin
         .from('users')
@@ -93,8 +156,7 @@ export async function POST(req: NextRequest) {
         .catch(() => ({ data: null }))
 
       if (!existingUser) {
-        // Create a placeholder user record
-        // In real implementation, admin would set their own password
+        // Create user record in users table
         await supabaseAdmin
           .from('users')
           .insert({

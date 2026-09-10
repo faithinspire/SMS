@@ -1,410 +1,578 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { AuthService } from '@/services/auth.service'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase-client'
-import Link from 'next/link'
 
-interface Payment {
+interface School {
   id: string
+  name: string
+  logo_url: string | null
+}
+
+interface Staff {
+  id: string
+  full_name: string
+  email: string
+  phone?: string
+  role: string
+}
+
+interface Student {
+  id: string
+  full_name: string
+  email: string
+  admission_number?: string
+}
+
+interface Transaction {
+  id: string
+  type: 'STAFF_SALARY' | 'STUDENT_PAYMENT'
+  recipient_id: string
+  recipient_name: string
+  recipient_email?: string
+  recipient_phone?: string
   amount: number
+  purpose: string
   payment_method: string
-  status: string
+  status: 'COMPLETED' | 'PENDING' | 'FAILED'
   created_at: string
-  payer_name?: string
+  invoice_number?: string
+  notes?: string
+}
+
+interface PaymentDetails {
+  recipient: Staff | Student | null
+  transaction: Transaction
+  school: School | null
+  allTransactions: Transaction[]
 }
 
 export default function AccountantDashboard() {
-  const router = useRouter()
-  const [user, setUser] = useState<any>(null)
+  const [school, setSchool] = useState<School | null>(null)
+  const [staffList, setStaffList] = useState<Staff[]>([])
+  const [studentList, setStudentList] = useState<Student[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
-  const [school, setSchool] = useState<any>(null)
-  const [stats, setStats] = useState({
-    totalRevenue: 0,
-    pendingPayments: 0,
-    totalExpenses: 0,
-    totalStaff: 0,
-  })
-  const [payments, setPayments] = useState<Payment[]>([])
-  const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'salaries' | 'reports'>('overview')
-  const [filterType, setFilterType] = useState<'all' | 'student' | 'staff'>('all')
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [selectedPayment, setSelectedPayment] = useState<PaymentDetails | null>(null)
+  const [activeTab, setActiveTab] = useState<'staff' | 'students' | 'transactions'>('staff')
+  const [schoolId, setSchoolId] = useState<string | null>(null)
+  const [editMode, setEditMode] = useState(false)
+  const [editData, setEditData] = useState<Partial<Transaction>>({})
 
   useEffect(() => {
-    loadData()
+    initializeDashboard()
   }, [])
 
-  const loadData = async () => {
+  const initializeDashboard = async () => {
     try {
       setLoading(true)
-      const currentUser = await AuthService.getCurrentUser()
+      setError(null)
+      setSuccess(null)
 
-      if (!currentUser || (currentUser as any).role !== 'ACCOUNTANT') {
-        router.push('/landing')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('Not authenticated')
         return
       }
 
-      setUser(currentUser as any)
+      const { data: userData, error: userErr } = await supabase
+        .from('users')
+        .select('school_id, role')
+        .eq('id', user.id)
+        .single()
 
-      if ((currentUser as any).schoolId) {
-        const { data: schoolData } = await supabase
-          .from('schools')
-          .select('*')
-          .eq('id', (currentUser as any).schoolId)
-          .single()
-
-        setSchool(schoolData)
-
-        // Load payments
-        const { data: paymentsData } = await supabase
-          .from('payments')
-          .select('*')
-          .eq('school_id', (currentUser as any).schoolId)
-          .order('created_at', { ascending: false })
-          .limit(10)
-
-        setPayments(paymentsData || [])
-
-        // Calculate stats
-        const totalRevenue = paymentsData?.reduce((sum: number, p) => {
-          return p.status === 'COMPLETED' ? sum + p.amount : sum
-        }, 0) || 0
-
-        const pendingPayments = paymentsData?.reduce((sum: number, p) => {
-          return p.status === 'PENDING' ? sum + p.amount : sum
-        }, 0) || 0
-
-        setStats({
-          totalRevenue,
-          pendingPayments,
-          totalExpenses: 0,
-          totalStaff: 0,
-        })
+      if (userErr || !userData?.school_id) {
+        setError('School not found')
+        return
       }
-    } catch (error) {
-      console.error('Load data error:', error)
+
+      const sid = userData.school_id
+      setSchoolId(sid)
+
+      // Fetch school
+      const { data: schoolData } = await supabase
+        .from('schools')
+        .select('id, name, logo_url')
+        .eq('id', sid)
+        .single()
+
+      if (schoolData) setSchool(schoolData)
+
+      // Fetch ALL users from the school - select only existing columns
+      const { data: allUsers, error: allUsersErr } = await supabase
+        .from('users')
+        .select('id, full_name, email, role')
+        .eq('school_id', sid)
+
+      console.log('All users in school:', allUsers)
+      console.error('All users error:', allUsersErr)
+
+      // Filter staff (anyone who is NOT student)
+      const staffRoles = ['TEACHER', 'ACCOUNTANT', 'PRINCIPAL', 'HEAD_TEACHER', 'SCHOOL_ADMIN', 'STAFF', 'HEAD_OF_DEPARTMENT']
+      const filteredStaff = (allUsers || []).filter(u => staffRoles.includes(u.role))
+      
+      console.log('Filtered staff:', filteredStaff)
+      setStaffList(filteredStaff)
+
+      // Filter students
+      const filteredStudents = (allUsers || []).filter(u => u.role === 'STUDENT')
+      console.log('Filtered students:', filteredStudents)
+      setStudentList(filteredStudents)
+
+      // Fetch transactions
+      const { data: txnData, error: txnErr } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('school_id', sid)
+        .order('created_at', { ascending: false })
+
+      if (txnErr) {
+        console.error('Transaction fetch error:', txnErr)
+        setTransactions([])
+      } else {
+        setTransactions(txnData || [])
+      }
+    } catch (err) {
+      console.error('Init error:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load data')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleLogout = async () => {
+  const handleStaffClick = (staff: Staff) => {
+    const staffTransactions = transactions.filter(
+      t => t.recipient_id === staff.id && t.type === 'STAFF_SALARY'
+    )
+    
+    setSelectedPayment({
+      recipient: staff,
+      transaction: staffTransactions[0] || {
+        id: `new-${staff.id}`,
+        type: 'STAFF_SALARY',
+        recipient_id: staff.id,
+        recipient_name: staff.full_name,
+        recipient_email: staff.email,
+        recipient_phone: staff.phone || '',
+        amount: 0,
+        purpose: 'Monthly Salary',
+        payment_method: 'Bank Transfer',
+        status: 'PENDING',
+        created_at: new Date().toISOString(),
+        invoice_number: '',
+        notes: '',
+      },
+      school: school,
+      allTransactions: staffTransactions,
+    })
+    setEditMode(false)
+    setEditData({})
+  }
+
+  const handleStudentClick = (student: Student) => {
+    const studentTransactions = transactions.filter(
+      t => t.recipient_id === student.id && t.type === 'STUDENT_PAYMENT'
+    )
+    
+    setSelectedPayment({
+      recipient: student,
+      transaction: studentTransactions[0] || {
+        id: `new-${student.id}`,
+        type: 'STUDENT_PAYMENT',
+        recipient_id: student.id,
+        recipient_name: student.full_name,
+        recipient_email: student.email,
+        amount: 0,
+        purpose: 'School Fees',
+        payment_method: 'Bank Transfer',
+        status: 'PENDING',
+        created_at: new Date().toISOString(),
+        invoice_number: '',
+        notes: '',
+      },
+      school: school,
+      allTransactions: studentTransactions,
+    })
+    setEditMode(false)
+    setEditData({})
+  }
+
+  const savePayment = async () => {
+    if (!selectedPayment || !schoolId) return
+
     try {
-      await AuthService.logout()
-      router.push('/landing')
-    } catch (error) {
-      console.error('Logout error:', error)
+      setError(null)
+      const txn = selectedPayment.transaction
+      const finalData = {
+        amount: editData.amount !== undefined ? Number(editData.amount) : Number(txn.amount),
+        purpose: editData.purpose || txn.purpose,
+        payment_method: editData.payment_method || txn.payment_method,
+        status: editData.status || txn.status,
+        notes: editData.notes || txn.notes || null,
+        invoice_number: editData.invoice_number || txn.invoice_number || null,
+      }
+
+      // Validate
+      if (!finalData.amount || finalData.amount <= 0) {
+        setError('Amount must be greater than 0')
+        return
+      }
+
+      if (txn.id.startsWith('new-')) {
+        // New transaction
+        const { data, error: insertErr } = await supabase
+          .from('transactions')
+          .insert([{
+            school_id: schoolId,
+            type: txn.type,
+            recipient_id: txn.recipient_id,
+            recipient_name: txn.recipient_name,
+            recipient_email: txn.recipient_email,
+            recipient_phone: txn.recipient_phone,
+            amount: finalData.amount,
+            purpose: finalData.purpose,
+            payment_method: finalData.payment_method,
+            status: finalData.status,
+            invoice_number: finalData.invoice_number,
+            notes: finalData.notes,
+            created_at: new Date().toISOString(),
+          }])
+          .select()
+
+        if (insertErr) {
+          console.error('Insert error:', insertErr)
+          throw insertErr
+        }
+        setSuccess('Payment recorded successfully!')
+      } else {
+        // Update existing
+        const { error: updateErr } = await supabase
+          .from('transactions')
+          .update(finalData)
+          .eq('id', txn.id)
+
+        if (updateErr) {
+          console.error('Update error:', updateErr)
+          throw updateErr
+        }
+        setSuccess('Payment updated successfully!')
+      }
+
+      setEditMode(false)
+      setTimeout(() => {
+        setSuccess(null)
+        setSelectedPayment(null)
+        initializeDashboard()
+      }, 1500)
+    } catch (err) {
+      console.error('Save error:', err)
+      setError(err instanceof Error ? err.message : 'Failed to save payment')
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-yellow-500 border-t-orange-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading dashboard...</p>
-        </div>
-      </div>
-    )
+  const shareReceipt = async (method: 'email' | 'whatsapp') => {
+    const txn = selectedPayment?.transaction
+    if (!txn || !selectedPayment?.school) {
+      setError('Missing payment details')
+      return
+    }
+
+    const receiptContent = `
+*PAYMENT RECEIPT*
+
+School: ${selectedPayment.school.name}
+Recipient: ${selectedPayment.recipient?.full_name || txn.recipient_name}
+Amount: ₦${txn.amount.toFixed(2)}
+Purpose: ${txn.purpose}
+Date: ${new Date(txn.created_at).toLocaleDateString()}
+Status: ${txn.status}
+
+Thank you!
+    `.trim()
+
+    if (method === 'email' && selectedPayment.recipient?.email) {
+      const mailtoLink = `mailto:${selectedPayment.recipient.email}?subject=Payment Receipt - ${selectedPayment.school.name}&body=${encodeURIComponent(receiptContent)}`
+      window.location.href = mailtoLink
+    } else if (method === 'whatsapp') {
+      if (!selectedPayment.recipient || !('phone' in selectedPayment.recipient)) {
+        setError('No phone number available for WhatsApp')
+        return
+      }
+
+      let phone = selectedPayment.recipient.phone
+      if (!phone) {
+        setError('No phone number found')
+        return
+      }
+
+      // Clean phone number - remove spaces, dashes, parentheses
+      let cleanPhone = phone.replace(/[\s\-\(\)]/g, '')
+      
+      // If phone doesn't start with +, add Nigeria country code
+      if (!cleanPhone.startsWith('+')) {
+        if (cleanPhone.startsWith('0')) {
+          cleanPhone = '+234' + cleanPhone.substring(1)
+        } else {
+          cleanPhone = '+234' + cleanPhone
+        }
+      }
+
+      const whatsappLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(receiptContent)}`
+      console.log('WhatsApp link:', whatsappLink)
+      window.open(whatsappLink, '_blank')
+    }
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-xl text-red-600">Unauthorized</div>
-      </div>
-    )
+  const shareAllHistory = async (method: 'email' | 'whatsapp') => {
+    if (!selectedPayment?.recipient || !selectedPayment?.school) {
+      setError('Missing payment details')
+      return
+    }
+
+    const history = selectedPayment.allTransactions
+      .map(t => `${new Date(t.created_at).toLocaleDateString()} - ${t.purpose}: ₦${t.amount.toFixed(2)} (${t.status})`)
+      .join('\n')
+
+    const content = `
+*PAYMENT HISTORY*
+
+School: ${selectedPayment.school.name}
+Name: ${selectedPayment.recipient.full_name}
+
+${history || 'No transaction history'}
+
+Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0).toFixed(2)}
+    `.trim()
+
+    if (method === 'email' && selectedPayment.recipient.email) {
+      const mailtoLink = `mailto:${selectedPayment.recipient.email}?subject=Payment History - ${selectedPayment.school.name}&body=${encodeURIComponent(content)}`
+      window.location.href = mailtoLink
+    } else if (method === 'whatsapp') {
+      if (!('phone' in selectedPayment.recipient)) {
+        setError('No phone number available')
+        return
+      }
+
+      let phone = selectedPayment.recipient.phone
+      if (!phone) {
+        setError('No phone number found')
+        return
+      }
+
+      // Clean phone number
+      let cleanPhone = phone.replace(/[\s\-\(\)]/g, '')
+      
+      // Add Nigeria country code if needed
+      if (!cleanPhone.startsWith('+')) {
+        if (cleanPhone.startsWith('0')) {
+          cleanPhone = '+234' + cleanPhone.substring(1)
+        } else {
+          cleanPhone = '+234' + cleanPhone
+        }
+      }
+
+      const whatsappLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(content)}`
+      window.open(whatsappLink, '_blank')
+    }
+  }
+
+  const formatCurrency = (val: number | undefined) => {
+    const num = typeof val === 'number' ? val : 0
+    return `₦${num.toFixed(2)}`
+  }
+
+  const styles = {
+    container: { minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '2rem' } as React.CSSProperties,
+    header: { background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' as const, gap: '1rem' } as React.CSSProperties,
+    headerLeft: { display: 'flex', alignItems: 'center', gap: '1.5rem' } as React.CSSProperties,
+    logo: { width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover' as const } as React.CSSProperties,
+    tabContainer: { display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' as const } as React.CSSProperties,
+    tab: { background: 'white', border: 'none', padding: '1rem 1.5rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' } as React.CSSProperties,
+    card: { background: 'white', borderRadius: '12px', padding: '1.5rem', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', marginBottom: '1rem' } as React.CSSProperties,
+    modal: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 } as React.CSSProperties,
+    modalContent: { background: 'white', borderRadius: '12px', padding: '2rem', maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto' as const } as React.CSSProperties,
+    input: { width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '1rem', boxSizing: 'border-box' as const } as React.CSSProperties,
+    button: { padding: '0.75rem 1rem', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' } as React.CSSProperties,
+  }
+
+  if (loading) {
+    return <div style={styles.container}><p style={{ color: 'white' }}>Loading...</p></div>
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-yellow-600 to-orange-600 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            {school?.logo_url && (
-              <img src={school.logo_url} alt={school.name} className="h-12 w-12 rounded-full" />
-            )}
-            <div>
-              <h1 className="text-3xl font-bold">💰 Accountant Dashboard</h1>
-              <p className="text-yellow-100 mt-1">{school?.name}</p>
-            </div>
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <div style={styles.headerLeft}>
+          {school?.logo_url && <img src={school.logo_url} alt="Logo" style={styles.logo} />}
+          <div>
+            <h1 style={{ margin: 0, color: '#111827' }}>{school?.name}</h1>
+            <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280' }}>💰 Accountant</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition"
-          >
-            Logout
-          </button>
         </div>
+        <button onClick={initializeDashboard} style={{ ...styles.button, background: '#667eea', color: 'white' }}>🔄 Refresh</button>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Financial Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow hover:shadow-lg transition p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Total Revenue</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">₦{stats.totalRevenue.toLocaleString()}</p>
-              </div>
-              <span className="text-3xl">💵</span>
-            </div>
-          </div>
+      {error && <div style={{ background: '#fee', color: '#c33', padding: '1rem', borderRadius: '8px', marginBottom: '2rem' }}>❌ {error}</div>}
+      {success && <div style={{ background: '#d1fae5', color: '#065f46', padding: '1rem', borderRadius: '8px', marginBottom: '2rem' }}>✅ {success}</div>}
 
-          <div className="bg-white rounded-lg shadow hover:shadow-lg transition p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Pending Payments</p>
-                <p className="text-3xl font-bold text-orange-600 mt-2">₦{stats.pendingPayments.toLocaleString()}</p>
-              </div>
-              <span className="text-3xl">⏳</span>
-            </div>
-          </div>
+      <div style={styles.tabContainer}>
+        {['staff', 'students', 'transactions'].map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab as typeof activeTab)} style={{ ...styles.tab, background: activeTab === tab ? '#667eea' : 'rgba(255, 255, 255, 0.7)', color: activeTab === tab ? 'white' : '#6b7280' }}>
+            {tab === 'staff' && `👨‍💼 Staff (${staffList.length})`}
+            {tab === 'students' && `👨‍🎓 Students (${studentList.length})`}
+            {tab === 'transactions' && `📋 Transactions (${transactions.length})`}
+          </button>
+        ))}
+      </div>
 
-          <div className="bg-white rounded-lg shadow hover:shadow-lg transition p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Total Expenses</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">₦{stats.totalExpenses.toLocaleString()}</p>
+      {activeTab === 'staff' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+          {staffList.length === 0 ? (
+            <div style={{ color: 'white', gridColumn: '1 / -1', padding: '2rem', textAlign: 'center' }}>📭 No staff found</div>
+          ) : (
+            staffList.map(staff => (
+              <div key={staff.id} onClick={() => handleStaffClick(staff)} style={{ ...styles.card, cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
+                <p style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>{staff.full_name}</p>
+                <p style={{ margin: '0.5rem 0 0 0', color: '#667eea', fontWeight: '600', fontSize: '0.9rem' }}>{staff.role}</p>
+                <p style={{ margin: '0.25rem 0', color: '#6b7280', fontSize: '0.9rem' }}>📧 {staff.email}</p>
+                {staff.phone && <p style={{ margin: '0.25rem 0', color: '#6b7280', fontSize: '0.9rem' }}>📱 {staff.phone}</p>}
               </div>
-              <span className="text-3xl">📊</span>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow hover:shadow-lg transition p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Total Staff</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalStaff}</p>
-              </div>
-              <span className="text-3xl">👥</span>
-            </div>
-          </div>
+            ))
+          )}
         </div>
+      )}
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <button
-            onClick={() => {
-              setFilterType('student')
-            }}
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition shadow-lg"
-          >
-            💳 Record Student Payment
-          </button>
-          <button
-            onClick={() => {
-              setFilterType('staff')
-            }}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition shadow-lg"
-          >
-            👤 Record Staff Salary
-          </button>
-          <Link href="/accountant/payment-history">
-            <button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition shadow-lg">
-              📋 Payment History
-            </button>
-          </Link>
-          <button className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-lg transition shadow-lg">
-            📈 Generate Report
-          </button>
+      {activeTab === 'students' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+          {studentList.length === 0 ? (
+            <div style={{ color: 'white', gridColumn: '1 / -1', padding: '2rem', textAlign: 'center' }}>📭 No students found</div>
+          ) : (
+            studentList.map(student => (
+              <div key={student.id} onClick={() => handleStudentClick(student)} style={{ ...styles.card, cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
+                <p style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>{student.full_name}</p>
+                <p style={{ margin: '0.5rem 0 0 0', color: '#667eea', fontWeight: '600' }}>{student.admission_number || 'No admission #'}</p>
+                <p style={{ margin: '0.25rem 0', color: '#6b7280', fontSize: '0.9rem' }}>📧 {student.email}</p>
+              </div>
+            ))
+          )}
         </div>
+      )}
 
-        {/* Tab Navigation */}
-        <div className="bg-white rounded-lg shadow mb-8">
-          <div className="flex gap-4 p-4 border-b flex-wrap">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                activeTab === 'overview'
-                  ? 'bg-yellow-600 text-white'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              📊 Overview
-            </button>
-            <button
-              onClick={() => setActiveTab('payments')}
-              className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                activeTab === 'payments'
-                  ? 'bg-yellow-600 text-white'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              💳 Student Payments
-            </button>
-            <button
-              onClick={() => setActiveTab('salaries')}
-              className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                activeTab === 'salaries'
-                  ? 'bg-yellow-600 text-white'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              👤 Staff Salaries
-            </button>
-            <button
-              onClick={() => setActiveTab('reports')}
-              className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                activeTab === 'reports'
-                  ? 'bg-yellow-600 text-white'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              📈 Reports
-            </button>
-          </div>
+      {activeTab === 'transactions' && (
+        <div style={{ background: 'white', borderRadius: '12px', padding: '1.5rem' }}>
+          {transactions.length === 0 ? (
+            <p style={{ color: '#9ca3af', textAlign: 'center' }}>No transactions yet</p>
+          ) : (
+            transactions.map(txn => (
+              <div key={txn.id} onClick={() => setSelectedPayment({ recipient: null, transaction: txn, school, allTransactions: [txn] })} style={{ ...styles.card, cursor: 'pointer' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: '700' }}>{txn.recipient_name}</p>
+                    <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.9rem' }}>{txn.purpose}</p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ margin: 0, fontWeight: '700', color: '#667eea' }}>{formatCurrency(txn.amount)}</p>
+                    <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.9rem' }}>{txn.status}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
-          {/* Overview Tab */}
-          {activeTab === 'overview' && (
-            <div className="p-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-gradient-to-br from-green-100 to-green-50 p-6 rounded-lg">
-                  <h3 className="font-bold text-green-900 mb-4">Recent Payments</h3>
-                  <div className="space-y-3">
-                    {payments.slice(0, 3).map((payment) => (
-                      <div key={payment.id} className="bg-white p-3 rounded flex justify-between">
-                        <div>
-                          <p className="font-semibold text-gray-900 text-sm">{payment.payer_name || 'Student'}</p>
-                          <p className="text-xs text-gray-600">{new Date(payment.created_at).toLocaleDateString()}</p>
-                        </div>
-                        <p className="font-bold text-green-700">₦{payment.amount.toLocaleString()}</p>
+      {selectedPayment && (
+        <div style={styles.modal} onClick={() => setSelectedPayment(null)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', alignItems: 'center' }}>
+              <h2 style={{ margin: 0 }}>💳 {editMode ? 'Record Payment' : 'Payment Details'}</h2>
+              <button onClick={() => { setSelectedPayment(null); setEditMode(false) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem' }}>✕</button>
+            </div>
+
+            {!editMode ? (
+              <>
+                <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                  <p style={{ margin: 0, fontWeight: '700' }}>{selectedPayment.school?.name}</p>
+                  <p style={{ margin: '0.5rem 0 0 0', fontWeight: '600' }}>{selectedPayment.recipient?.full_name}</p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#6b7280' }}>Amount</label>
+                    <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold', color: '#667eea' }}>{formatCurrency(selectedPayment.transaction.amount)}</p>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#6b7280' }}>Status</label>
+                    <p style={{ margin: 0, display: 'inline-block', padding: '0.25rem 0.75rem', borderRadius: '4px', background: selectedPayment.transaction.status === 'COMPLETED' ? '#d1fae5' : '#fef3c7', color: selectedPayment.transaction.status === 'COMPLETED' ? '#065f46' : '#92400e', fontWeight: '600', fontSize: '0.875rem' }}>{selectedPayment.transaction.status}</p>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>Purpose</label>
+                  <p style={{ margin: 0 }}>{selectedPayment.transaction.purpose}</p>
+                </div>
+
+                {selectedPayment.allTransactions.length > 0 && (
+                  <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                    <p style={{ margin: '0 0 0.75rem 0', fontWeight: '600', fontSize: '0.9rem' }}>📋 History ({selectedPayment.allTransactions.length})</p>
+                    {selectedPayment.allTransactions.map((t, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', fontSize: '0.9rem', borderBottom: i < selectedPayment.allTransactions.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
+                        <span>{new Date(t.created_at).toLocaleDateString()}</span>
+                        <span style={{ fontWeight: '600' }}>{formatCurrency(t.amount)}</span>
                       </div>
                     ))}
                   </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <button onClick={() => { setEditMode(true); setEditData({}) }} style={{ ...styles.button, background: '#667eea', color: 'white' }}>✏️ Edit</button>
+                  <button onClick={() => shareReceipt('email')} style={{ ...styles.button, background: '#e5e7eb', color: '#111827' }}>📧 Email</button>
+                  <button onClick={() => shareReceipt('whatsapp')} style={{ ...styles.button, background: '#e5e7eb', color: '#111827' }}>💬 WhatsApp</button>
+                  {selectedPayment.allTransactions.length > 0 && <button onClick={() => shareAllHistory('email')} style={{ ...styles.button, background: '#e5e7eb', color: '#111827' }}>📧 History</button>}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#111827', fontSize: '0.9rem' }}>Amount *</label>
+                  <input type="number" min="0" step="0.01" value={String(editData.amount !== undefined ? editData.amount : selectedPayment.transaction.amount)} onChange={(e) => setEditData({ ...editData, amount: parseFloat(e.target.value) || 0 })} style={styles.input} />
                 </div>
 
-                <div className="bg-gradient-to-br from-yellow-100 to-yellow-50 p-6 rounded-lg">
-                  <h3 className="font-bold text-yellow-900 mb-4">Payment Summary</h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <p className="text-gray-700">Completed</p>
-                      <p className="font-bold text-gray-900">{payments.filter(p => p.status === 'COMPLETED').length}</p>
-                    </div>
-                    <div className="flex justify-between">
-                      <p className="text-gray-700">Pending</p>
-                      <p className="font-bold text-orange-600">{payments.filter(p => p.status === 'PENDING').length}</p>
-                    </div>
-                    <div className="flex justify-between">
-                      <p className="text-gray-700">Failed</p>
-                      <p className="font-bold text-red-600">{payments.filter(p => p.status === 'FAILED').length}</p>
-                    </div>
-                  </div>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#111827', fontSize: '0.9rem' }}>Purpose</label>
+                  <input type="text" value={editData.purpose || selectedPayment.transaction.purpose} onChange={(e) => setEditData({ ...editData, purpose: e.target.value })} style={styles.input} />
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* Payments Tab */}
-          {activeTab === 'payments' && (
-            <div className="p-8">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Student Payment Records</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-semibold">Student Name</th>
-                      <th className="px-4 py-2 text-left font-semibold">Amount</th>
-                      <th className="px-4 py-2 text-left font-semibold">Method</th>
-                      <th className="px-4 py-2 text-left font-semibold">Status</th>
-                      <th className="px-4 py-2 text-left font-semibold">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {payments.map((payment) => (
-                      <tr key={payment.id} className="border-b hover:bg-gray-50">
-                        <td className="px-4 py-2">{payment.payer_name || '-'}</td>
-                        <td className="px-4 py-2 font-bold">₦{payment.amount.toLocaleString()}</td>
-                        <td className="px-4 py-2">{payment.payment_method}</td>
-                        <td className="px-4 py-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                            payment.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                            payment.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {payment.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2">{new Date(payment.created_at).toLocaleDateString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Salaries Tab */}
-          {activeTab === 'salaries' && (
-            <div className="p-8">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Staff Salary Records</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-semibold">Staff Name</th>
-                      <th className="px-4 py-2 text-left font-semibold">Amount</th>
-                      <th className="px-4 py-2 text-left font-semibold">Month</th>
-                      <th className="px-4 py-2 text-left font-semibold">Status</th>
-                      <th className="px-4 py-2 text-left font-semibold">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {payments.map((payment) => (
-                      <tr key={payment.id} className="border-b hover:bg-gray-50">
-                        <td className="px-4 py-2">{payment.payer_name || '-'}</td>
-                        <td className="px-4 py-2 font-bold">₦{payment.amount.toLocaleString()}</td>
-                        <td className="px-4 py-2">{new Date(payment.created_at).toLocaleString('default', { month: 'long', year: 'numeric' })}</td>
-                        <td className="px-4 py-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                            payment.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                            payment.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {payment.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2">{new Date(payment.created_at).toLocaleDateString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Reports Tab */}
-          {activeTab === 'reports' && (
-            <div className="p-8">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Financial Reports</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-gradient-to-br from-blue-100 to-blue-50 p-6 rounded-lg">
-                  <h4 className="font-bold text-blue-900 mb-4">Monthly Summary</h4>
-                  <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded transition">
-                    Generate Monthly Report
-                  </button>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#111827', fontSize: '0.9rem' }}>Status</label>
+                  <select value={editData.status || selectedPayment.transaction.status} onChange={(e) => setEditData({ ...editData, status: e.target.value as any })} style={styles.input}>
+                    <option>PENDING</option>
+                    <option>COMPLETED</option>
+                    <option>FAILED</option>
+                  </select>
                 </div>
-                <div className="bg-gradient-to-br from-purple-100 to-purple-50 p-6 rounded-lg">
-                  <h4 className="font-bold text-purple-900 mb-4">Annual Summary</h4>
-                  <button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded transition">
-                    Generate Annual Report
-                  </button>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#111827', fontSize: '0.9rem' }}>Payment Method</label>
+                  <input type="text" value={editData.payment_method || selectedPayment.transaction.payment_method} onChange={(e) => setEditData({ ...editData, payment_method: e.target.value })} style={styles.input} />
                 </div>
-              </div>
-            </div>
-          )}
+
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#111827', fontSize: '0.9rem' }}>Notes</label>
+                  <textarea value={editData.notes || selectedPayment.transaction.notes || ''} onChange={(e) => setEditData({ ...editData, notes: e.target.value })} style={{ ...styles.input, minHeight: '80px' }} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <button onClick={savePayment} style={{ ...styles.button, background: '#10b981', color: 'white', fontWeight: '700' }}>💾 Save Payment</button>
+                  <button onClick={() => { setEditMode(false); setEditData({}) }} style={{ ...styles.button, background: '#e5e7eb', color: '#111827' }}>Cancel</button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-
-        {/* Welcome Section */}
-        <div className="bg-gradient-to-r from-yellow-500 to-orange-500 rounded-lg shadow-lg p-8 text-white">
-          <h3 className="text-2xl font-bold mb-2">Welcome, {user?.full_name || user?.name || 'Accountant'}!</h3>
-          <p className="text-yellow-100">
-            Manage all financial transactions, record student payments and staff salaries, track expenses, and generate financial reports. All records are securely stored and easily accessible.
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

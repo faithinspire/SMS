@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { LetterGenerationService, EmploymentLetterData, AdmissionLetterData } from '@/services/letter-generation.service'
+import { useState, useEffect } from 'react'
+import { LetterGenerationService, EmploymentLetterData, AdmissionLetterData, EnhancedEmploymentLetterData, EnhancedAdmissionLetterData } from '@/services/letter-generation.service'
 import { SharingService } from '@/services/sharing.service'
+import { supabase } from '@/lib/supabase-client'
 
 interface GenerateLetterModalProps {
   type: 'EMPLOYMENT' | 'ADMISSION'
@@ -30,6 +31,93 @@ export default function GenerateLetterModal({
     phoneNumber: '',
     email: '',
   })
+  const [enrichedData, setEnrichedData] = useState<any>(null)
+
+  useEffect(() => {
+    if (isOpen && recipientData) {
+      enrichLetterData()
+    }
+  }, [isOpen, recipientData])
+
+  const enrichLetterData = async () => {
+    try {
+      const enhanced: any = { ...recipientData }
+
+      if (type === 'ADMISSION') {
+        // Get class teacher information
+        if (recipientData.class_arm_combo_id) {
+          const { data: classData } = await supabase
+            .from('class_arm_combos')
+            .select(`
+              id,
+              class_teacher:class_teacher_id(full_name, email)
+            `)
+            .eq('id', recipientData.class_arm_combo_id)
+            .single()
+
+          if (classData?.class_teacher) {
+            enhanced.classTeacherName = classData.class_teacher.full_name
+            enhanced.classTeacherEmail = classData.class_teacher.email
+          }
+        }
+
+        // Get guardian information - use guardians table (not student_guardians)
+        if (recipientData.id) {
+          const { data: guardians } = await supabase
+            .from('guardians')
+            .select('full_name')
+            .eq('student_id', recipientData.id)
+            .limit(2)
+
+          if (guardians && guardians.length > 0) {
+            enhanced.guardianNames = guardians.map((g: any) => g.full_name)
+          }
+        }
+      }
+
+      // Add school details
+      if (schoolData) {
+        enhanced.schoolMotto = schoolData.school_motto
+        enhanced.schoolVision = schoolData.school_vision
+        enhanced.schoolMission = schoolData.school_mission
+        enhanced.codeOfConductUrl = schoolData.code_of_conduct_url
+        enhanced.codeOfConductText = schoolData.code_of_conduct_text
+      }
+
+      if (type === 'EMPLOYMENT') {
+        // Get position details from position_details table
+        const { data: positionData } = await supabase
+          .from('position_details')
+          .select('*')
+          .eq('school_id', schoolData.id)
+          .eq('role', recipientData.role)
+          .single()
+
+        if (positionData) {
+          enhanced.jobDescription = positionData.description
+          enhanced.benefits = positionData.benefits
+          enhanced.workingHours = positionData.work_hours
+          enhanced.reportingManager = positionData.reporting_manager_role
+        }
+
+        // Get teacher-specific details
+        const { data: teacherData } = await supabase
+          .from('teachers')
+          .select('salary, bank_name, account_number')
+          .eq('user_id', recipientData.id)
+          .single()
+
+        if (teacherData) {
+          enhanced.salary = teacherData.salary || recipientData.salary_amount || 0
+        }
+      }
+
+      setEnrichedData(enhanced)
+    } catch (err) {
+      console.error('Error enriching letter data:', err)
+      setEnrichedData(recipientData)
+    }
+  }
 
   const generateLetter = () => {
     setError('')
@@ -37,28 +125,59 @@ export default function GenerateLetterModal({
       let letter = ''
       let html = ''
 
-      if (type === 'EMPLOYMENT' && recipientData) {
-        const employmentData: EmploymentLetterData = {
-          teacherName: recipientData.full_name,
-          teacherId: recipientData.id,
+      const dataToUse = enrichedData || recipientData
+
+      if (type === 'EMPLOYMENT' && dataToUse) {
+        // Map role to position title
+        const roleToPositionMap: {[key: string]: string} = {
+          'TEACHER': 'Teacher',
+          'HEAD_TEACHER': 'Head Teacher',
+          'PRINCIPAL': 'Principal',
+          'ACCOUNTANT': 'Accountant',
+          'ADMIN': 'Administrator',
+          'STAFF': 'Staff Member',
+          'LIBRARIAN': 'Librarian',
+          'NURSE': 'School Nurse',
+          'COUNSELOR': 'Counselor',
+          'ICT_COORDINATOR': 'ICT Coordinator',
+        }
+        
+        const employmentData: EnhancedEmploymentLetterData = {
+          teacherName: dataToUse.full_name,
+          teacherId: dataToUse.id,
           schoolName: schoolData?.name || 'School',
-          position: 'Teacher',
-          salary: recipientData.salary_amount || 0,
+          position: roleToPositionMap[dataToUse.role] || dataToUse.role || 'Staff Member',
+          salary: dataToUse.salary || 0,
           startDate: new Date().toISOString(),
           employmentTerms: 'As per school policies',
+          jobDescription: dataToUse.jobDescription,
+          benefits: dataToUse.benefits,
+          workingHours: dataToUse.workingHours,
+          reportingManager: dataToUse.reportingManager,
+          schoolMotto: dataToUse.schoolMotto,
+          schoolLogoUrl: schoolData?.logo_url, // Add school logo to employment letter
         }
 
         letter = LetterGenerationService.generateEmploymentLetter(employmentData)
         html = LetterGenerationService.generateEmploymentLetterHTML(employmentData)
-      } else if (type === 'ADMISSION' && recipientData) {
-        const admissionData: AdmissionLetterData = {
-          studentName: recipientData.full_name,
-          studentId: recipientData.id,
-          admissionNumber: recipientData.admission_number,
+      } else if (type === 'ADMISSION' && dataToUse) {
+        const admissionData: EnhancedAdmissionLetterData = {
+          studentName: dataToUse.full_name,
+          studentId: dataToUse.id,
+          admissionNumber: dataToUse.admission_number,
           schoolName: schoolData?.name || 'School',
-          className: recipientData.class_name || 'Class',
-          department: recipientData.department,
+          className: dataToUse.class_name || 'Class',
+          department: dataToUse.department,
           startDate: new Date().toISOString(),
+          classTeacherName: dataToUse.classTeacherName,
+          classTeacherEmail: dataToUse.classTeacherEmail,
+          codeOfConductUrl: dataToUse.codeOfConductUrl,
+          codeOfConductText: dataToUse.codeOfConductText,
+          guardianNames: dataToUse.guardianNames,
+          schoolMotto: dataToUse.schoolMotto,
+          schoolVision: dataToUse.schoolVision,
+          schoolMission: dataToUse.schoolMission,
+          schoolLogoUrl: schoolData?.logo_url, // Add school logo to admission letter
         }
 
         letter = LetterGenerationService.generateAdmissionLetter(admissionData)

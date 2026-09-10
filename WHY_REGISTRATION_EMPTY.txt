@@ -1,0 +1,188 @@
+================================================================================
+                    WHY IS REGISTRATION PAGE EMPTY?
+================================================================================
+
+THE PROBLEM:
+════════════════════════════════════════════════════════════════════════════════
+
+Registration Modal Opens
+        ↓
+Tries to load: getClassesAndSubjects()
+        ↓
+Queries Supabase:
+  - SELECT * FROM classes WHERE school_id = 'YOUR_SCHOOL_ID'
+  - SELECT * FROM subjects WHERE school_id = 'YOUR_SCHOOL_ID'
+        ↓
+Results: []  ← EMPTY ARRAYS!
+        ↓
+Modal shows:
+  "❌ No classes available"
+  "❌ No subjects available"
+        ↓
+Dropdowns stay EMPTY
+
+
+WHY ARE THEY EMPTY?
+════════════════════════════════════════════════════════════════════════════════
+
+Reason: School data was NEVER populated!
+
+Migration 015 creates a TRIGGER that auto-populates data when:
+✅ A new school is created → Data auto-generated
+
+But if your school was created BEFORE migration 015 applied:
+❌ No trigger ran
+❌ No data was created
+❌ Dropdowns are empty
+
+
+THE FIX (IN 3 STEPS):
+════════════════════════════════════════════════════════════════════════════════
+
+Step 1: Get your School UUID
+─────────────────────────────
+SELECT id FROM schools LIMIT 1;
+    ↓
+Copy: 550e8400-e29b-41d4-a716-446655440000
+
+
+Step 2: Call the Population API
+────────────────────────────────
+POST /api/setup/init-school-data
+Body: {"schoolId": "550e8400-e29b-41d4-a716-446655440000"}
+    ↓
+    ↓ API runs this:
+    ↓
+    SELECT create_default_school_data('550e8400-e29b-41d4-a716-446655440000')
+    ↓
+    This creates:
+    ✅ 15 Classes (Prep → SSS 3)
+    ✅ 45 Arms (3 per class)
+    ✅ 45 Class-Arm Combos
+    ✅ 4 Streams (Science, Commercial, etc)
+    ✅ 17 Subjects (with correct levels)
+
+
+Step 3: Verify in Database
+────────────────────────────
+SELECT COUNT(*) FROM classes WHERE school_id = '550e8400...';
+    ↓ Should show: 15 ✅
+
+SELECT COUNT(*) FROM subjects WHERE school_id = '550e8400...';
+    ↓ Should show: 17 ✅
+
+
+AFTER THE FIX:
+════════════════════════════════════════════════════════════════════════════════
+
+Registration Modal Opens
+        ↓
+Tries to load: getClassesAndSubjects()
+        ↓
+Queries Supabase:
+  - SELECT * FROM classes WHERE school_id = 'YOUR_SCHOOL_ID'
+  - SELECT * FROM subjects WHERE school_id = 'YOUR_SCHOOL_ID'
+        ↓
+Results: [15 classes]  ← DATA FOUND!
+         [17 subjects]
+        ↓
+Modal shows:
+  ✅ Class dropdown populated:
+     - Prep (0)
+     - Nursery (1)
+     - KG (2)
+     - Primary 1-6 (3-8)
+     - JSS 1-3 (9-11)
+     - SSS 1-3 (12-14)
+  ✅ Subject dropdown populated:
+     - When Primary 3 selected: 10 primary subjects
+     - When SSS 2 selected: 17 secondary subjects
+        ↓
+Can register successfully! ✅
+
+
+WHAT CHANGED IN YOUR CODE:
+════════════════════════════════════════════════════════════════════════════════
+
+1. Teacher Registration Modal
+   BEFORE: "Class Teacher Assignment (Optional)" ← Could skip
+   AFTER:  "Class Teacher Assignment *" ← REQUIRED now
+
+2. Better Error Messages
+   BEFORE: "No classes available. Please add classes to your school first."
+   AFTER:  "No classes available. Please ensure migration 015 has been 
+            applied and school data has been populated. 
+            Run: POST /api/setup/init-school-data with schoolId: [UUID]"
+
+3. Better Debugging
+   BEFORE: Silent failure (hard to debug)
+   AFTER:  Logs to browser console with exact details
+           Shows: classCount, subjectCount, streamCount, etc.
+
+
+WHY MAKE IT REQUIRED?
+════════════════════════════════════════════════════════════════════════════════
+
+Because:
+1. ✅ Teachers need to be assigned to classes
+2. ✅ System needs to know who teaches what
+3. ✅ Can't have teachers without class assignment
+4. ✅ Better data integrity
+
+
+DATA FLOW ARCHITECTURE:
+════════════════════════════════════════════════════════════════════════════════
+
+                         School Created
+                              ↓
+                   Migration 015 Runs
+                              ↓
+                   Trigger: create_default_school_data()
+                              ├─→ 15 Classes (Prep-SSS3)
+                              ├─→ 45 Arms (A, B, C per class)
+                              ├─→ 45 Combos (linking classes to arms)
+                              ├─→ 4 Streams (Science, Commercial, etc)
+                              └─→ 17 Subjects (with applicable_to_levels)
+                              ↓
+                   Data Ready in Database
+                              ↓
+                   Registration Modal Opens
+                              ├─→ Fetches classes from DB ✅
+                              ├─→ Fetches subjects from DB ✅
+                              ├─→ User selects class (REQUIRED) ✅
+                              ├─→ User selects subjects (REQUIRED) ✅
+                              └─→ Registration complete ✅
+
+
+WHAT YOU NEED TO DO:
+════════════════════════════════════════════════════════════════════════════════
+
+1. Get your school UUID
+2. Run: POST /api/setup/init-school-data with that UUID
+3. Wait for success response
+4. Hard refresh your browser
+5. Try registration again
+6. Should work now! ✅
+
+
+TIME TO FIX: 5 MINUTES
+════════════════════════════════════════════════════════════════════════════════
+
+1. Get UUID in Supabase → 1 min
+2. Run API endpoint → 1 min
+3. Verify in Supabase → 1 min
+4. Hard refresh browser → 1 min
+5. Test registration → 1 min
+   TOTAL: 5 minutes
+
+
+TECHNICAL SUMMARY:
+════════════════════════════════════════════════════════════════════════════════
+
+Problem:   School has no classes/subjects in database
+Cause:     School created before migration 015 was applied
+Solution:  Run API endpoint to trigger create_default_school_data()
+Result:    All 15 classes + 17 subjects created automatically
+Time:      5 minutes to fix
+
+================================================================================

@@ -1,0 +1,161 @@
+==========================================
+FILE UPLOAD NOW VISIBLE IN LESSON NOTES FORM
+==========================================
+
+✅ FIXED!
+
+The file upload section is NOW CLEARLY VISIBLE with:
+- 📎 Blue highlighted section (easy to spot!)
+- Clear label: "📎 Upload Lesson File (Optional)"
+- File input field
+- Shows accepted file formats
+- Displays selected file name and size
+
+==========================================
+WHERE TO FIND IT
+==========================================
+
+Go to: http://localhost:3000/teacher/lesson-notes
+Click: "✚ New Lesson Note" button
+
+You will see the form with these sections (top to bottom):
+1. Subject (dropdown)
+2. Class (dropdown)
+3. Topic (text input)
+4. Content Summary (textarea)
+5. 📎 Upload Lesson File (BLUE SECTION) ← HERE IT IS!
+6. Create button
+
+==========================================
+WHAT YOU'LL SEE
+==========================================
+
+Before selecting file:
+┌───────────────────────────────────┐
+│ 📎 Upload Lesson File (Optional)  │
+│                                   │
+│ [File input field]                │
+│ Accepted formats: PDF, DOC, etc.  │
+└───────────────────────────────────┘
+
+After selecting file:
+┌───────────────────────────────────┐
+│ 📎 Upload Lesson File (Optional)  │
+│                                   │
+│ [File input field]                │
+│ Accepted formats: PDF, DOC, etc.  │
+│                                   │
+│ ✓ Selected: lesson.pdf (256 KB)   │ ← File appears here!
+└───────────────────────────────────┘
+
+==========================================
+HOW TO USE IT
+==========================================
+
+STEP 1: Click "✚ New Lesson Note" button
+
+STEP 2: Fill in all fields:
+  - Select Subject
+  - Select Class
+  - Enter Topic
+  - Enter Content Summary
+
+STEP 3: Select File (OPTIONAL)
+  - Click the file input field
+  - Choose a file from your computer
+  - Supported: PDF, DOC, DOCX, PPTX, TXT, XLSX
+  - See filename appear in green box
+
+STEP 4: Submit
+  - Click "💾 Create Lesson Note" button
+  - File uploads to storage
+  - Lesson note created
+
+STEP 5: Verify
+  - Go back to lesson notes list
+  - You should see: 📎 File: lesson.pdf
+  - Shows file was uploaded!
+
+==========================================
+TROUBLESHOOTING
+==========================================
+
+IF YOU STILL DON'T SEE IT:
+
+1. Restart Dev Server
+   - Press Ctrl+C in terminal (stop current server)
+   - Run: npm run dev
+
+2. Hard Refresh Browser
+   - Press Ctrl+F5 (Windows) or Cmd+Shift+R (Mac)
+
+3. Clear Cache
+   - Press Ctrl+Shift+Delete
+   - Clear "Cached images and files"
+   - Refresh page
+
+4. Check Console Errors
+   - Press F12 (open Developer Tools)
+   - Go to Console tab
+   - Look for red error messages
+   - Report them
+
+==========================================
+FILES UPLOADED WILL:
+==========================================
+
+✓ Be stored in Supabase storage bucket "lesson-uploads"
+✓ Be organized in folders: school_id / teacher_id / timestamp-filename
+✓ Be private (only school users can access)
+✓ Have their path/name/size saved to database
+✓ Appear in lesson notes list with 📎 icon
+✓ Be available for headteacher to download/review
+
+==========================================
+ACCEPTED FILE TYPES
+==========================================
+
+✅ PDF files (.pdf)
+✅ Word documents (.doc, .docx)
+✅ PowerPoint presentations (.pptx)
+✅ Text files (.txt)
+✅ Excel spreadsheets (.xlsx)
+
+❌ Other formats not supported
+
+==========================================
+NEXT STEPS
+==========================================
+
+1. Restart dev server (if you haven't already)
+2. Go to: http://localhost:3000/teacher/lesson-notes
+3. Click: "✚ New Lesson Note"
+4. Look for blue section with 📎 icon
+5. Select a file to upload
+6. Submit the form
+7. Verify file appears in list
+
+==========================================
+SUCCESS LOOKS LIKE:
+==========================================
+
+✓ Blue file upload section visible in form
+✓ Can select a file
+✓ File name shows in green box after selection
+✓ Form submits without errors
+✓ Lesson note appears in list
+✓ File name appears with 📎 icon in list
+
+If you see all of these, FILE UPLOAD IS WORKING! ✅
+
+==========================================
+THE UPLOAD FEATURE IS LIVE AND READY
+==========================================
+
+Everything is set up to upload lesson notes:
+- Form has file input
+- Supabase storage bucket ready (create if needed)
+- Database columns ready for file metadata
+- Headteacher can view files
+
+Start uploading lesson notes! 📝📎

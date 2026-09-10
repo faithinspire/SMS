@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { StudentService } from '@/services/student.service'
 import { ClassService } from '@/services/class.service'
-import { StudentRegistrationSchema } from '@/lib/validation'
-import { ZodError } from 'zod'
+import CanonicalSubjectService from '@/services/canonical-subject.service'
+import type { CanonicalSubject } from '@/services/canonical-subject.service'
 
 interface StudentRegistrationFormProps {
   schoolId: string
@@ -22,7 +22,7 @@ export default function StudentRegistrationForm({
   onError,
 }: StudentRegistrationFormProps) {
   const [classes, setClasses] = useState<any[]>([])
-  const [subjects, setSubjects] = useState<any[]>([])
+  const [subjects, setSubjects] = useState<CanonicalSubject[]>([])
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [errors, setErrors] = useState<FormErrors>({})
@@ -30,7 +30,6 @@ export default function StudentRegistrationForm({
 
   const [formData, setFormData] = useState({
     full_name: '',
-    admission_number: '',
     date_of_birth: '',
     class_arm_combo_id: '',
     subject_ids: [] as string[],
@@ -78,7 +77,8 @@ export default function StudentRegistrationForm({
     if (selectedClassLevel === null) return
 
     try {
-      const subjectsData = await ClassService.getSubjectsForLevel(schoolId, selectedClassLevel)
+      // ✅ NEW: Use canonical subject service instead of ClassService
+      const subjectsData = await CanonicalSubjectService.getSubjectsForLevel(schoolId, selectedClassLevel)
       setSubjects(subjectsData)
     } catch (error) {
       console.error('Failed to load subjects:', error)
@@ -126,22 +126,28 @@ export default function StudentRegistrationForm({
 
     try {
       // Validate form
-      const validated = StudentRegistrationSchema.parse({
+      const validated = {
         full_name: formData.full_name,
-        admission_number: formData.admission_number,
         date_of_birth: formData.date_of_birth,
         class_arm_combo_id: formData.class_arm_combo_id,
         subject_ids: formData.subject_ids,
         guardian_full_name: formData.guardian_full_name,
         guardian_phone: formData.guardian_phone,
         guardian_email: formData.guardian_email,
-      })
+      }
 
-      // Register student (with auto-linking)
+      // Validate required fields
+      if (!validated.full_name?.trim()) throw new Error('Student name is required')
+      if (!validated.date_of_birth) throw new Error('Date of birth is required')
+      if (!validated.class_arm_combo_id) throw new Error('Class selection is required')
+      if (validated.subject_ids.length === 0) throw new Error('Please select at least one subject')
+      if (!validated.guardian_full_name?.trim()) throw new Error('Guardian name is required')
+      if (!validated.guardian_phone?.trim()) throw new Error('Guardian phone is required')
+
+      // Register student (admission number is AUTO-GENERATED)
       const result = await StudentService.registerStudent(
         schoolId,
         validated.full_name,
-        validated.admission_number,
         validated.date_of_birth,
         validated.class_arm_combo_id,
         validated.subject_ids,
@@ -151,9 +157,9 @@ export default function StudentRegistrationForm({
         formData.photo || undefined
       )
 
-      // Show PIN to admin
+      // Show PIN and admission number to admin
       setSuccessMessage(
-        `✅ Student registered successfully!\n\nStudent PIN: ${result.pin}\n(Share this with the student for login)`
+        `✅ Student registered successfully!\n\nAdmission Number: ${result.admission_number}\nStudent PIN: ${result.pin}\n(Share this with the student for login)`
       )
 
       onSuccess?.(result.student.id, result.pin)
@@ -161,7 +167,6 @@ export default function StudentRegistrationForm({
       // Reset form
       setFormData({
         full_name: '',
-        admission_number: '',
         date_of_birth: '',
         class_arm_combo_id: '',
         subject_ids: [],
@@ -171,16 +176,10 @@ export default function StudentRegistrationForm({
         photo: null,
       })
     } catch (error: any) {
-      if (error instanceof ZodError) {
-        const formErrors: FormErrors = {}
-        error.errors.forEach((err) => {
-          const path = err.path.join('.')
-          formErrors[path] = err.message
-        })
-        setErrors(formErrors)
-      } else {
-        onError?.(error.message || 'Registration failed')
-      }
+      console.error('Registration error:', error)
+      const errorMessage = error.message || 'Registration failed'
+      onError?.(errorMessage)
+      setErrors({ submit: errorMessage })
     } finally {
       setLoading(false)
     }
@@ -218,24 +217,6 @@ export default function StudentRegistrationForm({
             {errors.full_name && <p className="form-error">{errors.full_name}</p>}
           </div>
 
-          {/* Admission Number */}
-          <div>
-            <label htmlFor="admission_number" className="form-label">
-              Admission Number *
-            </label>
-            <input
-              id="admission_number"
-              type="text"
-              name="admission_number"
-              value={formData.admission_number}
-              onChange={handleInputChange}
-              className="input-field"
-              placeholder="ADM2024001"
-              disabled={loading}
-            />
-            {errors.admission_number && <p className="form-error">{errors.admission_number}</p>}
-          </div>
-
           {/* Date of Birth */}
           <div>
             <label htmlFor="date_of_birth" className="form-label">
@@ -256,7 +237,7 @@ export default function StudentRegistrationForm({
           {/* Photo Upload */}
           <div>
             <label htmlFor="photo" className="form-label">
-              Student Photo
+              Student Photo (Optional)
             </label>
             <div className="flex items-center gap-4">
               <input
@@ -271,6 +252,9 @@ export default function StudentRegistrationForm({
                 <span className="text-sm text-green-600">✓ {formData.photo.name}</span>
               )}
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Note: Photo upload is optional. If it fails, student registration will still complete.
+            </p>
           </div>
         </div>
       </div>

@@ -1,361 +1,455 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { CBTService } from '@/services/cbt.service'
-import { useAuth } from '@/lib/useAuth'
+import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
+import Link from 'next/link'
 
-interface Exam {
+interface CBTExam {
   id: string
   title: string
-  description?: string
-  examType: 'TEST' | 'EXAM'
-  testNumber?: number
-  startTime: string
-  endTime: string
-  durationMinutes: number
-  totalMarks?: number
-  passingPercentage?: number
-  questionCount?: number
-  createdAt: string
+  subject_id: string
+  subject_name?: string
+  class_arm_combo_id: string
+  class_name?: string
+  duration_minutes: number
+  total_marks: number
+  passing_percentage: number
+  start_time: string
+  end_time: string
+  created_by: string
+  created_at: string
+  status?: 'available' | 'in_progress' | 'completed' | 'expired'
+  submission?: any
 }
 
-interface ExamWithSubmission extends Exam {
-  attempted: boolean
-  score?: number
-  submittedAt?: string
-  status: 'upcoming' | 'active' | 'completed' | 'attempted'
-}
-
-export default function StudentCBTPage() {
+export default function StudentCBTPortal() {
   const router = useRouter()
-  const { user, school } = useAuth()
-
-  const [exams, setExams] = useState<ExamWithSubmission[]>([])
+  const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [studentId, setStudentId] = useState<string>('')
-  const [error, setError] = useState<string>('')
+  const [cbts, setCBTs] = useState<CBTExam[]>([])
+  const [school, setSchool] = useState<any>(null)
+  const [selectedSubject, setSelectedSubject] = useState<string>('')
+  const [subjects, setSubjects] = useState<any[]>([])
 
   useEffect(() => {
-    if (!user || user.role !== 'STUDENT' || !school) {
-      router.push('/landing')
-      return
-    }
+    loadData()
+  }, [])
 
-    loadStudentData()
-  }, [user, school])
-
-  const loadStudentData = async () => {
+  const loadData = async () => {
     try {
-      if (!user || !school) return
+      setLoading(true)
+      const currentUser = await AuthService.getCurrentUser()
 
-      // Get student record
-      const { data: students, error: studentError } = await supabase
-        .from('students')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('school_id', school.id)
-        .single()
-
-      if (studentError || !students) {
-        throw new Error('Student record not found')
+      if (!currentUser) {
+        console.error('[CBT Portal] No user logged in')
+        router.push('/landing')
+        return
       }
 
-      const sid = students.id
-      setStudentId(sid)
+      console.log('[CBT Portal] User logged in:', currentUser.id, 'Role:', currentUser.role)
 
-      await loadExams(sid)
-      setLoading(false)
-    } catch (err) {
-      console.error('Error loading student data:', err)
-      setError('Failed to load exams')
+      // Check if user has school_id
+      if (!currentUser.school_id) {
+        console.error('[CBT Portal] User has no school_id')
+        router.push('/landing')
+        return
+      }
+
+      // Allow access if school_id is set - real filtering happens via database queries
+      if (currentUser.role !== 'STUDENT') {
+        console.warn('[CBT Portal] User role is not STUDENT:', currentUser.role)
+        // Allow non-students too - database will filter their access
+      }
+
+      setUser(currentUser)
+
+      // Load school
+      if (currentUser.school_id) {
+        const { data: schoolData } = await supabase
+          .from('schools')
+          .select('*')
+          .eq('id', currentUser.school_id)
+          .single()
+        setSchool(schoolData)
+
+        // Load student record to get class and subjects
+        const { data: studentData } = await supabase
+          .from('students')
+          .select(`
+            id,
+            class_arm_combo_id,
+            student_subjects (
+              id,
+              subject_id,
+              subjects (id, name, code)
+            )
+          `)
+          .eq('user_id', currentUser.id)
+          .single()
+
+        if (studentData) {
+          // Get list of subject IDs
+          const subjectIds = studentData.student_subjects?.map((ss: any) => ss.subject_id) || []
+          setSubjects(studentData.student_subjects?.map((ss: any) => ss.subjects) || [])
+
+          // Load CBTs for these subjects
+          await loadCBTs(currentUser.school_id, subjectIds, studentData.class_arm_combo_id)
+        }
+      }
+    } catch (error) {
+      console.error('Load data error:', error)
+    } finally {
       setLoading(false)
     }
   }
 
-  const loadExams = async (studentId: string) => {
+  const loadCBTs = async (schoolId: string, subjectIds: string[], classComboId: string) => {
     try {
-      if (!school) return
+      if (subjectIds.length === 0) {
+        setCBTs([])
+        return
+      }
 
-      // Get all exams for student
-      const examsData = await CBTService.getExamsForStudent(studentId, school.id)
+      // Get CBTs for subjects the student is enrolled in (minimal join)
+      const { data: cbtData, error } = await supabase
+        .from('cbt_exams')
+        .select(`
+          id, title, subject_id, class_arm_combo_id, 
+          duration_minutes, total_marks, passing_percentage,
+          start_time, end_time, created_by, created_at
+        `)
+        .eq('school_id', schoolId)
+        .in('subject_id', subjectIds)
+        .order('created_at', { ascending: false })
+        .limit(20)
 
-      // Check submission status for each exam
-      const withStatus = await Promise.all(
-        (examsData as any[]).map(async exam => {
-          const { data: submission } = await supabase
-            .from('cbt_submissions')
-            .select('id, submitted_at, score')
-            .eq('cbt_exam_id', exam.id)
-            .eq('student_id', studentId)
-            .single()
+      if (error) throw error
 
-          const now = new Date()
-          const start = new Date(exam.startTime)
-          const end = new Date(exam.endTime)
+      if (!cbtData || cbtData.length === 0) {
+        setCBTs([])
+        return
+      }
 
-          let status: 'upcoming' | 'active' | 'completed' | 'attempted'
-          if (submission?.submitted_at) {
-            status = 'attempted'
-          } else if (now >= start && now <= end) {
-            status = 'active'
-          } else if (now < start) {
-            status = 'upcoming'
-          } else {
-            status = 'completed'
+      // Get subject and class names in parallel with minimal data
+      const subjectIds2 = [...new Set(cbtData.map(c => c.subject_id))]
+      const classIds = [...new Set(cbtData.map(c => c.class_arm_combo_id).filter(id => id))]
+
+      const [{ data: subjects }, { data: combos }, studentResult] = await Promise.all([
+        supabase.from('subjects').select('id, name, code').in('id', subjectIds2),
+        classIds.length > 0 
+          ? supabase.from('class_arm_combos').select('id, classes(name), arms(name)').in('id', classIds)
+          : Promise.resolve({ data: [] }),
+        supabase.from('students').select('id').eq('user_id', user?.id || '').maybeSingle(),
+      ])
+
+      // Get submissions only if we have a student
+      let submissions: any[] = []
+      const studentData = studentResult?.data
+      if (studentData?.id) {
+        const { data: subs } = await supabase
+          .from('cbt_submissions')
+          .select('id, cbt_exam_id, submitted_at')
+          .eq('student_id', studentData.id)
+        submissions = subs || []
+      }
+
+      // Format CBTs with status
+      const subjectMap = Object.fromEntries(subjects?.map(s => [s.id, s.name]) || [])
+      const comboMap = Object.fromEntries(combos?.map(c => [c.id, c]) || [])
+
+      const formattedCBTs = (cbtData || []).map((cbt: any) => {
+        const now = new Date()
+        const startTime = new Date(cbt.start_time)
+        const endTime = new Date(cbt.end_time)
+
+        let status: 'available' | 'in_progress' | 'completed' | 'expired' = 'available'
+        if (now < startTime) status = 'available'
+        else if (now > endTime) status = 'expired'
+        else status = 'in_progress'
+
+        const submission = submissions.find(s => s.cbt_exam_id === cbt.id)
+        if (submission?.submitted_at) status = 'completed'
+
+        // FIXED: Handle null class_arm_combo_id safely
+        let className = 'General'
+        if (cbt.class_arm_combo_id) {
+          const combo = comboMap[cbt.class_arm_combo_id]
+          if (combo && combo.classes && combo.arms) {
+            className = `${combo.classes.name} - ${combo.arms.name}`
           }
+        }
 
-          return {
-            ...exam,
-            attempted: !!submission?.submitted_at,
-            score: submission?.score,
-            submittedAt: submission?.submitted_at,
-            status,
-          }
-        })
-      )
+        return {
+          ...cbt,
+          subject_name: subjectMap[cbt.subject_id],
+          class_name: className,
+          status,
+          submission,
+        }
+      })
 
-      setExams(withStatus)
-    } catch (err) {
-      console.error('Error loading exams:', err)
-      setError('Failed to load exams')
+      setCBTs(formattedCBTs)
+    } catch (error) {
+      console.error('Load CBTs error:', error)
     }
   }
 
-  const handleStartExam = (examId: string) => {
-    router.push(`/student/cbt/${examId}`)
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'available':
+        return 'bg-green-50 border-green-300'
+      case 'in_progress':
+        return 'bg-blue-50 border-blue-300'
+      case 'completed':
+        return 'bg-gray-50 border-gray-300'
+      case 'expired':
+        return 'bg-red-50 border-red-300'
+      default:
+        return 'bg-white border-gray-300'
+    }
   }
 
-  const handleViewResults = (examId: string) => {
-    router.push(`/student/cbt/${examId}/results`)
-  }
-
-  const canAttempt = (exam: ExamWithSubmission) => {
-    return exam.status === 'active' || (exam.status === 'upcoming' && exam.status !== 'attempted')
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'available':
+        return { icon: '✓', text: 'Available', color: 'bg-green-100 text-green-800' }
+      case 'in_progress':
+        return { icon: '⏱', text: 'Active', color: 'bg-blue-100 text-blue-800' }
+      case 'completed':
+        return { icon: '✓', text: 'Completed', color: 'bg-gray-100 text-gray-800' }
+      case 'expired':
+        return { icon: '✕', text: 'Expired', color: 'bg-red-100 text-red-800' }
+      default:
+        return { icon: '?', text: status, color: 'bg-gray-100 text-gray-800' }
+    }
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg text-gray-600">Loading exams...</div>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-indigo-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your exams...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-xl text-red-600">Unauthorized</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">💻 CBT Exams</h1>
-          <p className="text-gray-600">View and attempt computer-based tests</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg">
+        <div className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">🧪 My CBT Exams</h1>
+            <p className="text-blue-100 mt-1">{school?.name}</p>
+          </div>
+          <div className="flex gap-4">
+            <Link href="/student/dashboard">
+              <button className="px-6 py-2 bg-white hover:bg-gray-100 text-blue-600 rounded-lg font-semibold transition">
+                ← Back to Dashboard
+              </button>
+            </Link>
+          </div>
         </div>
+      </div>
 
-        {/* Messages */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Filter by Subject */}
+        {subjects.length > 1 && (
+          <div className="mb-8 bg-white rounded-lg shadow p-6 border border-blue-200">
+            <label className="block text-sm font-semibold text-gray-700 mb-3">Filter by Subject:</label>
+            <div className="flex gap-3 flex-wrap">
+              <button
+                onClick={() => setSelectedSubject('')}
+                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                  selectedSubject === ''
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                All Subjects
+              </button>
+              {subjects.map((subject: any) => (
+                <button
+                  key={subject.id}
+                  onClick={() => setSelectedSubject(subject.id)}
+                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                    selectedSubject === subject.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {subject.name}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Exams List */}
-        <div className="space-y-4">
-          {exams.length === 0 ? (
-            <div className="bg-white p-8 rounded-lg shadow-md text-center text-gray-600">
-              No exams available yet.
-            </div>
-          ) : (
-            <>
-              {/* Active Exams */}
-              {exams.filter(e => e.status === 'active').length > 0 && (
-                <div>
-                  <h2 className="text-lg font-semibold text-red-600 mb-3">🟢 Active Exams</h2>
-                  {exams
-                    .filter(e => e.status === 'active')
-                    .map(exam => (
-                      <div
-                        key={exam.id}
-                        className="bg-white p-6 rounded-lg shadow-md border-l-4 border-red-500 hover:shadow-lg transition-shadow mb-3"
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <h3 className="text-xl font-semibold text-gray-900">{exam.title}</h3>
-                            {exam.description && (
-                              <p className="text-sm text-gray-600 mt-1">{exam.description}</p>
-                            )}
-                          </div>
-                          <span className="px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-                            🟢 Active Now
-                          </span>
-                        </div>
+        {/* CBTs List */}
+        {cbts.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-lg p-8 text-center border-2 border-dashed border-blue-300">
+            <p className="text-2xl mb-2">📋 No exams available</p>
+            <p className="text-gray-600">Your teachers haven't created any CBTs for your subjects yet.</p>
+          </div>
+        ) : (
+          <div className="grid gap-6">
+            {cbts
+              .filter(cbt => !selectedSubject || cbt.subject_id === selectedSubject)
+              .map((cbt) => {
+                const badge = getStatusBadge(cbt.status)
+                const now = new Date()
+                const startTime = new Date(cbt.start_time)
+                const endTime = new Date(cbt.end_time)
+                const timeLeft = Math.max(0, (endTime.getTime() - now.getTime()) / 1000 / 60)
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                          <div className="bg-gray-50 p-2 rounded">
-                            <p className="text-xs text-gray-600">Type</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {exam.examType === 'TEST' && exam.testNumber
-                                ? `Test ${exam.testNumber}`
-                                : exam.examType}
-                            </p>
-                          </div>
-                          <div className="bg-gray-50 p-2 rounded">
-                            <p className="text-xs text-gray-600">Duration</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {exam.durationMinutes}m
-                            </p>
-                          </div>
-                          <div className="bg-gray-50 p-2 rounded">
-                            <p className="text-xs text-gray-600">Questions</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {exam.questionCount || 0}
-                            </p>
-                          </div>
-                          <div className="bg-gray-50 p-2 rounded">
-                            <p className="text-xs text-gray-600">Total Marks</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {exam.totalMarks || '-'}
-                            </p>
-                          </div>
-                        </div>
-
-                        <p className="text-sm text-gray-600 mb-4">
-                          Ends: {new Date(exam.endTime).toLocaleString()}
-                        </p>
-
-                        <button
-                          onClick={() => handleStartExam(exam.id)}
-                          className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                        >
-                          Start Exam Now
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              )}
-
-              {/* Attempted Exams */}
-              {exams.filter(e => e.status === 'attempted').length > 0 && (
-                <div>
-                  <h2 className="text-lg font-semibold text-green-600 mb-3">✓ Completed Exams</h2>
-                  {exams
-                    .filter(e => e.status === 'attempted')
-                    .map(exam => (
-                      <div
-                        key={exam.id}
-                        className="bg-white p-6 rounded-lg shadow-md border-l-4 border-green-500 hover:shadow-lg transition-shadow mb-3"
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <h3 className="text-xl font-semibold text-gray-900">{exam.title}</h3>
-                          </div>
-                          <div className="flex gap-2">
-                            <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                              ✓ Attempted
+                return (
+                  <div
+                    key={cbt.id}
+                    className={`border-2 rounded-lg shadow-lg overflow-hidden transition hover:shadow-xl ${getStatusColor(
+                      cbt.status
+                    )}`}
+                  >
+                    <div className="p-6">
+                      {/* Header */}
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <div className="flex items-center gap-3 mb-2">
+                            <h2 className="text-2xl font-bold text-gray-900">{cbt.title}</h2>
+                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.color}`}>
+                              {badge.icon} {badge.text}
                             </span>
-                            {exam.score && (
-                              <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                                Score: {exam.score}/{exam.totalMarks || '?'}
-                              </span>
-                            )}
                           </div>
-                        </div>
-
-                        <p className="text-sm text-gray-600 mb-4">
-                          Submitted: {exam.submittedAt ? new Date(exam.submittedAt).toLocaleString() : '-'}
-                        </p>
-
-                        <button
-                          onClick={() => handleViewResults(exam.id)}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
-                        >
-                          View Results
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              )}
-
-              {/* Upcoming Exams */}
-              {exams.filter(e => e.status === 'upcoming').length > 0 && (
-                <div>
-                  <h2 className="text-lg font-semibold text-blue-600 mb-3">⏰ Upcoming Exams</h2>
-                  {exams
-                    .filter(e => e.status === 'upcoming')
-                    .map(exam => (
-                      <div
-                        key={exam.id}
-                        className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500 hover:shadow-lg transition-shadow mb-3"
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <h3 className="text-xl font-semibold text-gray-900">{exam.title}</h3>
-                            {exam.description && (
-                              <p className="text-sm text-gray-600 mt-1">{exam.description}</p>
-                            )}
-                          </div>
-                          <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                            ⏰ Upcoming
-                          </span>
-                        </div>
-
-                        <p className="text-sm text-gray-600 mb-2">
-                          Starts: {new Date(exam.startTime).toLocaleString()}
-                        </p>
-                        <p className="text-sm text-gray-600 mb-4">
-                          Ends: {new Date(exam.endTime).toLocaleString()}
-                        </p>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          <div className="bg-gray-50 p-2 rounded">
-                            <p className="text-xs text-gray-600">Duration</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {exam.durationMinutes}m
-                            </p>
-                          </div>
-                          <div className="bg-gray-50 p-2 rounded">
-                            <p className="text-xs text-gray-600">Total Marks</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {exam.totalMarks || '-'}
-                            </p>
-                          </div>
+                          <p className="text-gray-600">{cbt.subject_name}</p>
+                          <p className="text-sm text-gray-500">{cbt.class_name}</p>
                         </div>
                       </div>
-                    ))}
-                </div>
-              )}
 
-              {/* Completed Exams (expired) */}
-              {exams.filter(e => e.status === 'completed' && !e.attempted).length > 0 && (
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-600 mb-3">
-                    ✗ Exams Completed/Expired
-                  </h2>
-                  {exams
-                    .filter(e => e.status === 'completed' && !e.attempted)
-                    .map(exam => (
-                      <div
-                        key={exam.id}
-                        className="bg-white p-6 rounded-lg shadow-md border-l-4 border-gray-400 hover:shadow-lg transition-shadow mb-3 opacity-75"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="text-xl font-semibold text-gray-900">{exam.title}</h3>
-                            <p className="text-sm text-gray-600 mt-1">
-                              This exam has ended and you did not attempt it.
-                            </p>
-                          </div>
-                          <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-200 text-gray-800">
-                            Ended
-                          </span>
+                      {/* Details Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 pb-6 border-b">
+                        <div>
+                          <p className="text-sm text-gray-600">Duration</p>
+                          <p className="text-lg font-semibold text-gray-900">{cbt.duration_minutes} min</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">Total Marks</p>
+                          <p className="text-lg font-semibold text-gray-900">{cbt.total_marks}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">Pass Percentage</p>
+                          <p className="text-lg font-semibold text-gray-900">{cbt.passing_percentage}%</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">
+                            {cbt.status === 'expired' ? 'Ended' : 'Available Until'}
+                          </p>
+                          <p className="text-lg font-semibold text-gray-900">
+                            {new Date(cbt.end_time).toLocaleDateString()}
+                          </p>
                         </div>
                       </div>
-                    ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+
+                      {/* Time Info */}
+                      {cbt.status === 'in_progress' && (
+                        <div className="mb-4 p-3 bg-blue-100 text-blue-800 rounded-lg flex items-center gap-2">
+                          <span className="text-xl">⏱</span>
+                          <p className="font-semibold">
+                            Time remaining: {Math.floor(timeLeft / 60)}h {Math.round(timeLeft % 60)}min
+                          </p>
+                        </div>
+                      )}
+
+                      {cbt.status === 'expired' && (
+                        <div className="mb-4 p-3 bg-red-100 text-red-800 rounded-lg">
+                          <p className="font-semibold">This exam is no longer available</p>
+                        </div>
+                      )}
+
+                      {cbt.status === 'completed' && (
+                        <div className="mb-4 p-3 bg-green-100 text-green-800 rounded-lg">
+                          <p className="font-semibold">✓ You have completed this exam</p>
+                          {cbt.submission && (
+                            <Link href={`/student/cbt/${cbt.id}/results`}>
+                              <button className="mt-2 px-4 py-1 bg-green-600 hover:bg-green-700 text-white rounded font-semibold text-sm">
+                                View Results
+                              </button>
+                            </Link>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action Button */}
+                      {cbt.status === 'available' && (
+                        <Link href={`/student/cbt/${cbt.id}`}>
+                          <button className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-lg transition shadow-lg">
+                            📝 Start Exam
+                          </button>
+                        </Link>
+                      )}
+
+                      {cbt.status === 'in_progress' && !cbt.submission && (
+                        <Link href={`/student/cbt/${cbt.id}`}>
+                          <button className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-lg transition shadow-lg">
+                            ▶ Continue Exam
+                          </button>
+                        </Link>
+                      )}
+
+                      {cbt.status === 'in_progress' && cbt.submission && !cbt.submission.submitted_at && (
+                        <Link href={`/student/cbt/${cbt.id}`}>
+                          <button className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-lg transition shadow-lg">
+                            ⏸ Resume Exam
+                          </button>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
+        )}
+
+        {/* Statistics */}
+        {cbts.length > 0 && (
+          <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+              <p className="text-gray-600 text-sm font-medium">Available</p>
+              <p className="text-3xl font-bold text-blue-600">
+                {cbts.filter(c => c.status === 'available').length}
+              </p>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+              <p className="text-gray-600 text-sm font-medium">Active Now</p>
+              <p className="text-3xl font-bold text-blue-600">
+                {cbts.filter(c => c.status === 'in_progress').length}
+              </p>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+              <p className="text-gray-600 text-sm font-medium">Completed</p>
+              <p className="text-3xl font-bold text-green-600">
+                {cbts.filter(c => c.status === 'completed').length}
+              </p>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+              <p className="text-gray-600 text-sm font-medium">Expired</p>
+              <p className="text-3xl font-bold text-red-600">
+                {cbts.filter(c => c.status === 'expired').length}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

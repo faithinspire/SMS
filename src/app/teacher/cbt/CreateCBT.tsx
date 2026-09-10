@@ -8,6 +8,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import CanonicalSubjectService from '@/services/canonical-subject.service';
+import type { CanonicalSubject } from '@/services/canonical-subject.service';
 import { toast } from 'react-hot-toast';
 
 const supabase = createClient(
@@ -43,7 +45,7 @@ interface Question {
 const CreateCBTForm: React.FC = () => {
   const [schoolId, setSchoolId] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjects] = useState<CanonicalSubject[]>([]);
   const [classArms, setClassArms] = useState<ClassArm[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -111,29 +113,31 @@ const CreateCBTForm: React.FC = () => {
       try {
         setIsLoading(true);
 
-        // Fetch subjects
-        const { data: subjectsData } = await supabase
-          .from('subjects')
-          .select('id, name')
-          .eq('school_id', schoolId)
-          .order('name');
-
+        // ✅ NEW: Use canonical subject service instead of direct Supabase query
+        const subjectsData = await CanonicalSubjectService.getAllSubjectsForSchool(schoolId);
         setSubjects(subjectsData || []);
+        console.log('✅ Subjects loaded:', subjectsData?.length || 0);
 
-        // Fetch class arms
-        const { data: classArmsData } = await supabase
+        // Fetch class arms with correct nested structure
+        const { data: classArmsData, error: classArmsError } = await supabase
           .from('class_arm_combos')
           .select(`
             id,
-            class:class_id (id, name),
-            arm:arm_id (name)
+            classes (id, name),
+            arms (name)
           `)
           .eq('school_id', schoolId)
-          .order('class(name)');
+          .order('created_at');
 
+        if (classArmsError) {
+          console.error('❌ Error fetching class arms:', classArmsError);
+          toast.error('Failed to load classes');
+        }
+        
+        console.log('✅ Class arms loaded:', classArmsData?.length || 0, classArmsData?.[0]);
         setClassArms(classArmsData || []);
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('❌ Error fetching data:', error);
         toast.error('Failed to load classes and subjects');
       } finally {
         setIsLoading(false);
@@ -363,11 +367,15 @@ const CreateCBTForm: React.FC = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Select Class</option>
-              {classArms.map(ca => (
-                <option key={ca.id} value={ca.id}>
-                  {ca.class.name} - {ca.arm.name}
-                </option>
-              ))}
+              {classArms.length > 0 ? (
+                classArms.map(ca => (
+                  <option key={ca.id} value={ca.id}>
+                    {(ca.classes as any)?.name || 'Unknown'} - {(ca.arms as any)?.name || 'Unknown'}
+                  </option>
+                ))
+              ) : (
+                <option disabled>Loading classes...</option>
+              )}
             </select>
           </div>
 

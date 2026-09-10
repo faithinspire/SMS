@@ -55,8 +55,18 @@ class ApiClient {
       apiError.details = data?.error?.details
     } else if (error.request) {
       apiError.code = 'NETWORK_ERROR'
-      apiError.message = 'Network error. Please check your connection.'
+      apiError.message = 'Network error. Please check your connection and try again.'
+      apiError.statusCode = 0
+    } else {
+      apiError.code = 'CLIENT_ERROR'
+      apiError.message = error.message
     }
+
+    console.error('[ApiClient Error]', {
+      code: apiError.code,
+      message: apiError.message,
+      statusCode: apiError.statusCode,
+    })
 
     return Promise.reject(apiError)
   }

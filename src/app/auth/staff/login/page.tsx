@@ -38,7 +38,8 @@ export default function StaffLoginPage() {
         password: formData.password,
       })
 
-      router.push('/dashboard')
+      // Redirect directly to teacher dashboard after successful login
+      router.push('/teacher/dashboard')
     } catch (err: any) {
       setError(err.message || 'Login failed')
     } finally {

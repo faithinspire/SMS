@@ -1,660 +1,741 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { UserRegistrationService, TeacherRegistrationData } from '@/services/user-registration.service'
-import { createClient } from '@supabase/supabase-js'
+import React, { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase-client'
+import { TeacherService } from '@/services/teacher.service'
+import { TeacherPhotoService } from '@/services/teacher-photo.service'
+import { RegistrationConfigService } from '@/services/registration-config.service'
+import CanonicalSubjectService from '@/services/canonical-subject.service'
+import type { RegistrationClass, RegistrationArm, ClassArmCombo } from '@/services/registration-config.service'
+import type { CanonicalSubject } from '@/services/canonical-subject.service'
 
 interface TeacherRegistrationModalProps {
-  schoolId: string
   isOpen: boolean
   onClose: () => void
-  onSuccess: () => void
+  schoolId: string
+  onSuccess?: (teacherId: string) => void
 }
 
-export default function TeacherRegistrationModal({
-  schoolId,
+export function TeacherRegistrationModal({
   isOpen,
   onClose,
+  schoolId,
   onSuccess,
 }: TeacherRegistrationModalProps) {
+  // UI State
   const [currentStep, setCurrentStep] = useState(1)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [dataLoading, setDataLoading] = useState(false)
 
-  // Teacher Level
+  // Form Data - Step 1
   const [teacherLevel, setTeacherLevel] = useState<'PRIMARY' | 'SECONDARY' | null>(null)
 
-  // Personal Info
-  const [formData, setFormData] = useState({
-    full_name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    date_of_birth: '',
-  })
+  // Form Data - Step 2: Personal Info
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [password, setPassword] = useState('')
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
-  // Payment Info
-  const [paymentData, setPaymentData] = useState({
-    bank_name: '',
-    account_number: '',
-    account_holder_name: '',
-    salary_amount: '',
-    employment_date: new Date().toISOString().split('T')[0],
-  })
+  // Form Data - Step 3: Bank Details
+  const [bankName, setBankName] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [accountName, setAccountName] = useState('')
+  const [salary, setSalary] = useState('')
 
-  // Assignments
-  const [selectedClass, setSelectedClass] = useState('')
-  const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set())
+  // Form Data - Step 4: Teaching Assignment
+  const [selectedComboId, setSelectedComboId] = useState<string | null>(null)
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([])
 
-  // Data
-  const [classes, setClasses] = useState<any[]>([])
-  const [subjects, setSubjects] = useState<any[]>([])
+  // Data State
+  const [combos, setCombos] = useState<ClassArmCombo[]>([])
+  const [subjects, setSubjects] = useState<CanonicalSubject[]>([])
 
+  // Load data when modal opens
   useEffect(() => {
-    if (isOpen) {
-      loadData()
+    if (isOpen && currentStep === 4) {
+      loadTeachingData()
     }
-  }, [isOpen])
+  }, [isOpen, currentStep])
 
-  const loadData = async () => {
+  const loadTeachingData = async () => {
+    if (!teacherLevel) {
+      setError('Teacher level not selected')
+      return
+    }
+
+    // ✅ VALIDATE SCHOOL ID FIRST
+    if (!schoolId || schoolId.trim() === '' || schoolId === 'undefined') {
+      setError('❌ School ID is required. Please contact your school administrator.')
+      console.error('❌ Empty or invalid school ID:', schoolId)
+      return
+    }
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(schoolId)) {
+      setError(`❌ Invalid school ID format: ${schoolId}`)
+      console.error('❌ Invalid school ID format:', schoolId)
+      return
+    }
+
     setDataLoading(true)
-    setError('')
-    console.log('🔍 [REGISTRATION DEBUG] TeacherRegistrationModal.loadData() called')
-    console.log('🔍 [REGISTRATION DEBUG] schoolId:', schoolId)
-    console.log('🔍 [REGISTRATION DEBUG] schoolId type:', typeof schoolId)
-    console.log('🔍 [REGISTRATION DEBUG] schoolId is empty?', !schoolId)
-    
+    setError(null)
+
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      
-      if (!supabaseUrl || !supabaseAnonKey) throw new Error('Supabase not configured')
-      
-      const supabase = createClient(supabaseUrl, supabaseAnonKey)
+      console.log(`📡 Loading teaching data for ${teacherLevel}...`)
 
-      console.log('📡 [REGISTRATION DEBUG] Fetching class_arm_combos for schoolId:', schoolId)
-      // Fetch class_arm_combos with joined data
-      const { data: combosData, error: combosError } = await supabase
-        .from('class_arm_combos')
-        .select(`
-          id,
-          class_id,
-          arm_id,
-          classes:class_id (id, name, level, type),
-          arms:arm_id (id, name)
-        `)
-        .eq('school_id', schoolId)
+      // Load combos for this teacher level
+      const loadedCombos = await RegistrationConfigService.getClassArmCombos(
+        schoolId,
+        teacherLevel
+      )
 
-      console.log('📡 [REGISTRATION DEBUG] class_arm_combos response:', {
-        count: combosData?.length,
-        error: combosError?.message,
-      })
-      
-      if (combosError) {
-        console.error('❌ [REGISTRATION DEBUG] combos error:', combosError)
-      }
+      console.log(`✅ Loaded ${loadedCombos.length} class-arm combos`)
 
-      if (combosData) {
-        const mapped = combosData.map((c: any) => ({
-          id: c.id,
-          class: c.classes,
-          arm: c.arms,
-        }))
-        console.log('✅ [REGISTRATION DEBUG] Mapped classes:', mapped.length, 'classes')
-        setClasses(mapped)
-      } else {
-        console.warn('⚠️ [REGISTRATION DEBUG] combosData is null')
-      }
+      // ✅ NEW: Load subjects from canonical service instead of hardcoded
+      const loadedSubjects = await CanonicalSubjectService.getAllSubjectsForSchool(schoolId)
 
-      console.log('📡 [REGISTRATION DEBUG] Fetching subjects for schoolId:', schoolId)
-      // Fetch subjects
-      const { data: subjectsData, error: subjectsError } = await supabase
-        .from('subjects')
-        .select('id, name, code, applicable_to_levels')
-        .eq('school_id', schoolId)
-        .order('name')
+      console.log(`✅ Loaded ${loadedSubjects.length} total subjects`)
 
-      console.log('📡 [REGISTRATION DEBUG] subjects response:', {
-        count: subjectsData?.length,
-        error: subjectsError?.message,
-      })
-
-      if (subjectsError) {
-        console.error('❌ [REGISTRATION DEBUG] subjects error:', subjectsError)
-      }
-
-      setSubjects(subjectsData || [])
-      console.log('✅ [REGISTRATION DEBUG] Set subjects:', subjectsData?.length || 0, 'subjects')
+      setCombos(loadedCombos)
+      setSubjects(loadedSubjects)
     } catch (err: any) {
-      console.error('❌ [REGISTRATION DEBUG] Exception in loadData:', err)
-      setError('Failed to load classes and subjects')
+      console.error('❌ Error loading teaching data:', err)
+      setError(`Failed to load teaching data: ${err.message}`)
     } finally {
       setDataLoading(false)
     }
   }
 
-  const handleSubjectToggle = (subjectId: string) => {
-    const newSet = new Set(selectedSubjects)
-    if (newSet.has(subjectId)) {
-      newSet.delete(subjectId)
-    } else {
-      newSet.add(subjectId)
-    }
-    setSelectedSubjects(newSet)
+  // Get subjects for selected combo - filters by class level
+  const getSubjectsForCombo = () => {
+    if (!selectedComboId) return []
+
+    const combo = combos.find(c => c.id === selectedComboId)
+    if (!combo) return []
+
+    const level = (combo.classes as any)?.level
+    if (level === undefined || level === null) return []
+
+    // ✅ NEW: Filter subjects by level using canonical service helper
+    return subjects.filter(s => s.applicable_to_levels.includes(level))
   }
 
-  const validateStep1 = (): boolean => {
-    if (!teacherLevel) {
-      setError('Please select teacher level')
-      return false
+  // Handle photo selection
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setPhotoFile(file)
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setPhotoPreview(event.target?.result as string)
+      }
+      reader.readAsDataURL(file)
     }
-    return true
   }
 
-  const validateStep2 = (): boolean => {
-    if (!formData.full_name.trim()) {
-      setError('Full name is required')
-      return false
-    }
-    if (!formData.email.trim()) {
-      setError('Email is required')
-      return false
-    }
-    if (!formData.password) {
-      setError('Password is required')
-      return false
-    }
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters')
-      return false
-    }
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
-      return false
-    }
-    if (!formData.date_of_birth) {
-      setError('Date of birth is required')
-      return false
-    }
-    return true
-  }
-
-  const validateStep3 = (): boolean => {
-    if (!paymentData.bank_name.trim()) {
-      setError('Bank name is required')
-      return false
-    }
-    if (!paymentData.account_number.trim()) {
-      setError('Account number is required')
-      return false
-    }
-    if (!paymentData.salary_amount) {
-      setError('Salary amount is required')
-      return false
-    }
-    if (parseFloat(paymentData.salary_amount) <= 0) {
-      setError('Salary must be greater than 0')
-      return false
-    }
-    return true
-  }
-
-  const validateStep4 = (): boolean => {
-    if (selectedSubjects.size === 0) {
-      setError('Please select at least one subject to teach')
-      return false
-    }
-    return true
-  }
-
+  // Step 1: Validate level selection
   const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    if (validateStep1()) setCurrentStep(2)
+    if (!teacherLevel) {
+      setError('Please select a teaching level')
+      return
+    }
+    setError(null)
+    setCurrentStep(2)
   }
 
+  // Step 2: Validate personal info
   const handleStep2Submit = (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    if (validateStep2()) setCurrentStep(3)
+    // Trim whitespace from email to prevent validation errors
+    const trimmedEmail = email.trim()
+    if (!firstName.trim() || !lastName.trim() || !trimmedEmail || !phone.trim() || !password.trim()) {
+      setError('Please fill in all personal information fields including password')
+      return
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    // Update email to trimmed version
+    setEmail(trimmedEmail)
+    setError(null)
+    setCurrentStep(3)
   }
 
+  // Step 3: Validate bank details
   const handleStep3Submit = (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    if (validateStep3()) setCurrentStep(4)
+    if (
+      !bankName.trim() ||
+      !accountNumber.trim() ||
+      !accountName.trim() ||
+      !salary.trim()
+    ) {
+      setError('Please fill in all bank details')
+      return
+    }
+    setError(null)
+    setCurrentStep(4)
   }
 
-  const handleStep4Submit = async (e: React.FormEvent) => {
+  // Step 4: Select teaching assignment
+  const handleStep4Submit = (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
+    if (!selectedComboId || selectedSubjects.length === 0) {
+      setError('Please select a class and at least one subject')
+      return
+    }
+    handleFinalSubmit()
+  }
 
-    if (!validateStep4()) return
+  // Toggle subject selection
+  const toggleSubject = (subjectId: string) => {
+    setSelectedSubjects(prev =>
+      prev.includes(subjectId)
+        ? prev.filter(id => id !== subjectId)
+        : [...prev, subjectId]
+    )
+  }
+
+  // Final submit
+  const handleFinalSubmit = async () => {
+    if (loading) return
 
     setLoading(true)
+    setError(null)
+    setSuccess(null)
 
     try {
-      const registrationData: TeacherRegistrationData = {
-        email: formData.email,
-        password: formData.password,
-        full_name: formData.full_name,
-        role: 'TEACHER',
-        school_id: schoolId,
-        class_arm_combo_id: selectedClass || undefined,
-        subject_ids: Array.from(selectedSubjects),
+      console.log('📝 Registering teacher...')
+      
+      // ✅ TRIM EMAIL TO PREVENT "INVALID EMAIL" ERROR
+      const trimmedEmail = email.trim().toLowerCase()
+      
+      // Validate password
+      if (!password || password.length < 6) {
+        setError('Password must be at least 6 characters')
+        setLoading(false)
+        return
       }
 
-      await UserRegistrationService.registerTeacher(registrationData)
+      // Step 1: Create user in auth via backend API (avoids rate limit)
+      // With retry logic for rate limit handling
+      console.log('🔐 Creating auth user via backend API...')
+      
+      let authResponse: Response | null = null
+      let lastError: any = null
+      
+      // Retry up to 3 times with exponential backoff (2s, 4s)
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          authResponse = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: trimmedEmail,
+              password: password,
+              full_name: `${firstName} ${lastName}`,
+              role: 'TEACHER',
+              school_id: schoolId,
+              user_type: 'STAFF',
+            }),
+          })
 
-      setSuccess('✅ Teacher registered successfully!')
-      setTimeout(() => {
-        onSuccess()
-        onClose()
-        setCurrentStep(1)
-        setTeacherLevel(null)
-        setFormData({ full_name: '', email: '', password: '', confirmPassword: '', date_of_birth: '' })
-        setPaymentData({
-          bank_name: '',
-          account_number: '',
-          account_holder_name: '',
-          salary_amount: '',
-          employment_date: new Date().toISOString().split('T')[0],
+          // If we get a 429 (rate limit), wait and retry
+          if (authResponse.status === 429 && attempt < 2) {
+            const waitTime = 1000 * Math.pow(2, attempt) // 1s, 2s, 4s
+            console.warn(`⚠️ Rate limited on attempt ${attempt + 1}. Waiting ${waitTime}ms before retry...`)
+            await new Promise(resolve => setTimeout(resolve, waitTime))
+            continue
+          }
+
+          // If we got a response (success or other error), break out of retry loop
+          break
+        } catch (fetchErr: any) {
+          lastError = fetchErr
+          if (attempt < 2) {
+            console.warn(`⚠️ Network error on attempt ${attempt + 1}, retrying...`)
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
+            continue
+          }
+        }
+      }
+
+      if (!authResponse) {
+        throw lastError || new Error('Failed to connect to auth service after retries')
+      }
+
+      if (!authResponse.ok) {
+        const errorData = await authResponse.json()
+        const errorMsg = errorData.error || 'Failed to create auth user'
+        
+        // Better error messages for common issues
+        if (authResponse.status === 429) {
+          throw new Error(`Rate limited by auth service. Please try again in a moment. (${errorMsg})`)
+        }
+        throw new Error(`Auth error: ${errorMsg}`)
+      }
+
+      const authData = await authResponse.json()
+      const userId = authData.user?.id
+      if (!userId) throw new Error('Failed to create auth user')
+      
+      // Log if user already existed (non-critical)
+      if (authData.user?.message) {
+        console.log('ℹ️ ', authData.user.message)
+      }
+
+      console.log('✅ Auth user created:', userId)
+
+      // Create user record in database - THIS IS CRITICAL
+      console.log('👤 Creating user record in database...')
+      const { error: userDbError } = await supabase
+        .from('users')
+        .insert({
+          id: userId,
+          school_id: schoolId,
+          email: trimmedEmail,
+          full_name: `${firstName} ${lastName}`,
+          role: 'TEACHER',
+          status: 'ACTIVE',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
-        setSelectedClass('')
-        setSelectedSubjects(new Set())
-      }, 2000)
+
+      if (userDbError) {
+        // Check if it's a duplicate key error (user already exists) - that's OK
+        if (userDbError.code === '23505') {
+          console.log('ℹ️ User record already exists in database')
+        } else {
+          console.error('❌ Critical error creating user record:', userDbError)
+          throw new Error(`Failed to create user record: ${userDbError.message}`)
+        }
+      } else {
+        console.log('✅ User record created in database')
+      }
+
+      // Step 2: Upload photo (optional)
+      let photoUrl = null
+      if (photoFile) {
+        console.log('📤 Uploading teacher photo...')
+        try {
+          photoUrl = await TeacherPhotoService.uploadTeacherPhoto(
+            schoolId,
+            userId,
+            photoFile
+          )
+          if (photoUrl) {
+            console.log('✅ Photo uploaded:', photoUrl)
+          } else {
+            console.warn('⚠️ Photo upload skipped (RLS blocked)')
+          }
+        } catch (photoErr: any) {
+          console.warn('⚠️ Photo upload failed, continuing without photo:', photoErr.message)
+        }
+      }
+
+      // Step 3: Create teacher record
+      console.log('💾 Creating teacher record...')
+      const teacherId = await TeacherService.registerTeacher({
+        school_id: schoolId,
+        user_id: userId,
+        first_name: firstName,
+        last_name: lastName,
+        email: trimmedEmail,
+        phone,
+        photo_url: photoUrl || null,
+        bank_name: bankName,
+        account_number: accountNumber,
+        account_name: accountName,
+        salary: parseFloat(salary),
+        teaching_level: teacherLevel,
+      })
+
+      console.log('✅ Teacher created:', teacherId)
+
+      // Step 4: Assign subjects to teacher
+      console.log(`📚 Assigning ${selectedSubjects.length} subjects...`)
+      // NOTE: subject_teacher_assignments.teacher_id references users(id), not teachers(id)
+      // So we pass userId here, not teacherId from the teachers table
+      await TeacherService.assignSubjectsToTeacher(userId, selectedSubjects, selectedComboId, schoolId)
+
+      console.log('✅ Subjects assigned')
+
+      // Step 5: Assign class to teacher
+      console.log('🏫 Assigning class...')
+      // NOTE: class_arm_combos.class_teacher_id references users(id), not teachers(id)
+      await TeacherService.assignClassToTeacher(userId, selectedComboId)
+
+      console.log('✅ Class assigned')
+
+      setSuccess(`✅ Teacher ${firstName} ${lastName} registered successfully!`)
+      setCurrentStep(1)
+
+      // Reset form
+      setTeacherLevel(null)
+      setFirstName('')
+      setLastName('')
+      setEmail('')
+      setPassword('')
+      setPhone('')
+      setPhotoFile(null)
+      setPhotoPreview(null)
+      setBankName('')
+      setAccountNumber('')
+      setAccountName('')
+      setSalary('')
+      setSelectedComboId(null)
+      setSelectedSubjects([])
+
+      // Call success callback
+      if (onSuccess) {
+        onSuccess(teacherId)
+      }
+
+      // Close after 2 seconds
+      setTimeout(onClose, 2000)
     } catch (err: any) {
-      setError(err.message || 'Failed to register teacher')
+      console.error('❌ Registration error:', err)
+      setError(`Registration failed: ${err.message}`)
     } finally {
       setLoading(false)
     }
   }
 
-  const filteredClasses = classes.filter((c) => !teacherLevel || c.class?.type === teacherLevel)
-
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[95vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full my-8">
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 border-b shadow-md">
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 text-white p-6 rounded-t-2xl">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">👨‍🏫 Teacher Registration</h2>
+            <h2 className="text-3xl font-bold">👨‍🏫 Register New Teacher</h2>
             <button
               onClick={onClose}
-              className="text-white hover:bg-white/20 rounded-full p-2 transition"
+              className="text-white hover:bg-white/20 rounded-full p-2 transition hover:scale-110"
+              type="button"
             >
               ✕
             </button>
           </div>
-          <div className="flex gap-2 mb-2">
+
+          {/* Progress Bar */}
+          <div className="flex gap-2">
             {[1, 2, 3, 4].map((step) => (
-              <div
-                key={step}
-                className={`flex-1 h-2 rounded ${
-                  currentStep >= step ? 'bg-white' : 'bg-white/30'
-                }`}
-              />
+              <div key={step} className="flex-1 flex flex-col gap-1">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    currentStep >= step ? 'bg-white' : 'bg-white/30'
+                  }`}
+                />
+                <span className="text-xs text-white/70">Step {step}</span>
+              </div>
             ))}
           </div>
-          <p className="text-sm text-blue-100">Step {currentStep} of 4</p>
         </div>
 
         {/* Content */}
-        <div className="p-8">
+        <div className="p-8 max-h-[calc(100vh-250px)] overflow-y-auto">
+          {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
-              {success}
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r-lg">
+              <p className="font-semibold">{error}</p>
             </div>
           )}
 
-          {dataLoading && (currentStep === 4) && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm">
-              Loading classes and subjects...
+          {/* Success Message */}
+          {success && (
+            <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 text-green-700 rounded-r-lg">
+              <p className="font-semibold">{success}</p>
+            </div>
+          )}
+
+          {/* Loading Indicator */}
+          {dataLoading && currentStep === 4 && (
+            <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-700 rounded-r-lg">
+              <p className="font-semibold">📡 Loading classes and subjects...</p>
             </div>
           )}
 
           {/* Step 1: Select Level */}
           {currentStep === 1 && (
             <form onSubmit={handleStep1Submit} className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-900">Which level do you teach?</h3>
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { value: 'PRIMARY', label: 'Primary School', icon: '🎓' },
-                  { value: 'SECONDARY', label: 'Secondary School', icon: '📚' },
-                ].map((level) => (
-                  <label
-                    key={level.value}
-                    className={`flex flex-col items-center gap-3 p-6 border-2 rounded-lg cursor-pointer transition ${
-                      teacherLevel === level.value
-                        ? 'border-blue-600 bg-blue-50'
-                        : 'border-gray-300 hover:border-blue-400'
-                    }`}
-                  >
-                    <span className="text-4xl">{level.icon}</span>
-                    <input
-                      type="radio"
-                      name="teacherLevel"
-                      value={level.value}
-                      checked={teacherLevel === level.value}
-                      onChange={(e) => setTeacherLevel(e.target.value as 'PRIMARY' | 'SECONDARY')}
-                      className="w-4 h-4"
-                    />
-                    <span className="font-semibold text-gray-900">{level.label}</span>
-                  </label>
-                ))}
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 mb-6">What level do you teach?</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { value: 'PRIMARY', label: 'Primary School', icon: '🎓', desc: 'Prep, Nursery, KG, Primary 1-6' },
+                    { value: 'SECONDARY', label: 'Secondary School', icon: '📚', desc: 'JSS 1-3 and SSS 1-3' },
+                  ].map((level) => (
+                    <button
+                      key={level.value}
+                      type="button"
+                      onClick={() => setTeacherLevel(level.value as 'PRIMARY' | 'SECONDARY')}
+                      className={`flex flex-col items-center gap-3 p-6 border-2 rounded-xl cursor-pointer transition-all transform hover:scale-105 ${
+                        teacherLevel === level.value
+                          ? 'border-blue-600 bg-blue-50 shadow-lg'
+                          : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'
+                      }`}
+                    >
+                      <span className="text-5xl">{level.icon}</span>
+                      <div className="text-center">
+                        <p className="font-bold text-gray-900">{level.label}</p>
+                        <p className="text-sm text-gray-600">{level.desc}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
-                >
-                  Continue →
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={!teacherLevel}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-lg transition"
+              >
+                Continue to Personal Info →
+              </button>
             </form>
           )}
 
           {/* Step 2: Personal Info */}
           {currentStep === 2 && (
             <form onSubmit={handleStep2Submit} className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-900">Personal Information</h3>
+              <h3 className="text-xl font-bold text-gray-900">Personal Information</h3>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Full Name <span className="text-red-500">*</span>
-                </label>
+              <div className="grid grid-cols-2 gap-4">
                 <input
                   type="text"
-                  value={formData.full_name}
-                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  placeholder="Enter full name"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  required
+                  placeholder="First Name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="col-span-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Email Address <span className="text-red-500">*</span>
-                </label>
                 <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="Enter email address"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  required
+                  type="text"
+                  placeholder="Last Name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="col-span-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Date of Birth <span className="text-red-500">*</span>
+              <input
+                type="email"
+                placeholder="Email Address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <input
+                type="tel"
+                placeholder="Phone Number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <input
+                type="password"
+                placeholder="Password (min. 6 characters)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              {/* Photo Upload */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                <label className="cursor-pointer">
+                  <div className="text-center">
+                    {photoPreview ? (
+                      <div className="flex flex-col items-center gap-4">
+                        <img
+                          src={photoPreview}
+                          alt="Preview"
+                          className="w-24 h-24 rounded-full object-cover"
+                        />
+                        <p className="text-sm text-gray-600">Click to change photo</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="text-4xl">📷</span>
+                        <p className="font-semibold text-gray-900">Upload Photo (Optional)</p>
+                        <p className="text-sm text-gray-600">Click to select or drag and drop</p>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoSelect}
+                    className="hidden"
+                  />
                 </label>
-                <input
-                  type="date"
-                  value={formData.date_of_birth}
-                  onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  required
-                />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Password <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Minimum 6 characters"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Confirm Password <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  placeholder="Re-enter password"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  required
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-4">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(1)}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-900 font-bold py-3 rounded-lg transition"
                 >
                   ← Back
                 </button>
                 <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
-                >
-                  Cancel
-                </button>
-                <button
                   type="submit"
-                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition"
                 >
-                  Continue →
+                  Continue to Bank Details →
                 </button>
               </div>
             </form>
           )}
 
-          {/* Step 3: Payment Info */}
+          {/* Step 3: Bank Details */}
           {currentStep === 3 && (
             <form onSubmit={handleStep3Submit} className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-900">Bank & Salary Details</h3>
+              <h3 className="text-xl font-bold text-gray-900">Bank & Salary Details</h3>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Bank Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={paymentData.bank_name}
-                  onChange={(e) => setPaymentData({ ...paymentData, bank_name: e.target.value })}
-                  placeholder="e.g., First Bank of Nigeria"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  required
-                />
-              </div>
+              <input
+                type="text"
+                placeholder="Bank Name"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Account Number <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={paymentData.account_number}
-                  onChange={(e) => setPaymentData({ ...paymentData, account_number: e.target.value })}
-                  placeholder="10-digit account number"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  required
-                />
-              </div>
+              <input
+                type="text"
+                placeholder="Account Number"
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Account Holder Name
-                </label>
-                <input
-                  type="text"
-                  value={paymentData.account_holder_name}
-                  onChange={(e) => setPaymentData({ ...paymentData, account_holder_name: e.target.value })}
-                  placeholder="Name as it appears on account"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                />
-              </div>
+              <input
+                type="text"
+                placeholder="Account Name"
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Monthly Salary (₦) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  value={paymentData.salary_amount}
-                  onChange={(e) => setPaymentData({ ...paymentData, salary_amount: e.target.value })}
-                  placeholder="Enter salary amount"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  required
-                />
-              </div>
+              <input
+                type="number"
+                placeholder="Monthly Salary"
+                value={salary}
+                onChange={(e) => setSalary(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Employment Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={paymentData.employment_date}
-                  onChange={(e) => setPaymentData({ ...paymentData, employment_date: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  required
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-4">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-900 font-bold py-3 rounded-lg transition"
                 >
                   ← Back
                 </button>
                 <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
-                >
-                  Cancel
-                </button>
-                <button
                   type="submit"
-                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition"
                 >
-                  Continue →
+                  Continue to Teaching Assignment →
                 </button>
               </div>
             </form>
           )}
 
-          {/* Step 4: Subjects & Classes */}
+          {/* Step 4: Teaching Assignment */}
           {currentStep === 4 && (
             <form onSubmit={handleStep4Submit} className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-900">Teaching Assignment</h3>
+              <h3 className="text-xl font-bold text-gray-900">Teaching Assignment</h3>
 
-              {/* Class Assignment */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Class Teacher Assignment (Optional)
-                </label>
-                <select
-                  value={selectedClass}
-                  onChange={(e) => setSelectedClass(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                >
-                  <option value="">-- Not a class teacher --</option>
-                  {filteredClasses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.class?.name} - {c.arm?.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Subjects Selection */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Subjects to Teach <span className="text-red-500">*</span>
-                  <span className="text-xs font-normal text-gray-500 ml-2">(Select at least one)</span>
-                </label>
-                <div className="border border-gray-300 rounded-lg p-4 max-h-48 overflow-y-auto bg-gray-50">
-                  {subjects.length > 0 ? (
-                    <div className="space-y-2">
-                      {subjects.map((subject) => (
-                        <label
-                          key={subject.id}
-                          className="flex items-center gap-3 p-2 hover:bg-white rounded cursor-pointer transition"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedSubjects.has(subject.id)}
-                            onChange={() => handleSubjectToggle(subject.id)}
-                            className="w-4 h-4 rounded"
-                          />
-                          <span className="text-sm font-medium text-gray-700">
-                            {subject.name}
-                            {subject.code && (
-                              <span className="text-gray-500 ml-1">({subject.code})</span>
-                            )}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500 text-sm text-center py-4">
-                      No subjects available
-                    </p>
-                  )}
+              {dataLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-600">Loading classes...</p>
                 </div>
-                {subjects.length > 0 && (
-                  <p className="text-sm text-gray-600 mt-2">
-                    {selectedSubjects.size} subject{selectedSubjects.size !== 1 ? 's' : ''} selected
-                  </p>
-                )}
-              </div>
+              ) : (
+                <>
+                  {/* Class Selection */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-3">
+                      Select Class
+                    </label>
+                    <select
+                      value={selectedComboId || ''}
+                      onChange={(e) => {
+                        setSelectedComboId(e.target.value)
+                        setSelectedSubjects([])
+                      }}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+                    >
+                      <option value="">Choose a class...</option>
+                      {combos.map((combo) => (
+                        <option key={combo.id} value={combo.id}>
+                          {(combo.classes as any)?.name || 'Unknown Class'} - Arm{' '}
+                          {(combo.arms as any)?.name || 'Unknown'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div className="flex gap-3 pt-4">
+                  {/* Subject Selection */}
+                  {selectedComboId && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-900 mb-3">
+                        Select Subjects
+                      </label>
+                      <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-300 rounded-lg p-4">
+                        {getSubjectsForCombo().length > 0 ? (
+                          getSubjectsForCombo().map((subject) => (
+                            <label
+                              key={subject.id}
+                              className="flex items-center gap-3 p-3 hover:bg-blue-50 rounded-lg cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedSubjects.includes(subject.id)}
+                                onChange={() => toggleSubject(subject.id)}
+                                className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-600"
+                              />
+                      <div>
+                        <p className="font-semibold text-gray-900">{subject.name}</p>
+                        <p className="text-sm text-gray-600">{subject.code}</p>
+                      </div>
+                            </label>
+                          ))
+                        ) : (
+                          <p className="text-gray-600">No subjects available for this class</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div className="flex gap-4">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(3)}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-900 font-bold py-3 rounded-lg transition"
+                  disabled={loading}
                 >
                   ← Back
                 </button>
                 <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
-                >
-                  Cancel
-                </button>
-                <button
                   type="submit"
-                  disabled={loading || selectedSubjects.size === 0}
-                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 transition"
+                  disabled={loading || !selectedComboId || selectedSubjects.length === 0}
+                  className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-lg transition"
                 >
-                  {loading ? 'Registering...' : 'Complete Registration'}
+                  {loading ? 'Registering...' : '✅ Complete Registration'}
                 </button>
               </div>
             </form>

@@ -1,106 +1,133 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useState } from 'react'
 
-export default function Landing() {
-  const [activeRole, setActiveRole] = useState('school-admin')
-  const [isDark, setIsDark] = useState(true)
-
-  useEffect(() => {
-    const theme = localStorage.getItem('theme') || 'dark'
-    setIsDark(theme === 'dark')
-  }, [])
-
-  useEffect(() => {
-    localStorage.setItem('theme', isDark ? 'dark' : 'light')
-  }, [isDark])
+export default function LandingPage() {
+  const [hoveredRole, setHoveredRole] = useState<string | null>(null)
 
   const roles = [
-    { id: 'superadmin', name: 'Super Admin', icon: '👑', color: 'red', path: '/auth/superadmin/login' },
-    { id: 'school-admin', name: 'School Admin', icon: '🏫', color: 'blue', path: '/auth/school-admin/login' },
-    { id: 'principal', name: 'Principal', icon: '👨‍💼', color: 'indigo', path: '/auth/principal/login' },
-    { id: 'headmaster', name: 'Headmaster', icon: '🎓', color: 'purple', path: '/auth/headmaster/login' },
-    { id: 'teacher', name: 'Teacher', icon: '👨‍🏫', color: 'green', path: '/auth/staff/login' },
-    { id: 'accountant', name: 'Accountant', icon: '💰', color: 'yellow', path: '/auth/accountant/login' },
-    { id: 'student', name: 'Student', icon: '👨‍🎓', color: 'orange', path: '/auth/student/login' },
+    {
+      id: 'superadmin',
+      title: 'Super Admin',
+      icon: '👑',
+      description: 'System administration',
+      href: '/auth/superadmin/login',
+      color: 'from-red-500 to-red-700',
+    },
+    {
+      id: 'school-admin',
+      title: 'School Admin',
+      icon: '🏫',
+      description: 'Manage school',
+      href: '/auth/school-admin/login',
+      color: 'from-blue-500 to-blue-700',
+    },
+    {
+      id: 'principal',
+      title: 'Principal',
+      icon: '👔',
+      description: 'Principal access',
+      href: '/auth/principal/login',
+      color: 'from-purple-500 to-purple-700',
+    },
+    {
+      id: 'headmaster',
+      title: 'Head Teacher',
+      icon: '📚',
+      description: 'Academic management',
+      href: '/auth/headmaster/login',
+      color: 'from-green-500 to-green-700',
+    },
+    {
+      id: 'teacher',
+      title: 'Teacher',
+      icon: '👨‍🏫',
+      description: 'Classroom management',
+      href: '/auth/staff/login',
+      color: 'from-yellow-500 to-yellow-700',
+    },
+    {
+      id: 'accountant',
+      title: 'Accountant',
+      icon: '💰',
+      description: 'Financial management',
+      href: '/auth/accountant/login',
+      color: 'from-pink-500 to-pink-700',
+    },
+    {
+      id: 'student',
+      title: 'Student',
+      icon: '🎓',
+      description: 'Student portal',
+      href: '/auth/student/login',
+      color: 'from-indigo-500 to-indigo-700',
+    },
   ]
 
   return (
-    <div className={`min-h-screen transition-colors ${isDark ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
-      <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'} border-b`}>
-        <div className="max-w-6xl mx-auto px-4 py-6 flex justify-between items-center">
-          <div className="text-3xl font-bold">📚 School Management System</div>
-          <button
-            onClick={() => setIsDark(!isDark)}
-            className={`px-4 py-2 rounded ${isDark ? 'bg-yellow-500 text-gray-900' : 'bg-gray-800 text-white'}`}
-          >
-            {isDark ? '☀️' : '🌙'}
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-blue-900 to-slate-900">
+      {/* Header */}
+      <div className="text-center pt-12 pb-8">
+        <h1 className="text-5xl font-bold text-white mb-2">🎓 School Management System</h1>
+        <p className="text-blue-200 text-xl">Select your role to continue</p>
+      </div>
 
-      <main className="max-w-6xl mx-auto px-4 py-12">
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold mb-4">Welcome</h1>
-          <p className={`text-xl ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Your Gateway to Education</p>
-        </div>
-
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold mb-8 text-center">Select Your Role</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
-            {roles.map((role) => (
-              <button
-                key={role.id}
-                onClick={() => setActiveRole(role.id)}
-                className={`p-4 rounded-lg transition ${
-                  activeRole === role.id
-                    ? `${isDark ? 'bg-blue-600' : 'bg-blue-500'} text-white`
-                    : `${isDark ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`
-                }`}
+      {/* Role Grid */}
+      <div className="max-w-6xl mx-auto px-4 pb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {roles.map((role) => (
+            <Link href={role.href} key={role.id}>
+              <div
+                className={`h-full p-6 rounded-xl shadow-lg cursor-pointer transform transition-all duration-300 ${
+                  hoveredRole === role.id ? 'scale-105 shadow-2xl' : 'hover:scale-105'
+                } bg-gradient-to-br ${role.color} text-white`}
+                onMouseEnter={() => setHoveredRole(role.id)}
+                onMouseLeave={() => setHoveredRole(null)}
               >
-                <div className="text-3xl mb-2">{role.icon}</div>
-                <div className="font-semibold text-sm">{role.name}</div>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="flex justify-center mb-12">
-          <Link
-            href={roles.find((r) => r.id === activeRole)?.path || '/'}
-            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition"
-          >
-            Sign In
-          </Link>
-        </section>
-
-        <section className={`${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded-lg p-8`}>
-          <h2 className="text-2xl font-bold mb-6 text-center">Platform Features</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              { icon: '📖', title: 'Academic Management', desc: 'Manage lessons and assignments' },
-              { icon: '👥', title: 'Student Tracking', desc: 'Monitor student progress' },
-              { icon: '💰', title: 'Accounting', desc: 'Handle payments' },
-              { icon: '📊', title: 'Reports', desc: 'Generate analytics' },
-              { icon: '🔐', title: 'Security', desc: 'Multi-level access control' },
-              { icon: '📱', title: 'Mobile Friendly', desc: 'Access anywhere' },
-            ].map((feature, i) => (
-              <div key={i} className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white border'}`}>
-                <div className="text-3xl mb-2">{feature.icon}</div>
-                <h3 className="font-bold mb-1">{feature.title}</h3>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{feature.desc}</p>
+                <div className="text-5xl mb-3 text-center">{role.icon}</div>
+                <h2 className="text-2xl font-bold text-center mb-2">{role.title}</h2>
+                <p className="text-center text-blue-100 text-sm">{role.description}</p>
+                <div className="mt-4 text-center">
+                  <span className="inline-block px-4 py-2 bg-white/20 rounded-lg text-sm font-semibold hover:bg-white/30 transition-all">
+                    Login →
+                  </span>
+                </div>
               </div>
-            ))}
-          </div>
-        </section>
-      </main>
-
-      <footer className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'} border-t py-6 mt-12`}>
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>© 2026 School Management System</p>
+            </Link>
+          ))}
         </div>
-      </footer>
+      </div>
+
+      {/* Registration Section */}
+      <div className="max-w-6xl mx-auto px-4 pb-12">
+        <div className="bg-white/10 backdrop-blur rounded-xl p-8 border border-white/20">
+          <h2 className="text-2xl font-bold text-white mb-6 text-center">New Users</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Link href="/auth/student/register">
+              <button className="w-full px-6 py-3 bg-gradient-to-r from-indigo-500 to-indigo-700 text-white rounded-lg font-semibold hover:shadow-lg transform hover:scale-105 transition-all">
+                📚 Student Registration
+              </button>
+            </Link>
+            <Link href="/auth/staff/register">
+              <button className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-700 text-white rounded-lg font-semibold hover:shadow-lg transform hover:scale-105 transition-all">
+                👨‍🏫 Staff Registration
+              </button>
+            </Link>
+            <Link href="/school-admin/dashboard?fallback=true">
+              <button className="w-full px-6 py-3 bg-gradient-to-r from-gray-600 to-gray-800 text-white rounded-lg font-semibold hover:shadow-lg transform hover:scale-105 transition-all">
+                🔓 Demo Access
+              </button>
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="text-center pb-6 text-blue-200 text-sm">
+        <p>School Management System v1.0 © 2024-2025</p>
+      </div>
     </div>
   )
 }
+

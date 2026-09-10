@@ -1,0 +1,143 @@
+================================================================================
+                  BUCKET NOT FOUND - CREATE BUCKETS NOW
+================================================================================
+
+❌ PROBLEM:
+  Upload failed: "bucket not found"
+  Error: Storage buckets don't exist in Supabase
+
+✅ SOLUTION:
+  Run Migration 096 to create all buckets automatically
+
+================================================================================
+                          STEP 1: CREATE BUCKETS
+================================================================================
+
+Option A: USE MIGRATION (RECOMMENDED)
+  1. File: database/migrations/096_create_storage_buckets.sql
+  2. Go to Supabase SQL Editor
+  3. Copy-paste entire content
+  4. Click Run
+  5. All 3 buckets created automatically ✅
+
+Option B: MANUAL CREATION (IF MIGRATION FAILS)
+  1. Go to Supabase Dashboard
+  2. Click: Storage → Create New Bucket
+  3. Create these 3 buckets:
+     - Name: lesson-uploads (Public: ON)
+     - Name: assignment-files (Public: ON)
+     - Name: student-assignments (Public: ON)
+
+================================================================================
+                    STEP 2: DISABLE RLS (IMPORTANT!)
+================================================================================
+
+RLS = Row Level Security (prevents uploads)
+
+Go to Supabase Dashboard:
+  1. Storage → Policies
+  2. For EACH bucket:
+     - Remove ALL policies (delete them)
+     - Leave RLS disabled
+  3. Or run the RLS disable commands in migration 096
+
+================================================================================
+                          STEP 3: TEST UPLOAD
+================================================================================
+
+After creating buckets:
+
+1. Go to: /teacher/lesson-notes
+2. Create lesson note with file
+3. Should upload successfully ✅
+
+Or:
+
+1. Go to: /student/assignments
+2. Upload assignment
+3. Should work ✅
+
+================================================================================
+                       WHAT MIGRATION 096 DOES
+================================================================================
+
+✅ Creates lesson-uploads bucket
+✅ Creates assignment-files bucket
+✅ Creates student-assignments bucket
+✅ Sets all buckets to PUBLIC
+✅ Disables RLS on all buckets
+✅ Allows uploads without authentication
+
+One command = All 3 buckets ready!
+
+================================================================================
+                  QUICK COPY-PASTE MIGRATION 096
+================================================================================
+
+IF YOU WANT TO RUN IT MANUALLY:
+
+File: database/migrations/096_create_storage_buckets.sql
+
+Content: (Just execute this SQL)
+
+BEGIN;
+INSERT INTO storage.buckets (id, name, owner, public, created_at, updated_at)
+VALUES 
+  ('lesson-uploads', 'lesson-uploads', NULL, true, NOW(), NOW()),
+  ('assignment-files', 'assignment-files', NULL, true, NOW(), NOW()),
+  ('student-assignments', 'student-assignments', NULL, true, NOW(), NOW())
+ON CONFLICT (name) DO NOTHING;
+
+ALTER TABLE storage.objects DISABLE ROW LEVEL SECURITY;
+ALTER TABLE storage.buckets DISABLE ROW LEVEL SECURITY;
+COMMIT;
+
+Then run in Supabase SQL Editor.
+
+================================================================================
+                        VERIFY BUCKETS CREATED
+================================================================================
+
+Go to Supabase Dashboard:
+  1. Storage tab
+  2. Should see 3 buckets:
+     ✅ lesson-uploads
+     ✅ assignment-files
+     ✅ student-assignments
+
+All showing "Public" ✅
+
+================================================================================
+                           THEN TEST
+================================================================================
+
+1. Teacher: Create lesson note + upload file → Should work ✅
+2. Student: Upload assignment → Should work ✅
+3. Files saved in correct bucket ✅
+
+================================================================================
+                          BUCKETS CREATED NOW
+================================================================================
+
+After running migration 096:
+
+✅ All 3 buckets exist
+✅ No RLS blocking uploads
+✅ Teachers can upload lesson notes
+✅ Students can upload assignments
+✅ Files stored securely
+
+Ready to use! 🚀
+
+================================================================================
+                            NEXT STEPS
+================================================================================
+
+1. Run Migration 096 in Supabase (copy-paste ready)
+2. Restart dev server: npm run dev
+3. Test uploads:
+   - /teacher/lesson-notes → try upload
+   - /student/assignments → try upload
+4. Done! ✅
+
+================================================================================

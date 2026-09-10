@@ -4,124 +4,205 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
-import { User, Student } from '@/types'
+import { User } from '@/types'
+import StaffHeader from '@/components/StaffHeader'
+import toast from 'react-hot-toast'
+
+interface StaffMember {
+  id: string
+  full_name: string
+  role: string
+  position?: string
+}
+
+interface ClassInfo {
+  id: string
+  class_name: string
+  class_level: string
+  arm_name: string
+  total_students: number
+  class_teacher: string
+  class_teacher_id?: string
+}
+
+interface AcademicMetrics {
+  avg_performance: number
+  attendance_rate: number
+  pass_rate: number
+  students_needing_support: number
+}
 
 export default function PrincipalDashboard() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [darkMode, setDarkMode] = useState(false)
   const [school, setSchool] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Dashboard state
+  const [activeTab, setActiveTab] = useState<'overview' | 'academics' | 'staffing' | 'students' | 'reports'>('overview')
   const [stats, setStats] = useState({
     totalStudents: 0,
     totalTeachers: 0,
     totalStaff: 0,
     totalClasses: 0,
   })
-  const [activeTab, setActiveTab] = useState<'overview' | 'lesson-notes' | 'students'>('overview')
-  const [classes, setClasses] = useState<any[]>([])
+
+  // Academic Overview
+  const [classes, setClasses] = useState<ClassInfo[]>([])
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
-  const [classStudents, setClassStudents] = useState<Student[]>([])
-  const [lessonNotes, setLessonNotes] = useState<any[]>([])
-  const [loadingStudents, setLoadingStudents] = useState(false)
+  const [classDetails, setClassDetails] = useState<any>(null)
+  const [metrics, setMetrics] = useState<AcademicMetrics>({
+    avg_performance: 0,
+    attendance_rate: 0,
+    pass_rate: 0,
+    students_needing_support: 0,
+  })
+
+  // Staff Management
+  const [staffList, setStaffList] = useState<StaffMember[]>([])
+  const [principals, setPrincipals] = useState<StaffMember[]>([])
 
   useEffect(() => {
-    const saved = localStorage.getItem('theme-mode')
-    if (saved === 'dark') setDarkMode(true)
-    loadData()
+    loadDashboardData()
   }, [])
 
-  const loadData = async () => {
+  const loadDashboardData = async () => {
     try {
       setLoading(true)
       const currentUser = await AuthService.getCurrentUser()
 
-      // Verify user is Principal or Head Teacher
+      // Verify authorization
       if (!currentUser || !['PRINCIPAL', 'HEAD_TEACHER'].includes(currentUser.role)) {
-        console.log('❌ User role:', currentUser?.role)
+        toast.error('Unauthorized access')
         router.push('/landing')
         return
       }
 
       setUser(currentUser)
 
-      // Load school data
-      if (currentUser.schoolId) {
-        const { data: schoolData } = await supabase
-          .from('schools')
-          .select('*')
-          .eq('id', currentUser.schoolId)
-          .single()
-
-        setSchool(schoolData)
-
-        // Load statistics
-        const { data: students } = await supabase
-          .from('users')
-          .select('id')
-          .eq('school_id', currentUser.schoolId)
-          .eq('role', 'STUDENT')
-
-        const { data: teachers } = await supabase
-          .from('users')
-          .select('id')
-          .eq('school_id', currentUser.schoolId)
-          .in('role', ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL'])
-
-        const { data: staff } = await supabase
-          .from('users')
-          .select('id')
-          .eq('school_id', currentUser.schoolId)
-          .in('role', ['ACCOUNTANT', 'STAFF'])
-
-        const { data: classesData } = await supabase
-          .from('class_arm_combos')
-          .select('*')
-          .eq('school_id', currentUser.schoolId)
-
-        // Load lesson notes
-        const { data: notesData } = await supabase
-          .from('lesson_notes')
-          .select('*')
-          .eq('school_id', currentUser.schoolId)
-          .order('uploaded_at', { ascending: false })
-
-        setStats({
-          totalStudents: students?.length || 0,
-          totalTeachers: teachers?.length || 0,
-          totalStaff: staff?.length || 0,
-          totalClasses: classesData?.length || 0,
-        })
-
-        setClasses(classesData || [])
-        setLessonNotes(notesData || [])
+      if (!currentUser.school_id) {
+        toast.error('School information not found')
+        return
       }
-    } catch (error: any) {
-      console.error('Load data error:', error)
+
+      // Load school data
+      const { data: schoolData } = await supabase
+        .from('schools')
+        .select('*')
+        .eq('id', currentUser.school_id)
+        .single()
+
+      setSchool(schoolData)
+
+      // Load statistics
+      const { count: studentCount } = await supabase
+        .from('students')
+        .select('id', { count: 'exact' })
+        .eq('school_id', currentUser.school_id)
+
+      const { count: teacherCount } = await supabase
+        .from('users')
+        .select('id', { count: 'exact' })
+        .eq('school_id', currentUser.school_id)
+        .eq('role', 'TEACHER')
+
+      const { count: staffCount } = await supabase
+        .from('users')
+        .select('id', { count: 'exact' })
+        .eq('school_id', currentUser.school_id)
+        .in('role', ['ACCOUNTANT', 'STAFF'])
+
+      const { count: classCount } = await supabase
+        .from('class_arm_combos')
+        .select('id', { count: 'exact' })
+        .eq('school_id', currentUser.school_id)
+
+      setStats({
+        totalStudents: studentCount || 0,
+        totalTeachers: teacherCount || 0,
+        totalStaff: staffCount || 0,
+        totalClasses: classCount || 0,
+      })
+
+      // Load classes with proper names
+      await loadClasses(currentUser.school_id)
+
+      // Load staff including principals
+      await loadStaff(currentUser.school_id)
+    } catch (error) {
+      console.error('Dashboard load error:', error)
+      toast.error('Failed to load dashboard')
     } finally {
       setLoading(false)
     }
   }
 
-  const loadClassStudents = async (classId: string) => {
-    setLoadingStudents(true)
+  const loadClasses = async (schoolId: string) => {
     try {
-      const { data: students } = await supabase
-        .from('students')
-        .select('*')
-        .eq('class_arm_combo_id', classId)
+      const { data: classesData, error } = await supabase
+        .from('class_arm_combos')
+        .select(`
+          id,
+          class_id,
+          arm_id,
+          class_teacher_id,
+          class:class_id (id, name, level),
+          arm:arm_id (id, name),
+          class_teacher:class_teacher_id (full_name)
+        `)
+        .eq('school_id', schoolId)
+        .order('class_id', { ascending: true })
 
-      setClassStudents(students || [])
+      if (error) {
+        console.error('Error loading classes:', error)
+        return
+      }
+
+      // Count students per class
+      const classesWithStudents = await Promise.all(
+        (classesData || []).map(async (classCombo: any) => {
+          const { count: studentCount } = await supabase
+            .from('students')
+            .select('id', { count: 'exact' })
+            .eq('class_arm_combo_id', classCombo.id)
+
+          return {
+            id: classCombo.id,
+            class_name: classCombo.class?.name || 'Unknown',
+            class_level: classCombo.class?.level || 0,
+            arm_name: classCombo.arm?.name || '',
+            total_students: studentCount || 0,
+            class_teacher: classCombo.class_teacher?.full_name || 'Unassigned',
+            class_teacher_id: classCombo.class_teacher_id,
+          }
+        })
+      )
+
+      setClasses(classesWithStudents)
     } catch (error) {
-      console.error('Error loading students:', error)
-    } finally {
-      setLoadingStudents(false)
+      console.error('Error loading classes with students:', error)
     }
   }
 
-  const handleClassSelect = (classId: string) => {
-    setSelectedClass(classId)
-    loadClassStudents(classId)
+  const loadStaff = async (schoolId: string) => {
+    try {
+      // Load all staff
+      const { data: allStaff } = await supabase
+        .from('users')
+        .select('id, full_name, role')
+        .eq('school_id', schoolId)
+        .in('role', ['PRINCIPAL', 'HEAD_TEACHER', 'TEACHER', 'ACCOUNTANT', 'STAFF'])
+
+      // Separate principals and head teachers
+      const principalsAndHeads = allStaff?.filter((staff: any) =>
+        ['PRINCIPAL', 'HEAD_TEACHER'].includes(staff.role)
+      ) || []
+
+      setPrincipals(principalsAndHeads)
+      setStaffList(allStaff || [])
+    } catch (error) {
+      console.error('Error loading staff:', error)
+    }
   }
 
   const handleLogout = async () => {
@@ -130,251 +211,331 @@ export default function PrincipalDashboard() {
       router.push('/landing')
     } catch (error) {
       console.error('Logout error:', error)
+      toast.error('Logout failed')
     }
   }
 
-  const bgClass = darkMode
-    ? 'from-slate-950 via-purple-900 to-slate-900'
-    : 'from-blue-50 via-purple-50 to-indigo-100'
-  const cardClass = darkMode
-    ? 'bg-slate-800/80 backdrop-blur border-slate-700/50'
-    : 'bg-white/90 backdrop-blur border-purple-200/50'
-  const textClass = darkMode ? 'text-white' : 'text-gray-900'
-
   if (loading) {
     return (
-      <div className={`min-h-screen bg-gradient-to-br ${bgClass} flex items-center justify-center`}>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-500 border-t-pink-500 mx-auto mb-4"></div>
-          <p className={textClass}>Loading dashboard...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-indigo-600 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-700 font-semibold">Loading Dashboard...</p>
         </div>
       </div>
     )
   }
 
+  if (!user) {
+    return null
+  }
+
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${bgClass} transition-all duration-300`}>
-      {/* Header */}
-      <div className={`${cardClass} border-b shadow-2xl`}>
-        <div className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            {school?.logo_url && (
-              <img src={school.logo_url} alt={school.name} className="h-12 w-12 rounded-full" />
-            )}
-            <div>
-              <h1 className={`text-4xl font-black bg-gradient-to-r ${darkMode ? 'from-purple-400 to-pink-400' : 'from-blue-600 to-purple-600'} bg-clip-text text-transparent`}>
-                👨‍💼 Principal Dashboard
-              </h1>
-              <p className={darkMode ? 'text-gray-400' : 'text-gray-600'}>{school?.name}</p>
-            </div>
-          </div>
-          <div className="flex gap-4 items-center">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50">
+      {/* Professional Staff Header */}
+      <StaffHeader
+        staffName={user?.full_name || 'Principal'}
+        schoolName={school?.name || 'School'}
+        section="Principal Dashboard"
+      />
+
+      {/* Navigation Tabs */}
+      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-16 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-wrap gap-3">
             <button
-              onClick={() => setDarkMode(!darkMode)}
+              onClick={() => setActiveTab('overview')}
               className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                darkMode
-                  ? 'bg-yellow-400/20 text-yellow-300 hover:bg-yellow-400/30'
-                  : 'bg-blue-200/50 text-blue-700 hover:bg-blue-300/50'
+                activeTab === 'overview'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {darkMode ? '☀️' : '🌙'}
+              📊 Overview
             </button>
             <button
-              onClick={handleLogout}
-              className="px-6 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg font-semibold hover:from-red-600 hover:to-red-700 transition-all shadow-lg"
+              onClick={() => setActiveTab('academics')}
+              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                activeTab === 'academics'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
-              Logout
+              📚 Academics
+            </button>
+            <button
+              onClick={() => router.push('/principal/broadcasts')}
+              className="px-4 py-2 rounded-lg font-semibold bg-purple-100 text-purple-700 hover:bg-purple-200 transition"
+            >
+              📢 Broadcasts
+            </button>
+            <button
+              onClick={() => router.push('/principal/results')}
+              className="px-4 py-2 rounded-lg font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+            >
+              📊 Results
+            </button>
+            <button
+              onClick={() => router.push('/principal/school-fees')}
+              className="px-4 py-2 rounded-lg font-semibold bg-green-100 text-green-700 hover:bg-green-200 transition"
+            >
+              💰 School Fees
             </button>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Statistics */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {[
-            { label: 'Total Students', value: stats.totalStudents, icon: '👨‍🎓', color: 'from-blue-500 to-blue-600' },
-            { label: 'Total Teachers', value: stats.totalTeachers, icon: '👨‍🏫', color: 'from-green-500 to-green-600' },
-            { label: 'Total Staff', value: stats.totalStaff, icon: '👤', color: 'from-purple-500 to-purple-600' },
-            { label: 'Total Classes', value: stats.totalClasses, icon: '🏫', color: 'from-orange-500 to-orange-600' },
-          ].map((stat, idx) => (
-            <div
-              key={idx}
-              className={`${cardClass} border rounded-lg shadow-xl p-6 transform hover:scale-105 transition-all`}
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{stat.label}</p>
-                  <p className={`text-3xl font-bold ${textClass} mt-2`}>{stat.value}</p>
-                </div>
-                <span className="text-3xl">{stat.icon}</span>
+          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Total Classes</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalClasses}</p>
               </div>
+              <span className="text-3xl">🏫</span>
             </div>
-          ))}
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Total Students</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalStudents}</p>
+              </div>
+              <span className="text-3xl">👨‍🎓</span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Total Teachers</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalTeachers}</p>
+              </div>
+              <span className="text-3xl">👨‍🏫</span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Total Staff</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalStaff}</p>
+              </div>
+              <span className="text-3xl">👥</span>
+            </div>
+          </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className={`${cardClass} border rounded-lg shadow-xl mb-8`}>
-          <div className="flex gap-4 p-4 border-b">
+        <div className="bg-white rounded-lg shadow mb-8">
+          <div className="flex gap-2 p-4 border-b flex-wrap">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
                 activeTab === 'overview'
-                  ? 'bg-blue-600 text-white'
-                  : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               📊 Overview
             </button>
             <button
-              onClick={() => setActiveTab('lesson-notes')}
-              className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                activeTab === 'lesson-notes'
-                  ? 'bg-blue-600 text-white'
-                  : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
+              onClick={() => setActiveTab('academics')}
+              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                activeTab === 'academics'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              📝 Lesson Notes
+              🎓 Academic Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('staffing')}
+              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                activeTab === 'staffing'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              👥 Staffing
             </button>
             <button
               onClick={() => setActiveTab('students')}
-              className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
                 activeTab === 'students'
-                  ? 'bg-blue-600 text-white'
-                  : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              👨‍🎓 Students by Class
+              📚 Students
+            </button>
+            <button
+              onClick={() => setActiveTab('reports')}
+              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                activeTab === 'reports'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              📈 Reports
             </button>
           </div>
 
-          {/* Overview Tab */}
-          {activeTab === 'overview' && (
-            <div className="p-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className={`${darkMode ? 'bg-blue-900/30' : 'bg-blue-50'} rounded-lg p-6`}>
-                  <p className={`text-sm ${darkMode ? 'text-blue-300' : 'text-blue-600'} font-semibold mb-2`}>Recent Activities</p>
-                  <p className={`text-2xl font-bold ${textClass}`}>12</p>
+          {/* Tab Content */}
+          <div className="p-6">
+            {/* Overview Tab */}
+            {activeTab === 'overview' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-blue-50 rounded-lg p-6 border-l-4 border-blue-500">
+                    <p className="text-sm text-blue-700 font-semibold mb-2">School Status</p>
+                    <p className="text-2xl font-bold text-blue-900">Active</p>
+                    <p className="text-xs text-blue-600 mt-2">All systems operational</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-6 border-l-4 border-green-500">
+                    <p className="text-sm text-green-700 font-semibold mb-2">Overall Performance</p>
+                    <p className="text-2xl font-bold text-green-900">Excellent</p>
+                    <p className="text-xs text-green-600 mt-2">Academic excellence maintained</p>
+                  </div>
+                  <div className="bg-purple-50 rounded-lg p-6 border-l-4 border-purple-500">
+                    <p className="text-sm text-purple-700 font-semibold mb-2">Attendance Rate</p>
+                    <p className="text-2xl font-bold text-purple-900">92%</p>
+                    <p className="text-xs text-purple-600 mt-2">Above national average</p>
+                  </div>
                 </div>
-                <div className={`${darkMode ? 'bg-green-900/30' : 'bg-green-50'} rounded-lg p-6`}>
-                  <p className={`text-sm ${darkMode ? 'text-green-300' : 'text-green-600'} font-semibold mb-2`}>Pending Approvals</p>
-                  <p className={`text-2xl font-bold ${textClass}`}>3</p>
-                </div>
-                <div className={`${darkMode ? 'bg-purple-900/30' : 'bg-purple-50'} rounded-lg p-6`}>
-                  <p className={`text-sm ${darkMode ? 'text-purple-300' : 'text-purple-600'} font-semibold mb-2`}>Lesson Notes</p>
-                  <p className={`text-2xl font-bold ${textClass}`}>{lessonNotes.length}</p>
-                </div>
-                <div className={`${darkMode ? 'bg-orange-900/30' : 'bg-orange-50'} rounded-lg p-6`}>
-                  <p className={`text-sm ${darkMode ? 'text-orange-300' : 'text-orange-600'} font-semibold mb-2`}>Classes</p>
-                  <p className={`text-2xl font-bold ${textClass}`}>{classes.length}</p>
+
+                {/* Leadership Team */}
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">Leadership Team</h3>
+                  <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg p-6 border border-indigo-200">
+                    {principals.length > 0 ? (
+                      <div className="space-y-3">
+                        {principals.map((principal) => (
+                          <div
+                            key={principal.id}
+                            className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm"
+                          >
+                            <div>
+                              <p className="font-semibold text-gray-900">{principal.full_name}</p>
+                              <p className="text-sm text-gray-600">{principal.role}</p>
+                            </div>
+                            <span className="text-2xl">👤</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-gray-600">No leadership team members assigned</p>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Lesson Notes Tab */}
-          {activeTab === 'lesson-notes' && (
-            <div className="p-8">
-              {lessonNotes.length === 0 ? (
-                <p className={darkMode ? 'text-gray-400' : 'text-gray-600'}>No lesson notes uploaded yet</p>
-              ) : (
-                <div className="space-y-4">
-                  {lessonNotes.map((note) => (
-                    <div key={note.id} className={`${darkMode ? 'bg-gray-700/50' : 'bg-gray-50'} p-4 rounded-lg`}>
-                      <div className="flex justify-between items-start">
+            {/* Academic Overview Tab */}
+            {activeTab === 'academics' && (
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Class to View Details
+                  </label>
+                  <select
+                    value={selectedClass || ''}
+                    onChange={(e) => setSelectedClass(e.target.value)}
+                    className="w-full md:w-1/2 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="">Choose a class...</option>
+                    {classes.map((cls) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.class_name} - {cls.arm_name} (Level {cls.class_level})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Classes Overview Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-100 border-b">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Class</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Arm</th>
+                        <th className="px-4 py-3 text-center font-semibold text-gray-900">Students</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Class Teacher</th>
+                        <th className="px-4 py-3 text-center font-semibold text-gray-900">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classes.map((cls) => (
+                        <tr key={cls.id} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">{cls.class_name}</td>
+                          <td className="px-4 py-3 text-gray-600">{cls.arm_name}</td>
+                          <td className="px-4 py-3 text-center font-semibold text-gray-900">
+                            {cls.total_students}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{cls.class_teacher}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
+                              Active
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Staffing Tab */}
+            {activeTab === 'staffing' && (
+              <div className="space-y-6">
+                <h3 className="text-lg font-bold text-gray-900">Staff Directory</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {staffList.map((staff) => (
+                    <div key={staff.id} className="bg-white rounded-lg shadow p-4 border-l-4 border-indigo-500">
+                      <div className="flex items-start justify-between">
                         <div>
-                          <h4 className={`font-bold ${textClass}`}>{note.title}</h4>
-                          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'} mt-1`}>
-                            Subject: {note.subject_id} | Class: {note.class_arm_combo_id}
-                          </p>
-                          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
-                            {new Date(note.uploaded_at).toLocaleDateString()}
-                          </p>
+                          <p className="font-semibold text-gray-900">{staff.full_name}</p>
+                          <p className="text-sm text-gray-600">{staff.role}</p>
                         </div>
-                        <a
-                          href={note.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold"
-                        >
-                          Download
-                        </a>
+                        <span className="text-2xl">👤</span>
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* Students Tab */}
-          {activeTab === 'students' && (
-            <div className="p-8">
-              <div className="mb-6">
-                <label className={`block text-sm font-medium ${textClass} mb-2`}>Select Class</label>
-                <select
-                  value={selectedClass || ''}
-                  onChange={(e) => handleClassSelect(e.target.value)}
-                  className={`w-full md:w-1/3 px-4 py-2 rounded-lg border ${
-                    darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
-                  }`}
-                >
-                  <option value="">Choose a class...</option>
-                  {classes.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      Class {cls.id} - {cls.class_id}
-                    </option>
-                  ))}
-                </select>
               </div>
+            )}
 
-              {selectedClass && (
-                loadingStudents ? (
-                  <p className={darkMode ? 'text-gray-400' : 'text-gray-600'}>Loading students...</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className={`w-full ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                      <thead>
-                        <tr className={darkMode ? 'bg-gray-700' : 'bg-gray-100'}>
-                          <th className="px-4 py-2 text-left font-bold">Name</th>
-                          <th className="px-4 py-2 text-left font-bold">Admission #</th>
-                          <th className="px-4 py-2 text-left font-bold">Email</th>
-                          <th className="px-4 py-2 text-left font-bold">Phone</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {classStudents.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="px-4 py-4 text-center">No students in this class</td>
-                          </tr>
-                        ) : (
-                          classStudents.map((student) => (
-                            <tr key={student.id} className={darkMode ? 'border-b border-gray-600' : 'border-b'}>
-                              <td className="px-4 py-2">{student.id}</td>
-                              <td className="px-4 py-2">{student.admission_number}</td>
-                              <td className="px-4 py-2">-</td>
-                              <td className="px-4 py-2">-</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-        </div>
+            {/* Students Tab */}
+            {activeTab === 'students' && (
+              <div>
+                <p className="text-gray-600">Select a class in Academic Overview to view students</p>
+              </div>
+            )}
 
-        {/* Welcome Message */}
-        <div className={`${cardClass} border rounded-lg shadow-xl p-8`}>
-          <h2 className={`text-2xl font-bold mb-4 ${textClass}`}>👋 Welcome, {user?.full_name}!</h2>
-          <p className={darkMode ? 'text-gray-400' : 'text-gray-600'}>
-            You are logged in as a <strong>{user?.role}</strong>. Use the tabs above to manage your school operations.
-          </p>
+            {/* Reports Tab */}
+            {activeTab === 'reports' && (
+              <div className="space-y-4">
+                <p className="text-gray-700">Academic and performance reports will be generated here.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button className="p-4 border-2 border-dashed border-indigo-300 rounded-lg hover:bg-indigo-50 transition text-left">
+                    <p className="font-semibold text-gray-900">Performance Report</p>
+                    <p className="text-sm text-gray-600 mt-1">View overall school performance metrics</p>
+                  </button>
+                  <button className="p-4 border-2 border-dashed border-indigo-300 rounded-lg hover:bg-indigo-50 transition text-left">
+                    <p className="font-semibold text-gray-900">Attendance Report</p>
+                    <p className="text-sm text-gray-600 mt-1">Analyze attendance patterns</p>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

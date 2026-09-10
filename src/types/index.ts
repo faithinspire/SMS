@@ -114,7 +114,7 @@ export interface Student {
   class_id: string;
   department_id?: string;
   subjects: string[];
-  class_arm_combo_id?: string;
+  class_arm_combo_id: string; // ✅ BLOCKER 3 FIX: Required (NOT NULL in DB)
   class_teacher_id?: string;
   created_at: string;
   updated_at: string;
@@ -135,6 +135,8 @@ export interface ScoreSheet {
   student_id: string;
   subject_id: string;
   term_id: string;
+  academic_session_id?: string; // ✅ BLOCKER 2 FIX: Track which session this score is for
+  session_year?: string; // ✅ Backup field for filtering
   test1?: number;
   test2?: number;
   test3?: number;
@@ -148,6 +150,19 @@ export interface ScoreSheet {
   test4_source?: 'MANUAL' | 'CBT';
   exam_source?: 'MANUAL' | 'CBT';
   updated_at: string;
+}
+
+export interface AcademicSession {
+  id: string;
+  school_id: string;
+  session_string: string; // Format: "2026/2027"
+  start_year: number;
+  end_year: number;
+  start_date?: string;
+  end_date?: string;
+  is_current: boolean;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface Term {

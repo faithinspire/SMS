@@ -10,12 +10,22 @@ export async function GET(
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
     if (!supabaseUrl || !anonKey) {
+      console.error('❌ Server configuration error: Missing Supabase env vars')
       return NextResponse.json(
         { error: 'Server configuration error' },
         { status: 500 }
       )
     }
 
+    if (!id) {
+      console.error('❌ No school ID provided')
+      return NextResponse.json(
+        { error: 'School ID is required' },
+        { status: 400 }
+      )
+    }
+
+    console.log('🔄 Fetching school:', id)
     const response = await fetch(
       `${supabaseUrl}/rest/v1/schools?id=eq.${id}`,
       {
@@ -27,14 +37,16 @@ export async function GET(
     )
 
     if (!response.ok) {
+      console.error('❌ School fetch failed:', response.status, response.statusText)
       return NextResponse.json(
-        { error: 'Failed to fetch school' },
+        { error: `Failed to fetch school: ${response.statusText}` },
         { status: response.status }
       )
     }
 
     const schools = await response.json()
     if (!schools || schools.length === 0) {
+      console.error('❌ School not found:', id)
       return NextResponse.json(
         { error: 'School not found' },
         { status: 404 }

@@ -1,55 +1,60 @@
-#!/usr/bin/env pwsh
+# Complete rebuild script for Next.js SMS project
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "SMS - Clean Rebuild Script" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "🔄 SMS Complete Rebuild Script" -ForegroundColor Cyan
+Write-Host "==============================" -ForegroundColor Cyan
 Write-Host ""
 
-Write-Host "[1/5] Stopping any running Node processes..." -ForegroundColor Yellow
-Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
+# Step 1: Stop any running dev servers
+Write-Host "1️⃣  Stopping any running dev servers..."
+Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
+Write-Host "✅ Dev servers stopped" -ForegroundColor Green
+Write-Host ""
 
-Write-Host "[2/5] Cleaning build folders..." -ForegroundColor Yellow
+# Step 2: Clean cache
+Write-Host "2️⃣  Cleaning Next.js cache..."
 if (Test-Path ".next") {
-    Remove-Item -Recurse -Force ".next" | Out-Null
-    Write-Host "  ✓ Removed .next folder" -ForegroundColor Green
+    Remove-Item -Path ".next" -Recurse -Force
+    Write-Host "✅ .next directory removed" -ForegroundColor Green
 }
-
-if (Test-Path "node_modules") {
-    Write-Host "  Removing node_modules (this may take a moment)..." -ForegroundColor Yellow
-    Remove-Item -Recurse -Force "node_modules" | Out-Null
-    Write-Host "  ✓ Removed node_modules folder" -ForegroundColor Green
+if (Test-Path "node_modules\.cache") {
+    Remove-Item -Path "node_modules\.cache" -Recurse -Force
+    Write-Host "✅ node_modules cache removed" -ForegroundColor Green
 }
+Write-Host ""
 
-Write-Host "[3/5] Installing dependencies..." -ForegroundColor Yellow
+# Step 3: Reinstall dependencies
+Write-Host "3️⃣  Reinstalling dependencies..."
+Write-Host "   Running: npm install" -ForegroundColor Yellow
 npm install
-if ($LASTEXITCODE -ne 0) {
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "✅ Dependencies installed" -ForegroundColor Green
+} else {
     Write-Host "❌ npm install failed" -ForegroundColor Red
     exit 1
 }
-Write-Host "  ✓ Dependencies installed" -ForegroundColor Green
+Write-Host ""
 
-Write-Host "[4/5] Building project..." -ForegroundColor Yellow
+# Step 4: Test build
+Write-Host "4️⃣  Testing build..."
+Write-Host "   Running: npm run build" -ForegroundColor Yellow
 npm run build
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Build failed" -ForegroundColor Red
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "✅ Build successful" -ForegroundColor Green
+} else {
+    Write-Host "❌ Build failed - checking for errors" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Try running manually:" -ForegroundColor Yellow
+    Write-Host "  npm run dev" -ForegroundColor Cyan
     exit 1
 }
-Write-Host "  ✓ Build completed" -ForegroundColor Green
-
-Write-Host "[5/5] Done!" -ForegroundColor Green
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "✅ Rebuild completed successfully!" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-Write-Host "To start the development server, run:" -ForegroundColor Yellow
-Write-Host "  npm run dev" -ForegroundColor Cyan
+# Step 5: Ready to run
+Write-Host "5️⃣  Starting development server..."
+Write-Host "   Running: npm run dev" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "🎉 Application starting at http://localhost:3000" -ForegroundColor Green
 Write-Host ""
 
-Write-Host "To start production server, run:" -ForegroundColor Yellow
-Write-Host "  npm start" -ForegroundColor Cyan
-Write-Host ""
-
-Read-Host "Press Enter to exit"
+npm run dev

@@ -1,0 +1,217 @@
+================================================================================
+            FIX: COULD NOT FIND FILE_NAME COLUMN IN ASSIGNMENTS
+================================================================================
+
+ERROR:
+  "Could not create assignment: Could not find the file_name column 
+   of assignments in the schema cache"
+
+CAUSE:
+  The assignments table is missing file_path, file_name, and file_size columns
+  needed for file uploads.
+
+✅ SOLUTION:
+  Run Migration 098 to add these columns safely
+
+================================================================================
+                       STEP 1: RUN MIGRATION 098
+================================================================================
+
+File: database/migrations/098_ensure_assignments_file_columns.sql
+
+This migration adds:
+  ✅ file_path (TEXT) - stores S3 path to uploaded file
+  ✅ file_name (TEXT) - stores original filename
+  ✅ file_size (BIGINT) - stores file size in bytes
+  ✅ max_marks (NUMERIC) - stores assignment max marks
+  ✅ created_at (TIMESTAMP) - stores creation time
+
+Steps:
+  1. Go to Supabase SQL Editor
+  2. Create new query
+  3. Copy-paste ENTIRE content of migration 098
+  4. Click Run
+  5. Done! ✅
+
+Expected Output:
+  ✅ Query successful
+  No errors
+
+================================================================================
+                  STEP 2: VERIFY COLUMNS WERE ADDED
+================================================================================
+
+In Supabase:
+  1. Go to SQL Editor
+  2. Run this query:
+
+    SELECT column_name, data_type 
+    FROM information_schema.columns 
+    WHERE table_name = 'assignments' 
+    ORDER BY ordinal_position;
+
+  3. You should see these columns:
+     ✅ id (uuid)
+     ✅ school_id (uuid)
+     ✅ teacher_id (uuid)
+     ✅ subject_id (uuid)
+     ✅ class_arm_combo_id (uuid)
+     ✅ title (text)
+     ✅ description (text)
+     ✅ instructions (text)
+     ✅ due_date (timestamp)
+     ✅ max_marks (numeric)
+     ✅ file_path (text) <- MUST SEE THIS
+     ✅ file_name (text) <- MUST SEE THIS
+     ✅ file_size (bigint) <- MUST SEE THIS
+     ✅ status (character varying)
+     ✅ created_at (timestamp)
+     ✅ updated_at (timestamp)
+
+If you DON'T see file_path, file_name, file_size:
+  ❌ Migration didn't work
+  ❌ Run it again
+  ❌ Check for errors in Supabase
+
+================================================================================
+                   STEP 3: ALSO CHECK SUBMISSIONS TABLE
+================================================================================
+
+Run this to verify submissions table also has file columns:
+
+  SELECT column_name, data_type 
+  FROM information_schema.columns 
+  WHERE table_name = 'student_assignment_submissions' 
+  ORDER BY ordinal_position;
+
+Should see:
+  ✅ file_path (text)
+  ✅ file_name (text)
+  ✅ file_size (bigint)
+
+If missing, migration 098 adds them.
+
+================================================================================
+                    STEP 4: RESTART DEV SERVER
+================================================================================
+
+After running migration 098:
+
+1. Kill dev server: Ctrl+C
+2. Restart: npm run dev
+3. Wait for "Ready on http://localhost:3000"
+
+================================================================================
+                     STEP 5: TEST ASSIGNMENT CREATION
+================================================================================
+
+Now test if assignment creation works:
+
+1. Go to /teacher/assignments
+2. Click "✚ New Assignment"
+3. Fill out form:
+   - Subject: (select any)
+   - Class: (select any)
+   - Title: "Test Assignment"
+   - Description: "Test"
+   - Instructions: "Do this"
+   - Due Date: (any future date)
+   - Max Marks: 100
+   - Upload File: (select a PDF or document)
+
+4. Click "✚ Create Assignment"
+
+Expected Result:
+  ✅ "Assignment created successfully!"
+  ✅ No errors
+  ✅ File uploaded
+  ✅ New assignment appears in list
+
+If Error Still Shows:
+  ❌ Check browser console (F12 → Console tab)
+  ❌ Look for specific error message
+  ❌ Run migration 098 again
+  ❌ Restart dev server again
+
+================================================================================
+                 WHAT MIGRATION 098 DOES (TECHNICAL)
+================================================================================
+
+Safe column additions:
+
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS file_path TEXT;
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS file_name TEXT;
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS file_size BIGINT;
+
+Also adds to student_assignment_submissions:
+
+ALTER TABLE student_assignment_submissions ADD COLUMN IF NOT EXISTS file_path TEXT;
+ALTER TABLE student_assignment_submissions ADD COLUMN IF NOT EXISTS file_name TEXT;
+ALTER TABLE student_assignment_submissions ADD COLUMN IF NOT EXISTS file_size BIGINT;
+
+"IF NOT EXISTS" means:
+  ✅ Safe to run multiple times
+  ✅ Won't error if columns already exist
+  ✅ Idempotent (same result every time)
+
+================================================================================
+                        QUICK CHECKLIST
+================================================================================
+
+Do this NOW:
+
+☐ 1. Open migration 098_ensure_assignments_file_columns.sql
+☐ 2. Copy entire content
+☐ 3. Go to Supabase SQL Editor
+☐ 4. Paste it in
+☐ 5. Click Run
+☐ 6. Wait for "Query successful"
+☐ 7. Close SQL editor
+☐ 8. Restart dev server (Ctrl+C, npm run dev)
+☐ 9. Go to /teacher/assignments
+☐ 10. Try creating assignment with file upload
+☐ 11. Should work! ✅
+
+================================================================================
+                        IF STILL FAILING
+================================================================================
+
+1. Check exact error in browser console:
+   - F12 → Console tab
+   - Look for red error
+   - Tell me the error message
+
+2. Verify migration ran:
+   - Supabase SQL Editor
+   - Run query to check columns exist
+   - Show me results
+
+3. Check schema:
+   - Supabase Dashboard
+   - Tables tab
+   - Find "assignments" table
+   - Click on it
+   - Look for file_path, file_name, file_size columns
+   - They must be there
+
+4. If columns don't exist:
+   - Migration didn't run successfully
+   - Run it again
+   - Check for errors
+   - Try running parts of migration individually
+
+================================================================================
+                           THEN TEST AGAIN
+================================================================================
+
+After migration and restart:
+
+✅ Go to /teacher/assignments
+✅ Create assignment with file upload
+✅ File should upload successfully
+✅ Assignment created in database
+✅ No "file_name column not found" error
+
+Done! ✅
+
+================================================================================

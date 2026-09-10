@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase-client'
+import { StudentService } from '@/services/student.service'
 
 interface EditStudentModalProps {
   studentId: string
@@ -12,10 +13,10 @@ interface EditStudentModalProps {
 }
 
 const DEPARTMENTS = [
-  { id: 'science', name: 'Science', description: 'Physics, Chemistry, Biology' },
-  { id: 'commercial', name: 'Commercial', description: 'Economics, Accounting, Business' },
-  { id: 'humanities', name: 'Humanities', description: 'History, Government, Literature' },
-  { id: 'technical', name: 'Technical', description: 'Technical Drawing, Woodwork' },
+  { id: 'SCIENCE', name: 'Science', description: 'Physics, Chemistry, Biology' },
+  { id: 'COMMERCIAL', name: 'Commercial', description: 'Economics, Accounting, Business' },
+  { id: 'HUMANITIES', name: 'Humanities', description: 'History, Government, Literature' },
+  { id: 'TECHNICAL', name: 'Technical', description: 'Technical Drawing, Woodwork' },
 ]
 
 export default function EditStudentModal({
@@ -56,24 +57,33 @@ export default function EditStudentModal({
       setLoading(true)
       setError('')
 
-      // Get student details
-      const { data: student, error: studentError } = await supabase
+      // Step 1: Get student details
+      const { data: studentData, error: studentError } = await supabase
         .from('students')
-        .select('id, full_name, email, admission_number, department, class_arm_combo_id')
+        .select('id, admission_number, department, class_arm_combo_id, user_id')
         .eq('id', studentId)
         .single()
 
       if (studentError) throw studentError
 
+      // Step 2: Get user details separately
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('full_name, email')
+        .eq('id', studentData.user_id)
+        .single()
+
+      if (userError) throw userError
+
       setStudentData({
-        full_name: student.full_name || '',
-        email: student.email || '',
-        admission_number: student.admission_number || '',
-        department: student.department || '',
+        full_name: userData?.full_name || '',
+        email: userData?.email || '',
+        admission_number: studentData.admission_number || '',
+        department: studentData.department || '',
       })
 
-      if (student.class_arm_combo_id) {
-        setSelectedClass(student.class_arm_combo_id)
+      if (studentData.class_arm_combo_id) {
+        setSelectedClass(studentData.class_arm_combo_id)
       }
 
       // Get student subjects
@@ -95,7 +105,7 @@ export default function EditStudentModal({
 
       setSubjects(subjectsData || [])
 
-      // Load classes
+      // Step 3: Load class_arm_combos
       const { data: combosData } = await supabase
         .from('class_arm_combos')
         .select('id, class_id, arm_id')
@@ -105,11 +115,13 @@ export default function EditStudentModal({
         const classIds = [...new Set(combosData.map(c => c.class_id))]
         const armIds = [...new Set(combosData.map(c => c.arm_id))]
 
+        // Step 4: Get class details separately
         const { data: classes } = await supabase
           .from('classes')
           .select('id, name, level, type')
           .in('id', classIds)
 
+        // Step 5: Get arm details separately
         const { data: arms } = await supabase
           .from('arms')
           .select('id, name')
@@ -124,8 +136,8 @@ export default function EditStudentModal({
         setClasses(merged)
 
         // Set current class info
-        if (student.class_arm_combo_id) {
-          const currentClass = merged.find(c => c.id === student.class_arm_combo_id)
+        if (studentData.class_arm_combo_id) {
+          const currentClass = merged.find(c => c.id === studentData.class_arm_combo_id)
           if (currentClass) {
             setClassType(currentClass.classes?.type as 'PRIMARY' | 'SECONDARY')
             setClassLevel(currentClass.classes?.level)
@@ -186,37 +198,19 @@ export default function EditStudentModal({
         return
       }
 
-      // Update student information
-      const { error: updateError } = await supabase
-        .from('students')
-        .update({
-          full_name: studentData.full_name,
+      // Use StudentService.updateStudentProfile() - unified update method
+      // This handles: user updates, student record updates, subject enrollment (no duplicates)
+      const updatedStudent = await StudentService.updateStudentProfile(
+        studentId,
+        schoolId,
+        {
+          fullName: studentData.full_name,
           email: studentData.email,
-          admission_number: studentData.admission_number,
           department: studentData.department || null,
-          class_arm_combo_id: selectedClass,
-        })
-        .eq('id', studentId)
-
-      if (updateError) throw updateError
-
-      // Update subjects
-      // First delete existing
-      await supabase.from('student_subjects').delete().eq('student_id', studentId)
-
-      // Then insert new
-      if (selectedSubjects.size > 0) {
-        const subjectsToInsert = Array.from(selectedSubjects).map(subjectId => ({
-          student_id: studentId,
-          subject_id: subjectId,
-        }))
-
-        const { error: subjectError } = await supabase
-          .from('student_subjects')
-          .insert(subjectsToInsert)
-
-        if (subjectError) throw subjectError
-      }
+          classArmComboId: selectedClass,
+          subjectIds: Array.from(selectedSubjects),
+        }
+      )
 
       setSuccess('✅ Student profile updated successfully!')
       setTimeout(() => {

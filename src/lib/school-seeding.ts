@@ -1,34 +1,53 @@
 /**
  * School Seeding Service
- * Automatically creates classes, arms, and subjects for new schools
+ * Automatically creates classes and arms for new schools
+ * NOTE: Subjects are now seeded automatically via migration 049
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { SCHOOL_CLASSES, NIGERIAN_SUBJECTS, DEPARTMENTS } from '@/constants/nigerian-subjects'
 
+// Standard Nigerian school classes (replaces deleted nigerian-subjects.ts)
+const SCHOOL_CLASSES = [
+  { name: 'Primary 1', level: 'Primary', type: 'Primary' },
+  { name: 'Primary 2', level: 'Primary', type: 'Primary' },
+  { name: 'Primary 3', level: 'Primary', type: 'Primary' },
+  { name: 'Primary 4', level: 'Primary', type: 'Primary' },
+  { name: 'Primary 5', level: 'Primary', type: 'Primary' },
+  { name: 'Primary 6', level: 'Primary', type: 'Primary' },
+  { name: 'JSS 1', level: 'JSS', type: 'JSS' },
+  { name: 'JSS 2', level: 'JSS', type: 'JSS' },
+  { name: 'JSS 3', level: 'JSS', type: 'JSS' },
+  { name: 'SSS 1', level: 'SSS', type: 'SSS' },
+  { name: 'SSS 2', level: 'SSS', type: 'SSS' },
+  { name: 'SSS 3', level: 'SSS', type: 'SSS' },
+]
+
+// Use service key for seeding to ensure write permissions
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
 export interface SeedingResult {
   success: boolean
   classesCreated: number
   armsCreated: number
+  combosCreated: number
   subjectsCreated: number
   error?: string
 }
 
 /**
- * Auto-seed a new school with standard Nigerian curriculum classes and subjects
+ * Auto-seed a new school with standard Nigerian curriculum classes and arms
+ * NOTE: Subjects are seeded automatically via migration 049 for all schools
  */
 export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingResult> {
-  console.log(`🌱 Starting to seed school ${schoolId} with Nigerian curriculum...`)
+  console.log(`🌱 Starting to seed school ${schoolId} with classes and arms...`)
 
   try {
     let classesCreated = 0
     let armsCreated = 0
-    let subjectsCreated = 0
+    let combosCreated = 0
 
     // 1. Create all classes
     console.log(`📚 Creating ${SCHOOL_CLASSES.length} classes...`)
@@ -81,7 +100,7 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
               continue
             }
 
-            const { error: armError } = await supabase
+            const { data: newArm, error: armError } = await supabase
               .from('arms')
               .insert({
                 class_id: newClass.id,
@@ -89,6 +108,8 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
                 name: armName,
                 capacity: 40,
               })
+              .select()
+              .single()
 
             if (armError) {
               console.error(`    ❌ Error creating arm ${armName}:`, armError)
@@ -97,6 +118,26 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
 
             console.log(`    ✅ Created arm: ${classItem.name}-${armName}`)
             armsCreated++
+
+            // 🔥 CRITICAL: Create class_arm_combo entry
+            try {
+              const { error: comboError } = await supabase
+                .from('class_arm_combos')
+                .insert({
+                  school_id: schoolId,
+                  class_id: newClass.id,
+                  arm_id: newArm.id,
+                })
+
+              if (comboError) {
+                console.error(`    ❌ Error creating combo for ${classItem.name}-${armName}:`, comboError)
+              } else {
+                console.log(`    ✅ Created combo for: ${classItem.name}-${armName}`)
+                combosCreated++
+              }
+            } catch (comboErr) {
+              console.error(`    ❌ Exception creating combo:`, comboErr)
+            }
           } catch (armErr) {
             console.error(`    ❌ Error creating arm ${armName}:`, armErr)
           }
@@ -106,107 +147,18 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
       }
     }
 
-    // 2. Create all subjects
-    console.log(`📖 Creating subjects...`)
-
-    // Get all primary subjects
-    const primarySubjects = NIGERIAN_SUBJECTS.PRIMARY || []
-    for (const subject of primarySubjects) {
-      try {
-        const { data: existingSubject, error: checkError } = await supabase
-          .from('subjects')
-          .select('id')
-          .eq('school_id', schoolId)
-          .eq('name', subject.name)
-          .single()
-
-        if (existingSubject) {
-          console.log(`  ⏭️  Subject ${subject.name} already exists`)
-          continue
-        }
-
-        // Find applicable levels for this subject (1-6 for primary)
-        const applicableLevels = [1, 2, 3, 4, 5, 6]
-
-        const { error: createError } = await supabase
-          .from('subjects')
-          .insert({
-            school_id: schoolId,
-            name: subject.name,
-            code: subject.code,
-            applicable_to_levels: applicableLevels,
-          })
-
-        if (createError) {
-          console.error(`  ❌ Error creating subject ${subject.name}:`, createError)
-          continue
-        }
-
-        console.log(`  ✅ Created subject: ${subject.name}`)
-        subjectsCreated++
-      } catch (err) {
-        console.error(`  ❌ Error creating subject ${subject.name}:`, err)
-      }
-    }
-
-    // Get all secondary subjects (from all categories)
-    const secondarySubjects = [
-      ...NIGERIAN_SUBJECTS.SECONDARY.COMMON,
-      ...NIGERIAN_SUBJECTS.SECONDARY.SCIENCES,
-      ...NIGERIAN_SUBJECTS.SECONDARY.COMMERCIAL,
-      ...NIGERIAN_SUBJECTS.SECONDARY.HUMANITIES,
-      ...NIGERIAN_SUBJECTS.SECONDARY.LANGUAGES,
-      ...NIGERIAN_SUBJECTS.SECONDARY.TECHNICAL,
-    ]
-
-    for (const subject of secondarySubjects) {
-      try {
-        const { data: existingSubject, error: checkError } = await supabase
-          .from('subjects')
-          .select('id')
-          .eq('school_id', schoolId)
-          .eq('name', subject.name)
-          .single()
-
-        if (existingSubject) {
-          console.log(`  ⏭️  Subject ${subject.name} already exists`)
-          continue
-        }
-
-        // Find applicable levels for this subject (7-12 for secondary: JSS1-SS3)
-        const applicableLevels = [7, 8, 9, 10, 11, 12]
-
-        const { error: createError } = await supabase
-          .from('subjects')
-          .insert({
-            school_id: schoolId,
-            name: subject.name,
-            code: subject.code,
-            applicable_to_levels: applicableLevels,
-          })
-
-        if (createError) {
-          console.error(`  ❌ Error creating subject ${subject.name}:`, createError)
-          continue
-        }
-
-        console.log(`  ✅ Created subject: ${subject.name}`)
-        subjectsCreated++
-      } catch (err) {
-        console.error(`  ❌ Error creating subject ${subject.name}:`, err)
-      }
-    }
-
     console.log(`\n✨ Seeding complete!`)
     console.log(`  📚 Classes created: ${classesCreated}`)
     console.log(`  🔗 Arms created: ${armsCreated}`)
-    console.log(`  📖 Subjects created: ${subjectsCreated}`)
+    console.log(`  🔀 Combos created: ${combosCreated}`)
+    console.log(`  📖 Subjects: Created automatically via migration 049`)
 
     return {
       success: true,
       classesCreated,
       armsCreated,
-      subjectsCreated,
+      combosCreated,
+      subjectsCreated: 0, // Subjects are now seeded by migration
     }
   } catch (error: any) {
     const errorMsg = error.message || 'Unknown error during seeding'
@@ -215,6 +167,7 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
       success: false,
       classesCreated: 0,
       armsCreated: 0,
+      combosCreated: 0,
       subjectsCreated: 0,
       error: errorMsg,
     }

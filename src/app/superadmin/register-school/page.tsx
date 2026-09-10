@@ -103,21 +103,30 @@ export default function RegisterSchoolPage() {
       formDataToSend.append('file', formData.logo)
       formDataToSend.append('school_id', schoolId)
 
+      console.log('Uploading logo with schoolId:', schoolId)
+
       const response = await fetch('/api/upload/school-logo', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${await AuthService.getAuthToken()}`,
-        },
         body: formDataToSend,
       })
 
+      console.log('Logo upload response status:', response.status)
+
       if (!response.ok) {
-        console.error('Logo upload failed:', response.statusText)
+        const errorData = await response.json()
+        console.error('Logo upload failed with status', response.status, ':', errorData)
         return null
       }
 
       const data = await response.json()
-      return data.file_url || null
+      console.log('Logo upload response:', data)
+      
+      if (data.success && data.file_url) {
+        return data.file_url
+      } else {
+        console.warn('Logo upload response missing file_url:', data)
+        return null
+      }
     } catch (err) {
       console.error('Logo upload error:', err)
       return null
@@ -144,60 +153,86 @@ export default function RegisterSchoolPage() {
         throw new Error('Password must be at least 8 characters with uppercase, lowercase, number, and special character')
       }
 
+      const payload = {
+        school_name: formData.schoolName,
+        school_email: formData.schoolEmail,
+        admin_email: formData.adminEmail,
+        admin_password: formData.adminPassword,
+        admin_name: formData.adminName,
+        phone: formData.phone,
+        address: formData.address,
+        subscription_plan: formData.subscriptionPlan,
+        school_type: formData.schoolType,
+        logo_url: null,
+      }
+
+      console.log('📝 [REGISTER] Submitting school registration with payload:', payload)
+
       // Register school via API (no auth required for basic school creation)
       const schoolResponse = await fetch('/api/superadmin/register-school', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          school_name: formData.schoolName,
-          school_email: formData.schoolEmail,
-          admin_email: formData.adminEmail,
-          admin_password: formData.adminPassword,
-          admin_name: formData.adminName,
-          phone: formData.phone,
-          address: formData.address,
-          subscription_plan: formData.subscriptionPlan,
-          school_type: formData.schoolType,
-          logo_url: null, // Will be updated after upload
-        }),
+        body: JSON.stringify(payload),
       })
+
+      console.log('📊 [REGISTER] Response status:', schoolResponse.status)
 
       if (!schoolResponse.ok) {
         const errorData = await schoolResponse.json()
-        throw new Error(errorData.message || 'Failed to register school')
+        console.error('❌ [REGISTER] API error response:', errorData)
+        throw new Error(errorData.message || errorData.details || 'Failed to register school')
       }
 
       const result = await schoolResponse.json()
       const schoolId = result.school_id
 
-      // Upload logo if provided (optional, don't fail if it fails)
+      console.log('✅ [REGISTER] School created successfully. School ID:', schoolId)
+
+      // Upload logo if provided (optional, don't fail registration if it fails)
       let logoUrl = null
       if (formData.logo) {
         try {
-          const token = await AuthService.getAuthToken()
-          if (token) {
-            logoUrl = await uploadLogo(schoolId)
+          console.log('📸 [REGISTER] Starting logo upload...')
+          logoUrl = await uploadLogo(schoolId)
+          
+          if (logoUrl) {
+            console.log('✅ [REGISTER] Logo uploaded successfully:', logoUrl)
             // Update school with logo URL if upload succeeded
-            if (logoUrl) {
-              await fetch(`/api/schools/${schoolId}`, {
-                method: 'PUT',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  logo_url: logoUrl,
-                }),
-              }).catch(err => console.warn('Logo update warning:', err))
+            try {
+              const token = await AuthService.getAuthToken()
+              if (token) {
+                const updateResponse = await fetch(`/api/schools/${schoolId}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    logo_url: logoUrl,
+                  }),
+                })
+                
+                if (!updateResponse.ok) {
+                  console.warn('Failed to update school logo_url in database')
+                } else {
+                  console.log('School logo_url updated in database')
+                }
+              }
+            } catch (err) {
+              console.warn('Could not update logo in database:', err)
             }
+          } else {
+            console.warn('Logo upload returned null')
           }
         } catch (logoErr) {
-          console.warn('Logo upload optional, continuing:', logoErr)
+          console.warn('Logo upload failed but continuing with school registration:', logoErr)
         }
       }
 
+      console.log('💾 [REGISTER] Setting success state with credentials')
+      console.log('Setting success state with credentials')
       setCredentials({
         school_id: schoolId,
         admin_email: formData.adminEmail,
@@ -205,6 +240,8 @@ export default function RegisterSchoolPage() {
         logo_url: logoUrl,
       })
       setSuccess(true)
+      
+      // Reset form
       setFormData({
         schoolName: '',
         schoolEmail: '',
@@ -218,7 +255,9 @@ export default function RegisterSchoolPage() {
         logo: null,
       })
       setLogoPreview(null)
+      setError(null)
 
+      console.log('Redirecting to schools list in 3 seconds...')
       setTimeout(() => {
         router.push('/superadmin/schools')
       }, 3000)
