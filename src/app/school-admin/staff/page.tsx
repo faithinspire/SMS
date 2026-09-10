@@ -5,15 +5,19 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+let supabase: any = null;
+
+function getSupabaseClient() {
+  if (!supabase) {
+    supabase = createClient();
+  }
+  return supabase;
+}
 
 interface StaffMember {
   id: string;
@@ -99,10 +103,10 @@ const StaffPage: React.FC = () => {
   useEffect(() => {
     const getCurrentSchool = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user } } = await getSupabaseClient().auth.getUser();
         if (!user) return;
 
-        const { data: userProfile } = await supabase
+        const { data: userProfile } = await getSupabaseClient()
           .from('users')
           .select('school_id')
           .eq('id', user.id)
@@ -125,7 +129,7 @@ const StaffPage: React.FC = () => {
 
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await getSupabaseClient()
         .from('staff')
         .select(`
           id,

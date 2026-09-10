@@ -7,13 +7,17 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+let supabase: any = null;
+
+function getSupabaseClient() {
+  if (!supabase) {
+    supabase = createClient();
+  }
+  return supabase;
+}
 
 interface DeletionRequest {
   id: string;
@@ -129,7 +133,7 @@ const DeletionRequestsPage: React.FC = () => {
   const fetchRequests = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await getSupabaseClient()
         .from('deletion_requests')
         .select(`
           id,

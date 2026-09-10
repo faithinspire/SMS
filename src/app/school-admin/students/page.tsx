@@ -5,15 +5,19 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+let supabase: any = null;
+
+function getSupabaseClient() {
+  if (!supabase) {
+    supabase = createClient();
+  }
+  return supabase;
+}
 
 interface Student {
   id: string;
@@ -116,10 +120,10 @@ const StudentsPage: React.FC = () => {
   useEffect(() => {
     const getCurrentSchool = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user } } = await getSupabaseClient().auth.getUser();
         if (!user) return;
 
-        const { data: userProfile } = await supabase
+        const { data: userProfile } = await getSupabaseClient()
           .from('users')
           .select('school_id')
           .eq('id', user.id)
@@ -141,7 +145,7 @@ const StudentsPage: React.FC = () => {
     const fetchClasses = async () => {
       if (!schoolId) return;
       try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseClient()
           .from('classes')
           .select('id, name')
           .eq('school_id', schoolId)
@@ -163,7 +167,7 @@ const StudentsPage: React.FC = () => {
 
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await getSupabaseClient()
         .from('students')
         .select(`
           id,
