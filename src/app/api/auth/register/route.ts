@@ -4,10 +4,15 @@ import { createClient } from '@supabase/supabase-js'
 // Force dynamic rendering - this route must run at request time, not build time
 export const dynamic = 'force-dynamic'
 
+// CRITICAL: Use dummy values if env vars missing during build to prevent errors
+const DUMMY_SUPABASE_URL = 'https://dummy.supabase.co'
+const DUMMY_SERVICE_KEY = 'dummy-key'
+
 // Create admin client with service role key for bypassing auth restrictions
+// Use dummy values if env vars are missing (happens during Vercel build)
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_KEY || '',
+  process.env.NEXT_PUBLIC_SUPABASE_URL || DUMMY_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY || DUMMY_SERVICE_KEY,
   {
     auth: {
       autoRefreshToken: false,
@@ -32,6 +37,14 @@ interface RegisterRequest {
  */
 export async function POST(request: NextRequest) {
   try {
+    // CRITICAL: Reject if Supabase env vars are not set (happens at build time)
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      return NextResponse.json(
+        { error: 'Service not available - Supabase credentials missing' },
+        { status: 503 }
+      )
+    }
+
     const body: RegisterRequest = await request.json()
 
     // Validate required fields

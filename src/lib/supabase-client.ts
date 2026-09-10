@@ -3,6 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
+// CRITICAL: Return dummy object if env vars missing to prevent build-time errors
+// This allows the module to load without throwing
+const DUMMY_URL = 'https://dummy.supabase.co'
+const DUMMY_KEY = 'dummy-key'
+
 // Custom fetch with retry logic and error handling
 async function customFetch(url: string | Request, options?: RequestInit): Promise<Response> {
   const maxRetries = 3
@@ -58,12 +63,12 @@ async function customFetch(url: string | Request, options?: RequestInit): Promis
 let supabaseInstance: any = null
 
 function getSupabaseClient() {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Supabase URL and Anon Key are required')
-  }
+  // If env vars are missing during build, use dummy values so module loads
+  const url = supabaseUrl || DUMMY_URL
+  const key = supabaseAnonKey || DUMMY_KEY
   
   if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+    supabaseInstance = createClient(url, key, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
@@ -89,11 +94,10 @@ export const supabase = new Proxy({}, {
 
 export const supabaseAdmin = new Proxy({}, {
   get: (target, prop) => {
-    if (!supabaseUrl || !supabaseAnonKey) {
-      throw new Error('Supabase URL and Anon Key are required')
-    }
     if (!target.hasOwnProperty('_admin')) {
-      (target as any)._admin = createClient(supabaseUrl, supabaseAnonKey)
+      const url = supabaseUrl || DUMMY_URL
+      const key = supabaseAnonKey || DUMMY_KEY
+      (target as any)._admin = createClient(url, key)
     }
     return (target as any)._admin[prop]
   },
