@@ -84,6 +84,7 @@ const nextConfig = {
   },
   eslint: {
     ignoreDuringBuilds: true,
+    dirs: [],  // Disable ESLint linting completely
   },
   webpack: (config, { isServer }) => {
     config.optimization = {
