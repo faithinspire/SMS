@@ -79,11 +79,6 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: false,
   compress: true,
-  // CRITICAL: Skip static generation to prevent build-time Supabase errors
-  experimental: {
-    // Disable static generation for all routes - forces everything to be dynamic
-    isrMemoryCacheSize: 0,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -91,8 +86,11 @@ const nextConfig = {
     ignoreDuringBuilds: true,
     dirs: [],  // Disable ESLint linting completely
   },
-  // Disable static generation for API routes to avoid build-time Supabase initialization errors
-  staticPageGenerationTimeout: 0,
+  // NUCLEAR: Disable static page generation for build to prevent Supabase init errors
+  // All pages/routes will be Server-Side Rendered (SSR) instead
+  experimental: {
+    staticPageGenerationTimeout: undefined,
+  },
   webpack: (config, { isServer }) => {
     config.optimization = {
       ...config.optimization,
