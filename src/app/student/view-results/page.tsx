@@ -59,7 +59,6 @@ export default function StudentViewResultsPage() {
   const [selectedSession, setSelectedSession] = useState<string>('')
   const [availableSessions, setAvailableSessions] = useState<Array<{ id: string; session_year: string }>>([])
   const [availableTerms, setAvailableTerms] = useState<Array<{ id: string; term_name: string; term_order: number }>>([])
-  const [selectedTerm, setSelectedTerm] = useState<string>('')
 
   useEffect(() => {
     const saved = localStorage.getItem('theme-mode')
