@@ -1,0 +1,5 @@
+Force Vercel to use latest commits with fixes
+Timestamp: 09:25:00
+Fixes in pipeline:
+- className syntax fix in register/page.tsx
+- selectedTerm duplicate removed from view-results/page.tsx
