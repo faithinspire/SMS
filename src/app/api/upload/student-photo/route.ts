@@ -15,8 +15,7 @@ import { uploadFile } from '@/lib/file-upload';
 export const dynamic = 'force-dynamic'
 
 
-const supabase = createClient()
-);
+const supabase = createClient();
 
 // Authorization middleware
 async function authorizeUser(token: string, schoolId: string, studentId: string) {
