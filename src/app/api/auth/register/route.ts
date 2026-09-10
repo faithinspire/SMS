@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase-client'
 
 // Force dynamic rendering - this route must run at request time, not build time
 export const dynamic = 'force-dynamic'

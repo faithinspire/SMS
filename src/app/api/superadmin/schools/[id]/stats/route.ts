@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * API Endpoint: GET /api/superadmin/schools/[id]/stats
  * Get school statistics (student and staff counts)
@@ -9,12 +10,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase-client';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabase = createClient();
 
 // Verify authorization
 async function verifyAccess(token: string, schoolId: string) {

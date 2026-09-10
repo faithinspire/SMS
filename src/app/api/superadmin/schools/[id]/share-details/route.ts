@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * API Endpoint: POST /api/superadmin/schools/[id]/share-details
  * Share school details via WhatsApp or Email
@@ -10,12 +11,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase-client';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabase = createClient();
 
 // Verify Super Admin authorization
 async function verifyAdmin(token: string) {
