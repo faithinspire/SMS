@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
  * 
  * Authentication: Required (Bearer token)
  * Authorization: SUPER_ADMIN only
+ * Uses service role key to bypass RLS
  * 
  * Response: { success, message }
  */
@@ -12,7 +13,11 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-client';
 
-const supabase = createClient();
+// Use service role for admin operations (bypasses RLS)
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
 // Verify authorization - Accept any authenticated request
 async function verifyAdmin(token: string) {
@@ -47,6 +52,8 @@ export async function DELETE(
     const token = authHeader.substring(7);
     const schoolId = params.id;
 
+    console.log(`🗑️ [DELETE SCHOOL] Starting deletion of school ${schoolId}`);
+
     // Verify admin
     const auth = await verifyAdmin(token);
     if (!auth.authorized) {
@@ -56,53 +63,48 @@ export async function DELETE(
       );
     }
 
-    // Check if school exists
-    const { data: school, error: checkError } = await supabase
+    // Check if service key is configured
+    if (!process.env.SUPABASE_SERVICE_KEY) {
+      console.error('❌ [DELETE SCHOOL] SUPABASE_SERVICE_KEY not configured');
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
+    // Check if school exists using service role
+    const { data: school, error: checkError } = await supabaseAdmin
       .from('schools')
       .select('id, name')
       .eq('id', schoolId)
       .single();
 
     if (checkError || !school) {
+      console.log(`⚠️ [DELETE SCHOOL] School not found: ${schoolId}`);
       return NextResponse.json(
         { success: false, error: 'School not found' },
         { status: 404 }
       );
     }
 
-    // Get all files for this school (for cleanup)
-    const { data: files } = await supabase
-      .from('file_uploads')
-      .select('id, storage_path')
-      .eq('school_id', schoolId)
-      .eq('is_deleted', false);
+    console.log(`✅ [DELETE SCHOOL] Found school: ${school.name}`);
 
-    // Delete files from storage
-    if (files && files.length > 0) {
-      const buckets = ['school-logos', 'student-photos', 'staff-photos', 'documents', 'assignments', 'lesson-materials'];
-      
-      for (const bucket of buckets) {
-        const filePaths = files.map(f => f.storage_path);
-        if (filePaths.length > 0) {
-          await supabase.storage
-            .from(bucket)
-            .remove(filePaths)
-            .catch(err => console.warn(`Could not delete files from ${bucket}:`, err));
-        }
-      }
-    }
-
-    // Delete school (cascades to all related data via foreign keys)
-    const { error: deleteError } = await supabase
+    // Delete school using service role (cascades to all related data via foreign keys)
+    const { error: deleteError } = await supabaseAdmin
       .from('schools')
       .delete()
       .eq('id', schoolId);
 
-    if (deleteError) throw deleteError;
+    if (deleteError) {
+      console.error(`❌ [DELETE SCHOOL] Delete error:`, deleteError);
+      throw deleteError;
+    }
+
+    console.log(`✅ [DELETE SCHOOL] School deleted successfully`);
 
     // Audit log
     try {
-      await supabase.from('audit_logs').insert({
+      await supabaseAdmin.from('audit_logs').insert({
         school_id: schoolId,
         user_id: auth.userId,
         action: 'DELETE_SCHOOL',
@@ -123,7 +125,7 @@ export async function DELETE(
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error deleting school:', error);
+    console.error('❌ [DELETE SCHOOL] Error deleting school:', error);
     return NextResponse.json(
       {
         success: false,

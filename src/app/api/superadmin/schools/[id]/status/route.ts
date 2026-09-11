@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
  * 
  * Authentication: Required (Bearer token)
  * Authorization: SUPER_ADMIN only
+ * Uses service role key to bypass RLS
  * 
  * Request: { status: 'ACTIVE' | 'PAUSED' | 'SUSPENDED' }
  * Response: { success, school, message }
@@ -13,7 +14,11 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-client';
 
-const supabase = createClient();
+// Use service role for admin operations (bypasses RLS)
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
 // Verify authorization - Accept any authenticated request
 async function verifyAdmin(token: string) {
@@ -48,12 +53,23 @@ export async function PATCH(
     const token = authHeader.substring(7);
     const schoolId = params.id;
 
+    console.log(`📝 [UPDATE STATUS] Starting status update for school ${schoolId}`);
+
     // Verify admin
     const auth = await verifyAdmin(token);
     if (!auth.authorized) {
       return NextResponse.json(
         { success: false, error: auth.error },
         { status: 403 }
+      );
+    }
+
+    // Check if service key is configured
+    if (!process.env.SUPABASE_SERVICE_KEY) {
+      console.error('❌ [UPDATE STATUS] SUPABASE_SERVICE_KEY not configured');
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error' },
+        { status: 500 }
       );
     }
 
@@ -68,19 +84,24 @@ export async function PATCH(
       );
     }
 
-    // Update school
-    const { data, error } = await supabase
+    // Update school using service role
+    const { data, error } = await supabaseAdmin
       .from('schools')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', schoolId)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error(`❌ [UPDATE STATUS] Update error:`, error);
+      throw error;
+    }
+
+    console.log(`✅ [UPDATE STATUS] School status updated to ${status}`);
 
     // Audit log
     try {
-      await supabase.from('audit_logs').insert({
+      await supabaseAdmin.from('audit_logs').insert({
         school_id: schoolId,
         user_id: auth.userId,
         action: 'UPDATE_SCHOOL_STATUS',
@@ -102,7 +123,7 @@ export async function PATCH(
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error updating school status:', error);
+    console.error('❌ [UPDATE STATUS] Error updating school status:', error);
     return NextResponse.json(
       {
         success: false,
