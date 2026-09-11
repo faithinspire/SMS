@@ -31,6 +31,7 @@ interface Transaction {
   recipient_name: string
   recipient_email?: string
   recipient_phone?: string
+  recipient_class?: string  // Class for students
   amount: number
   purpose: string
   payment_method: string
@@ -171,32 +172,60 @@ export default function AccountantDashboard() {
     setEditData({})
   }
 
-  const handleStudentClick = (student: Student) => {
-    const studentTransactions = transactions.filter(
-      t => t.recipient_id === student.id && t.type === 'STUDENT_PAYMENT'
-    )
-    
-    setSelectedPayment({
-      recipient: student,
-      transaction: studentTransactions[0] || {
-        id: `new-${student.id}`,
-        type: 'STUDENT_PAYMENT',
-        recipient_id: student.id,
-        recipient_name: student.full_name,
-        recipient_email: student.email,
-        amount: 0,
-        purpose: 'School Fees',
-        payment_method: 'Bank Transfer',
-        status: 'PENDING',
-        created_at: new Date().toISOString(),
-        invoice_number: '',
-        notes: '',
-      },
-      school: school,
-      allTransactions: studentTransactions,
-    })
-    setEditMode(false)
-    setEditData({})
+  const handleStudentClick = async (student: Student) => {
+    try {
+      const studentTransactions = transactions.filter(
+        t => t.recipient_id === student.id && t.type === 'STUDENT_PAYMENT'
+      )
+      
+      // Fetch student class info
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('class_arm_combo_id')
+        .eq('id', student.id)
+        .single()
+      
+      let studentClass = 'Unknown'
+      if (studentData?.class_arm_combo_id) {
+        const { data: classData } = await supabase
+          .from('class_arm_combos')
+          .select('classes(name), arms(name)')
+          .eq('id', studentData.class_arm_combo_id)
+          .single()
+        
+        if (classData) {
+          const className = (classData.classes as any)?.name || ''
+          const armName = (classData.arms as any)?.name || ''
+          studentClass = `${className}${armName ? ` ${armName}` : ''}`
+        }
+      }
+      
+      setSelectedPayment({
+        recipient: student,
+        transaction: studentTransactions[0] || {
+          id: `new-${student.id}`,
+          type: 'STUDENT_PAYMENT',
+          recipient_id: student.id,
+          recipient_name: student.full_name,
+          recipient_email: student.email,
+          recipient_class: studentClass,
+          amount: 0,
+          purpose: 'School Fees',
+          payment_method: 'Bank Transfer',
+          status: 'PENDING',
+          created_at: new Date().toISOString(),
+          invoice_number: '',
+          notes: '',
+        },
+        school: school,
+        allTransactions: studentTransactions,
+      })
+      setEditMode(false)
+      setEditData({})
+    } catch (err) {
+      console.error('Error fetching student class:', err)
+      setError('Failed to load student information')
+    }
   }
 
   const savePayment = async () => {
@@ -471,6 +500,9 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
                   <div>
                     <p style={{ margin: 0, fontWeight: '700' }}>{txn.recipient_name}</p>
                     <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.9rem' }}>{txn.purpose}</p>
+                    {txn.type === 'STUDENT_PAYMENT' && txn.recipient_class && (
+                      <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.85rem' }}>📚 {txn.recipient_class}</p>
+                    )}
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <p style={{ margin: 0, fontWeight: '700', color: '#667eea' }}>{formatCurrency(txn.amount)}</p>
@@ -496,6 +528,9 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
                 <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
                   <p style={{ margin: 0, fontWeight: '700' }}>{selectedPayment.school?.name}</p>
                   <p style={{ margin: '0.5rem 0 0 0', fontWeight: '600' }}>{selectedPayment.recipient?.full_name}</p>
+                  {selectedPayment.transaction.type === 'STUDENT_PAYMENT' && selectedPayment.transaction.recipient_class && (
+                    <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#6b7280' }}>📚 Class: {selectedPayment.transaction.recipient_class}</p>
+                  )}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>

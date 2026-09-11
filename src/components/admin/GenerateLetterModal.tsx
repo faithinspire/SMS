@@ -193,26 +193,36 @@ export default function GenerateLetterModal({
   }
 
   const handleShareWhatsApp = async () => {
-    if (!shareData.phoneNumber) {
-      setError('Please enter a phone number')
-      return
-    }
-
     try {
       setLoading(true)
-      const validated = SharingService.validatePhoneNumber(shareData.phoneNumber)
+      
+      // Get phone number from recipient data or user input
+      let phoneNumber = shareData.phoneNumber
+      
+      if (!phoneNumber && recipientData?.phone) {
+        phoneNumber = recipientData.phone
+      }
+      
+      if (!phoneNumber) {
+        setError('No phone number available. Please enter one or ensure the recipient has a phone number.')
+        setLoading(false)
+        return
+      }
+
+      const validated = SharingService.validatePhoneNumber(phoneNumber)
       if (!validated) {
         setError('Invalid phone number. Please use Nigerian format.')
+        setLoading(false)
         return
       }
 
       SharingService.shareViaWhatsApp({
-        phoneNumber: shareData.phoneNumber,
+        phoneNumber: phoneNumber,
         message: `Here is your ${type === 'EMPLOYMENT' ? 'employment' : 'admission'} letter from ${schoolData?.name}`,
         letterContent: generatedLetter,
       })
 
-      setSuccess(`✅ Opening WhatsApp to send to ${shareData.phoneNumber}`)
+      setSuccess(`✅ Opening WhatsApp to send to ${phoneNumber}`)
       setTimeout(() => {
         onClose()
         setShareMode(null)
@@ -369,9 +379,9 @@ export default function GenerateLetterModal({
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
                   <input
                     type="tel"
-                    value={shareData.phoneNumber}
+                    value={shareData.phoneNumber || (recipientData?.phone || '')}
                     onChange={(e) => setShareData({ ...shareData, phoneNumber: e.target.value })}
-                    placeholder="+234 801 234 5678 or 08012345678"
+                    placeholder={recipientData?.phone ? `Use: ${recipientData.phone}` : "+234 801 234 5678 or 08012345678"}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-3"
                   />
                   <div className="flex gap-2">

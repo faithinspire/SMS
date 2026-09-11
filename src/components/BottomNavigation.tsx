@@ -18,13 +18,14 @@ export default function BottomNavigation() {
         setUser(currentUser)
       } catch (err) {
         console.error('Error loading user:', err)
+        setUser(null)
       } finally {
         setLoading(false)
       }
     }
 
     getUser()
-  }, [])
+  }, [pathname])
 
   if (loading || !user) return null
 

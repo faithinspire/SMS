@@ -65,7 +65,7 @@ export default function EditStaffModal({
         staff = userData
       } catch (err: any) {
         // If employment_date or payment columns don't exist, try without them
-        if (err.message?.includes('column') || err.message?.includes('employment_date')) {
+        if (err.message?.includes('column') || err.message?.includes('employment_date') || err.message?.includes('bank_name')) {
           const { data: userData, error: staffError } = await supabase
             .from('users')
             .select('id, full_name, email, phone')
@@ -74,7 +74,7 @@ export default function EditStaffModal({
           
           if (staffError) throw staffError
           staff = userData
-          setError('⚠️ Some payment fields not available. Please run database migration in Supabase.')
+          setError('⚠️ Some payment fields not available. Run migration in Supabase to enable them.')
         } else {
           throw err
         }
