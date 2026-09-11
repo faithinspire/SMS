@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase-client'
 import { SharingService } from '@/services/sharing.service'
 
@@ -8,6 +9,13 @@ interface School {
   id: string
   name: string
   logo_url: string | null
+}
+
+interface User {
+  id: string
+  full_name: string
+  email: string
+  role: string
 }
 
 interface Staff {
@@ -23,6 +31,7 @@ interface Student {
   full_name: string
   email: string
   admission_number?: string
+  phone?: string
 }
 
 interface Transaction {
@@ -32,7 +41,7 @@ interface Transaction {
   recipient_name: string
   recipient_email?: string
   recipient_phone?: string
-  recipient_class?: string  // Class for students
+  recipient_class?: string
   amount: number
   purpose: string
   payment_method: string
@@ -49,7 +58,11 @@ interface PaymentDetails {
   allTransactions: Transaction[]
 }
 
+type NavTab = 'dashboard' | 'transactions' | 'reports' | 'settings'
+
 export default function AccountantDashboard() {
+  const router = useRouter()
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [school, setSchool] = useState<School | null>(null)
   const [staffList, setStaffList] = useState<Staff[]>([])
   const [studentList, setStudentList] = useState<Student[]>([])
@@ -58,7 +71,8 @@ export default function AccountantDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [selectedPayment, setSelectedPayment] = useState<PaymentDetails | null>(null)
-  const [activeTab, setActiveTab] = useState<'staff' | 'students' | 'transactions'>('staff')
+  const [activeNav, setActiveNav] = useState<NavTab>('dashboard')
+  const [activeTab, setActiveTab] = useState<'staff' | 'students'>('staff')
   const [schoolId, setSchoolId] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [editData, setEditData] = useState<Partial<Transaction>>({})
@@ -76,12 +90,13 @@ export default function AccountantDashboard() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         setError('Not authenticated')
+        router.push('/auth/login')
         return
       }
 
       const { data: userData, error: userErr } = await supabase
         .from('users')
-        .select('school_id, role')
+        .select('id, full_name, email, role, school_id')
         .eq('id', user.id)
         .single()
 
@@ -90,6 +105,7 @@ export default function AccountantDashboard() {
         return
       }
 
+      setCurrentUser(userData)
       const sid = userData.school_id
       setSchoolId(sid)
 
@@ -102,40 +118,24 @@ export default function AccountantDashboard() {
 
       if (schoolData) setSchool(schoolData)
 
-      // Fetch ALL users from the school - select only existing columns
-      const { data: allUsers, error: allUsersErr } = await supabase
+      // Fetch all users
+      const { data: allUsers } = await supabase
         .from('users')
-        .select('id, full_name, email, role')
+        .select('id, full_name, email, role, phone')
         .eq('school_id', sid)
 
-      console.log('All users in school:', allUsers)
-      console.error('All users error:', allUsersErr)
-
-      // Filter staff (anyone who is NOT student)
       const staffRoles = ['TEACHER', 'ACCOUNTANT', 'PRINCIPAL', 'HEAD_TEACHER', 'SCHOOL_ADMIN', 'STAFF', 'HEAD_OF_DEPARTMENT']
-      const filteredStaff = (allUsers || []).filter(u => staffRoles.includes(u.role))
-      
-      console.log('Filtered staff:', filteredStaff)
-      setStaffList(filteredStaff)
-
-      // Filter students
-      const filteredStudents = (allUsers || []).filter(u => u.role === 'STUDENT')
-      console.log('Filtered students:', filteredStudents)
-      setStudentList(filteredStudents)
+      setStaffList(allUsers?.filter(u => staffRoles.includes(u.role)) || [])
+      setStudentList(allUsers?.filter(u => u.role === 'STUDENT') || [])
 
       // Fetch transactions
-      const { data: txnData, error: txnErr } = await supabase
+      const { data: txnData } = await supabase
         .from('transactions')
         .select('*')
         .eq('school_id', sid)
         .order('created_at', { ascending: false })
 
-      if (txnErr) {
-        console.error('Transaction fetch error:', txnErr)
-        setTransactions([])
-      } else {
-        setTransactions(txnData || [])
-      }
+      setTransactions(txnData || [])
     } catch (err) {
       console.error('Init error:', err)
       setError(err instanceof Error ? err.message : 'Failed to load data')
@@ -144,11 +144,20 @@ export default function AccountantDashboard() {
     }
   }
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut()
+      router.push('/auth/login')
+    } catch (err) {
+      setError('Failed to logout')
+    }
+  }
+
   const handleStaffClick = (staff: Staff) => {
     const staffTransactions = transactions.filter(
       t => t.recipient_id === staff.id && t.type === 'STAFF_SALARY'
     )
-    
+
     setSelectedPayment({
       recipient: staff,
       transaction: staffTransactions[0] || {
@@ -178,29 +187,32 @@ export default function AccountantDashboard() {
       const studentTransactions = transactions.filter(
         t => t.recipient_id === student.id && t.type === 'STUDENT_PAYMENT'
       )
-      
-      // Fetch student class info
-      const { data: studentData } = await supabase
-        .from('students')
-        .select('class_arm_combo_id')
-        .eq('id', student.id)
-        .single()
-      
+
       let studentClass = 'Unknown'
-      if (studentData?.class_arm_combo_id) {
-        const { data: classData } = await supabase
-          .from('class_arm_combos')
-          .select('classes(name), arms(name)')
-          .eq('id', studentData.class_arm_combo_id)
+      try {
+        const { data: studentData } = await supabase
+          .from('students')
+          .select('class_arm_combo_id')
+          .eq('id', student.id)
           .single()
-        
-        if (classData) {
-          const className = (classData.classes as any)?.name || ''
-          const armName = (classData.arms as any)?.name || ''
-          studentClass = `${className}${armName ? ` ${armName}` : ''}`
+
+        if (studentData?.class_arm_combo_id) {
+          const { data: classData } = await supabase
+            .from('class_arm_combos')
+            .select('classes(name), arms(name)')
+            .eq('id', studentData.class_arm_combo_id)
+            .single()
+
+          if (classData) {
+            const className = (classData.classes as any)?.name || ''
+            const armName = (classData.arms as any)?.name || ''
+            studentClass = `${className}${armName ? ` ${armName}` : ''}`
+          }
         }
+      } catch (err) {
+        console.log('Could not fetch class info')
       }
-      
+
       setSelectedPayment({
         recipient: student,
         transaction: studentTransactions[0] || {
@@ -224,8 +236,7 @@ export default function AccountantDashboard() {
       setEditMode(false)
       setEditData({})
     } catch (err) {
-      console.error('Error fetching student class:', err)
-      setError('Failed to load student information')
+      console.error('Error:', err)
     }
   }
 
@@ -244,15 +255,13 @@ export default function AccountantDashboard() {
         invoice_number: editData.invoice_number || txn.invoice_number || null,
       }
 
-      // Validate
       if (!finalData.amount || finalData.amount <= 0) {
         setError('Amount must be greater than 0')
         return
       }
 
       if (txn.id.startsWith('new-')) {
-        // New transaction
-        const { data, error: insertErr } = await supabase
+        const { error: insertErr } = await supabase
           .from('transactions')
           .insert([{
             school_id: schoolId,
@@ -269,24 +278,16 @@ export default function AccountantDashboard() {
             notes: finalData.notes,
             created_at: new Date().toISOString(),
           }])
-          .select()
 
-        if (insertErr) {
-          console.error('Insert error:', insertErr)
-          throw insertErr
-        }
+        if (insertErr) throw insertErr
         setSuccess('Payment recorded successfully!')
       } else {
-        // Update existing
         const { error: updateErr } = await supabase
           .from('transactions')
           .update(finalData)
           .eq('id', txn.id)
 
-        if (updateErr) {
-          console.error('Update error:', updateErr)
-          throw updateErr
-        }
+        if (updateErr) throw updateErr
         setSuccess('Payment updated successfully!')
       }
 
@@ -297,15 +298,15 @@ export default function AccountantDashboard() {
         initializeDashboard()
       }, 1500)
     } catch (err) {
-      console.error('Save error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to save payment')
+      console.error('Error:', err)
+      setError(err instanceof Error ? err.message : 'Failed to save')
     }
   }
 
   const shareReceipt = async (method: 'email' | 'whatsapp') => {
     const txn = selectedPayment?.transaction
     if (!txn || !selectedPayment?.school) {
-      setError('Missing payment details')
+      setError('Missing details')
       return
     }
 
@@ -323,29 +324,20 @@ Thank you!
     `.trim()
 
     if (method === 'email' && selectedPayment.recipient?.email) {
-      const mailtoLink = `mailto:${selectedPayment.recipient.email}?subject=Payment Receipt - ${selectedPayment.school.name}&body=${encodeURIComponent(receiptContent)}`
+      const mailtoLink = `mailto:${selectedPayment.recipient.email}?subject=Payment Receipt&body=${encodeURIComponent(receiptContent)}`
       window.location.href = mailtoLink
     } else if (method === 'whatsapp') {
       if (!selectedPayment.recipient || !('phone' in selectedPayment.recipient)) {
-        setError('No phone number available for WhatsApp')
+        setError('No phone number available')
         return
       }
 
-      let phone = selectedPayment.recipient.phone
-      if (!phone) {
-        setError('No phone number found')
-        return
-      }
-
-      // Use SharingService which handles mobile detection and proper protocol
       try {
         SharingService.shareViaWhatsApp({
-          phoneNumber: phone,
-          message: `Here is your payment receipt from ${selectedPayment.school.name}`,
+          phoneNumber: selectedPayment.recipient.phone || '',
+          message: 'Here is your payment receipt',
           letterContent: receiptContent,
         })
-        setSuccess('✅ Opening WhatsApp on your phone...')
-        setTimeout(() => setSuccess(''), 2000)
       } catch (err: any) {
         setError(err.message)
       }
@@ -354,12 +346,12 @@ Thank you!
 
   const shareAllHistory = async (method: 'email' | 'whatsapp') => {
     if (!selectedPayment?.recipient || !selectedPayment?.school) {
-      setError('Missing payment details')
+      setError('Missing details')
       return
     }
 
     const history = selectedPayment.allTransactions
-      .map(t => `${new Date(t.created_at).toLocaleDateString()} - ${t.purpose}: ₦${t.amount.toFixed(2)} (${t.status})`)
+      .map(t => `${new Date(t.created_at).toLocaleDateString()} - ${t.purpose}: ₦${t.amount.toFixed(2)}`)
       .join('\n')
 
     const content = `
@@ -368,152 +360,336 @@ Thank you!
 School: ${selectedPayment.school.name}
 Name: ${selectedPayment.recipient.full_name}
 
-${history || 'No transaction history'}
+${history || 'No history'}
 
 Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0).toFixed(2)}
     `.trim()
 
     if (method === 'email' && selectedPayment.recipient.email) {
-      const mailtoLink = `mailto:${selectedPayment.recipient.email}?subject=Payment History - ${selectedPayment.school.name}&body=${encodeURIComponent(content)}`
+      const mailtoLink = `mailto:${selectedPayment.recipient.email}?subject=Payment History&body=${encodeURIComponent(content)}`
       window.location.href = mailtoLink
     } else if (method === 'whatsapp') {
       if (!('phone' in selectedPayment.recipient)) {
-        setError('No phone number available')
+        setError('No phone number')
         return
       }
 
-      let phone = selectedPayment.recipient.phone
-      if (!phone) {
-        setError('No phone number found')
-        return
-      }
-
-      // Use SharingService which handles mobile detection and proper protocol
       try {
         SharingService.shareViaWhatsApp({
-          phoneNumber: phone,
-          message: `Here is your payment history from ${selectedPayment.school.name}`,
+          phoneNumber: selectedPayment.recipient.phone || '',
+          message: 'Here is your payment history',
           letterContent: content,
         })
-        setSuccess('✅ Opening WhatsApp on your phone...')
-        setTimeout(() => setSuccess(''), 2000)
       } catch (err: any) {
         setError(err.message)
       }
     }
   }
 
-  const formatCurrency = (val: number | undefined) => {
-    const num = typeof val === 'number' ? val : 0
-    return `₦${num.toFixed(2)}`
+  const formatCurrency = (val: number | undefined) => `₦${(val || 0).toFixed(2)}`
+
+  const getTransactionStats = () => {
+    const total = transactions.reduce((sum, t) => sum + t.amount, 0)
+    const completed = transactions.filter(t => t.status === 'COMPLETED').length
+    const pending = transactions.filter(t => t.status === 'PENDING').length
+    return { total, completed, pending }
   }
 
-  const styles = {
-    container: { minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '2rem' } as React.CSSProperties,
-    header: { background: 'white', borderRadius: '12px', padding: '2rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' as const, gap: '1rem' } as React.CSSProperties,
-    headerLeft: { display: 'flex', alignItems: 'center', gap: '1.5rem' } as React.CSSProperties,
-    logo: { width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover' as const } as React.CSSProperties,
-    tabContainer: { display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' as const } as React.CSSProperties,
-    tab: { background: 'white', border: 'none', padding: '1rem 1.5rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' } as React.CSSProperties,
-    card: { background: 'white', borderRadius: '12px', padding: '1.5rem', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', marginBottom: '1rem' } as React.CSSProperties,
-    modal: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 } as React.CSSProperties,
-    modalContent: { background: 'white', borderRadius: '12px', padding: '2rem', maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto' as const } as React.CSSProperties,
-    input: { width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '1rem', boxSizing: 'border-box' as const } as React.CSSProperties,
-    button: { padding: '0.75rem 1rem', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' } as React.CSSProperties,
-  }
+  const stats = getTransactionStats()
 
   if (loading) {
-    return <div style={styles.container}><p style={{ color: 'white' }}>Loading...</p></div>
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <div style={{ color: 'white', fontSize: '1.2rem' }}>⏳ Loading...</div>
+      </div>
+    )
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          {school?.logo_url && <img src={school.logo_url} alt="Logo" style={styles.logo} />}
-          <div>
-            <h1 style={{ margin: 0, color: '#111827' }}>{school?.name}</h1>
-            <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280' }}>💰 Accountant</p>
+    <div style={{ minHeight: '100vh', background: '#f3f4f6' }}>
+      {/* Modern Header/Navbar */}
+      <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '1.5rem' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {school?.logo_url && <img src={school.logo_url} alt="Logo" style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />}
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.5rem' }}>{school?.name}</h1>
+              <p style={{ margin: '0.25rem 0 0 0', opacity: 0.9 }}>💰 Accountant Portal</p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <button onClick={initializeDashboard} style={{ padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>🔄 Refresh</button>
+            <button onClick={handleLogout} style={{ padding: '0.5rem 1rem', background: '#ef4444', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>🚪 Logout</button>
           </div>
         </div>
-        <button onClick={initializeDashboard} style={{ ...styles.button, background: '#667eea', color: 'white' }}>🔄 Refresh</button>
       </div>
 
-      {error && <div style={{ background: '#fee', color: '#c33', padding: '1rem', borderRadius: '8px', marginBottom: '2rem' }}>❌ {error}</div>}
-      {success && <div style={{ background: '#d1fae5', color: '#065f46', padding: '1rem', borderRadius: '8px', marginBottom: '2rem' }}>✅ {success}</div>}
-
-      <div style={styles.tabContainer}>
-        {['staff', 'students', 'transactions'].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab as typeof activeTab)} style={{ ...styles.tab, background: activeTab === tab ? '#667eea' : 'rgba(255, 255, 255, 0.7)', color: activeTab === tab ? 'white' : '#6b7280' }}>
-            {tab === 'staff' && `👨‍💼 Staff (${staffList.length})`}
-            {tab === 'students' && `👨‍🎓 Students (${studentList.length})`}
-            {tab === 'transactions' && `📋 Transactions (${transactions.length})`}
-          </button>
-        ))}
+      {/* Navigation Tabs */}
+      <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '0 1.5rem' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', gap: '2rem' }}>
+          {(['dashboard', 'transactions', 'reports', 'settings'] as NavTab[]).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveNav(tab)}
+              style={{
+                padding: '1rem 0',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: activeNav === tab ? '700' : '600',
+                color: activeNav === tab ? '#667eea' : '#6b7280',
+                borderBottom: activeNav === tab ? '2px solid #667eea' : 'none',
+                fontSize: '1rem',
+              }}
+            >
+              {tab === 'dashboard' && '📊 Dashboard'}
+              {tab === 'transactions' && '📋 Transactions'}
+              {tab === 'reports' && '📈 Reports'}
+              {tab === 'settings' && '⚙️ Settings'}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {activeTab === 'staff' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-          {staffList.length === 0 ? (
-            <div style={{ color: 'white', gridColumn: '1 / -1', padding: '2rem', textAlign: 'center' }}>📭 No staff found</div>
-          ) : (
-            staffList.map(staff => (
-              <div key={staff.id} onClick={() => handleStaffClick(staff)} style={{ ...styles.card, cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
-                <p style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>{staff.full_name}</p>
-                <p style={{ margin: '0.5rem 0 0 0', color: '#667eea', fontWeight: '600', fontSize: '0.9rem' }}>{staff.role}</p>
-                <p style={{ margin: '0.25rem 0', color: '#6b7280', fontSize: '0.9rem' }}>📧 {staff.email}</p>
-                {staff.phone && <p style={{ margin: '0.25rem 0', color: '#6b7280', fontSize: '0.9rem' }}>📱 {staff.phone}</p>}
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {/* Main Content */}
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+        {error && <div style={{ background: '#fee', color: '#c33', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>❌ {error}</div>}
+        {success && <div style={{ background: '#d1fae5', color: '#065f46', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>✅ {success}</div>}
 
-      {activeTab === 'students' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-          {studentList.length === 0 ? (
-            <div style={{ color: 'white', gridColumn: '1 / -1', padding: '2rem', textAlign: 'center' }}>📭 No students found</div>
-          ) : (
-            studentList.map(student => (
-              <div key={student.id} onClick={() => handleStudentClick(student)} style={{ ...styles.card, cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
-                <p style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>{student.full_name}</p>
-                <p style={{ margin: '0.5rem 0 0 0', color: '#667eea', fontWeight: '600' }}>{student.admission_number || 'No admission #'}</p>
-                <p style={{ margin: '0.25rem 0', color: '#6b7280', fontSize: '0.9rem' }}>📧 {student.email}</p>
+        {activeNav === 'dashboard' && (
+          <>
+            {/* Stats Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+              <div style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: '0.9rem' }}>Total Transactions</p>
+                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#667eea' }}>{transactions.length}</p>
               </div>
-            ))
-          )}
-        </div>
-      )}
+              <div style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: '0.9rem' }}>Total Amount</p>
+                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.total)}</p>
+              </div>
+              <div style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: '0.9rem' }}>Completed</p>
+                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#10b981' }}>{stats.completed}</p>
+              </div>
+              <div style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: '0.9rem' }}>Pending</p>
+                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.pending}</p>
+              </div>
+            </div>
 
-      {activeTab === 'transactions' && (
-        <div style={{ background: 'white', borderRadius: '12px', padding: '1.5rem' }}>
-          {transactions.length === 0 ? (
-            <p style={{ color: '#9ca3af', textAlign: 'center' }}>No transactions yet</p>
-          ) : (
-            transactions.map(txn => (
-              <div key={txn.id} onClick={() => setSelectedPayment({ recipient: null, transaction: txn, school, allTransactions: [txn] })} style={{ ...styles.card, cursor: 'pointer' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <div>
-                    <p style={{ margin: 0, fontWeight: '700' }}>{txn.recipient_name}</p>
-                    <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.9rem' }}>{txn.purpose}</p>
-                    {txn.type === 'STUDENT_PAYMENT' && txn.recipient_class && (
-                      <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.85rem' }}>📚 {txn.recipient_class}</p>
-                    )}
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ margin: 0, fontWeight: '700', color: '#667eea' }}>{formatCurrency(txn.amount)}</p>
-                    <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.9rem' }}>{txn.status}</p>
-                  </div>
+            {/* Tabs: Staff vs Students */}
+            <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '1rem' }}>
+                <button
+                  onClick={() => setActiveTab('staff')}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    background: activeTab === 'staff' ? '#667eea' : '#f3f4f6',
+                    color: activeTab === 'staff' ? 'white' : '#111827',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                  }}
+                >
+                  👨‍💼 Staff ({staffList.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('students')}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    background: activeTab === 'students' ? '#667eea' : '#f3f4f6',
+                    color: activeTab === 'students' ? 'white' : '#111827',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                  }}
+                >
+                  👨‍🎓 Students ({studentList.length})
+                </button>
+              </div>
+
+              {activeTab === 'staff' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
+                  {staffList.length === 0 ? (
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>No staff found</div>
+                  ) : (
+                    staffList.map(staff => (
+                      <div
+                        key={staff.id}
+                        onClick={() => handleStaffClick(staff)}
+                        style={{
+                          background: '#f9fafb',
+                          padding: '1rem',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          border: '1px solid #e5e7eb',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)'
+                          e.currentTarget.style.transform = 'translateY(-2px)'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.boxShadow = 'none'
+                          e.currentTarget.style.transform = 'translateY(0)'
+                        }}
+                      >
+                        <p style={{ margin: 0, fontWeight: '700', fontSize: '1rem' }}>{staff.full_name}</p>
+                        <p style={{ margin: '0.25rem 0 0 0', color: '#667eea', fontWeight: '600', fontSize: '0.9rem' }}>{staff.role}</p>
+                        <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280', fontSize: '0.85rem' }}>{staff.email}</p>
+                      </div>
+                    ))
+                  )}
                 </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+              )}
 
+              {activeTab === 'students' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
+                  {studentList.length === 0 ? (
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>No students found</div>
+                  ) : (
+                    studentList.map(student => (
+                      <div
+                        key={student.id}
+                        onClick={() => handleStudentClick(student)}
+                        style={{
+                          background: '#f9fafb',
+                          padding: '1rem',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          border: '1px solid #e5e7eb',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)'
+                          e.currentTarget.style.transform = 'translateY(-2px)'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.boxShadow = 'none'
+                          e.currentTarget.style.transform = 'translateY(0)'
+                        }}
+                      >
+                        <p style={{ margin: 0, fontWeight: '700', fontSize: '1rem' }}>{student.full_name}</p>
+                        <p style={{ margin: '0.25rem 0 0 0', color: '#667eea', fontWeight: '600' }}>{student.admission_number || 'N/A'}</p>
+                        <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280', fontSize: '0.85rem' }}>{student.email}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {activeNav === 'transactions' && (
+          <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ margin: '0 0 1.5rem 0' }}>📋 All Transactions</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '700', color: '#6b7280' }}>Recipient</th>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '700', color: '#6b7280' }}>Purpose</th>
+                    <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '700', color: '#6b7280' }}>Amount</th>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '700', color: '#6b7280' }}>Status</th>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '700', color: '#6b7280' }}>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((txn, idx) => (
+                    <tr
+                      key={txn.id}
+                      onClick={() => setSelectedPayment({ recipient: null, transaction: txn, school, allTransactions: [txn] })}
+                      style={{
+                        borderBottom: '1px solid #e5e7eb',
+                        cursor: 'pointer',
+                        background: idx % 2 === 0 ? '#f9fafb' : 'white',
+                        transition: 'background 0.2s',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = idx % 2 === 0 ? '#f9fafb' : 'white'}
+                    >
+                      <td style={{ padding: '1rem' }}>{txn.recipient_name}</td>
+                      <td style={{ padding: '1rem' }}>{txn.purpose}</td>
+                      <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '700', color: '#667eea' }}>{formatCurrency(txn.amount)}</td>
+                      <td style={{ padding: '1rem' }}>
+                        <span style={{
+                          padding: '0.25rem 0.75rem',
+                          borderRadius: '4px',
+                          background: txn.status === 'COMPLETED' ? '#d1fae5' : txn.status === 'PENDING' ? '#fef3c7' : '#fee2e2',
+                          color: txn.status === 'COMPLETED' ? '#065f46' : txn.status === 'PENDING' ? '#92400e' : '#991b1b',
+                          fontWeight: '600',
+                          fontSize: '0.85rem',
+                        }}>
+                          {txn.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '1rem' }}>{new Date(txn.created_at).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {transactions.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>No transactions yet</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeNav === 'reports' && (
+          <div style={{ background: 'white', borderRadius: '8px', padding: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ margin: 0 }}>📈 Financial Reports</h2>
+            <p style={{ marginTop: '1rem', color: '#6b7280' }}>Coming soon: Detailed financial reports and analytics</p>
+          </div>
+        )}
+
+        {activeNav === 'settings' && (
+          <div style={{ background: 'white', borderRadius: '8px', padding: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ margin: 0 }}>⚙️ Settings</h2>
+            <div style={{ marginTop: '1.5rem' }}>
+              <p style={{ fontWeight: '600' }}>Account Information</p>
+              <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '6px', marginTop: '0.5rem' }}>
+                <p style={{ margin: '0.5rem 0', color: '#6b7280' }}><strong>Name:</strong> {currentUser?.full_name}</p>
+                <p style={{ margin: '0.5rem 0', color: '#6b7280' }}><strong>Email:</strong> {currentUser?.email}</p>
+                <p style={{ margin: '0.5rem 0', color: '#6b7280' }}><strong>Role:</strong> {currentUser?.role}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Payment Modal */}
       {selectedPayment && (
-        <div style={styles.modal} onClick={() => setSelectedPayment(null)}>
-          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setSelectedPayment(null)}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              maxWidth: '600px',
+              width: '90%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', alignItems: 'center' }}>
               <h2 style={{ margin: 0 }}>💳 {editMode ? 'Record Payment' : 'Payment Details'}</h2>
               <button onClick={() => { setSelectedPayment(null); setEditMode(false) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem' }}>✕</button>
@@ -524,80 +700,40 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
                 <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
                   <p style={{ margin: 0, fontWeight: '700' }}>{selectedPayment.school?.name}</p>
                   <p style={{ margin: '0.5rem 0 0 0', fontWeight: '600' }}>{selectedPayment.recipient?.full_name}</p>
-                  {selectedPayment.transaction.type === 'STUDENT_PAYMENT' && selectedPayment.transaction.recipient_class && (
-                    <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#6b7280' }}>📚 Class: {selectedPayment.transaction.recipient_class}</p>
-                  )}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                   <div>
-                    <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#6b7280' }}>Amount</label>
+                    <p style={{ margin: '0 0 0.5rem 0', fontWeight: '600', color: '#6b7280', fontSize: '0.9rem' }}>Amount</p>
                     <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold', color: '#667eea' }}>{formatCurrency(selectedPayment.transaction.amount)}</p>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#6b7280' }}>Status</label>
-                    <p style={{ margin: 0, display: 'inline-block', padding: '0.25rem 0.75rem', borderRadius: '4px', background: selectedPayment.transaction.status === 'COMPLETED' ? '#d1fae5' : '#fef3c7', color: selectedPayment.transaction.status === 'COMPLETED' ? '#065f46' : '#92400e', fontWeight: '600', fontSize: '0.875rem' }}>{selectedPayment.transaction.status}</p>
+                    <p style={{ margin: '0 0 0.5rem 0', fontWeight: '600', color: '#6b7280', fontSize: '0.9rem' }}>Status</p>
+                    <p style={{ margin: 0, display: 'inline-block', padding: '0.25rem 0.75rem', borderRadius: '4px', background: selectedPayment.transaction.status === 'COMPLETED' ? '#d1fae5' : '#fef3c7', color: selectedPayment.transaction.status === 'COMPLETED' ? '#065f46' : '#92400e', fontWeight: '600', fontSize: '0.85rem' }}>{selectedPayment.transaction.status}</p>
                   </div>
                 </div>
 
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>Purpose</label>
+                  <p style={{ margin: '0 0 0.5rem 0', fontWeight: '600', color: '#6b7280' }}>Purpose</p>
                   <p style={{ margin: 0 }}>{selectedPayment.transaction.purpose}</p>
                 </div>
 
-                {selectedPayment.allTransactions.length > 0 && (
-                  <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                    <p style={{ margin: '0 0 0.75rem 0', fontWeight: '600', fontSize: '0.9rem' }}>📋 History ({selectedPayment.allTransactions.length})</p>
-                    {selectedPayment.allTransactions.map((t, i) => (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', fontSize: '0.9rem', borderBottom: i < selectedPayment.allTransactions.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
-                        <span>{new Date(t.created_at).toLocaleDateString()}</span>
-                        <span style={{ fontWeight: '600' }}>{formatCurrency(t.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <button onClick={() => { setEditMode(true); setEditData({}) }} style={{ ...styles.button, background: '#667eea', color: 'white' }}>✏️ Edit</button>
-                  <button onClick={() => shareReceipt('email')} style={{ ...styles.button, background: '#e5e7eb', color: '#111827' }}>📧 Email</button>
-                  <button onClick={() => shareReceipt('whatsapp')} style={{ ...styles.button, background: '#e5e7eb', color: '#111827' }}>💬 WhatsApp</button>
-                  {selectedPayment.allTransactions.length > 0 && <button onClick={() => shareAllHistory('email')} style={{ ...styles.button, background: '#e5e7eb', color: '#111827' }}>📧 History</button>}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+                  <button onClick={() => { setEditMode(true); setEditData({}) }} style={{ padding: '0.75rem', background: '#667eea', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>✏️ Edit</button>
+                  <button onClick={() => shareReceipt('email')} style={{ padding: '0.75rem', background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>📧 Email</button>
+                  <button onClick={() => shareReceipt('whatsapp')} style={{ padding: '0.75rem', background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>💬 WhatsApp</button>
                 </div>
               </>
             ) : (
               <>
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#111827', fontSize: '0.9rem' }}>Amount *</label>
-                  <input type="number" min="0" step="0.01" value={String(editData.amount !== undefined ? editData.amount : selectedPayment.transaction.amount)} onChange={(e) => setEditData({ ...editData, amount: parseFloat(e.target.value) || 0 })} style={styles.input} />
+                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem' }}>Amount *</label>
+                  <input type="number" min="0" value={editData.amount !== undefined ? editData.amount : selectedPayment.transaction.amount} onChange={(e) => setEditData({ ...editData, amount: parseFloat(e.target.value) })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '1rem', boxSizing: 'border-box' }} />
                 </div>
 
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#111827', fontSize: '0.9rem' }}>Purpose</label>
-                  <input type="text" value={editData.purpose || selectedPayment.transaction.purpose} onChange={(e) => setEditData({ ...editData, purpose: e.target.value })} style={styles.input} />
-                </div>
-
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#111827', fontSize: '0.9rem' }}>Status</label>
-                  <select value={editData.status || selectedPayment.transaction.status} onChange={(e) => setEditData({ ...editData, status: e.target.value as any })} style={styles.input}>
-                    <option>PENDING</option>
-                    <option>COMPLETED</option>
-                    <option>FAILED</option>
-                  </select>
-                </div>
-
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#111827', fontSize: '0.9rem' }}>Payment Method</label>
-                  <input type="text" value={editData.payment_method || selectedPayment.transaction.payment_method} onChange={(e) => setEditData({ ...editData, payment_method: e.target.value })} style={styles.input} />
-                </div>
-
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#111827', fontSize: '0.9rem' }}>Notes</label>
-                  <textarea value={editData.notes || selectedPayment.transaction.notes || ''} onChange={(e) => setEditData({ ...editData, notes: e.target.value })} style={{ ...styles.input, minHeight: '80px' }} />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <button onClick={savePayment} style={{ ...styles.button, background: '#10b981', color: 'white', fontWeight: '700' }}>💾 Save Payment</button>
-                  <button onClick={() => { setEditMode(false); setEditData({}) }} style={{ ...styles.button, background: '#e5e7eb', color: '#111827' }}>Cancel</button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <button onClick={savePayment} style={{ padding: '0.75rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700' }}>💾 Save</button>
+                  <button onClick={() => { setEditMode(false); setEditData({}) }} style={{ padding: '0.75rem', background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700' }}>Cancel</button>
                 </div>
               </>
             )}

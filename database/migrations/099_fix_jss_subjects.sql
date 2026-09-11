@@ -1,11 +1,11 @@
--- Fix JSS1-JSS3 Subjects Configuration
--- Ensures all JSS subjects are properly configured with correct levels (9-11)
--- Removes any non-JSS subjects from JSS levels
--- Populates JSS curriculum for all schools
+-- Migration: Fix JSS1-JSS3 Subjects Configuration
+-- Purpose: Ensures all JSS subjects are properly configured with correct levels (9-11)
+-- This migration removes any non-JSS subjects from JSS levels
+-- And populates JSS curriculum for all schools
 
--- First, ensure subjects table has correct columns
-ALTER TABLE subjects ADD COLUMN IF NOT EXISTS section VARCHAR(50) DEFAULT 'GENERAL';
-ALTER TABLE subjects ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+-- Ensure subjects table has required columns
+ALTER TABLE IF EXISTS subjects ADD COLUMN IF NOT EXISTS section VARCHAR(50) DEFAULT 'GENERAL';
+ALTER TABLE IF EXISTS subjects ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 
 -- JSS Core Subjects (must be in 9-11 range)
 INSERT INTO subjects (school_id, name, code, applicable_to_levels, section, is_active)
