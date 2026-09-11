@@ -52,14 +52,18 @@ export default function CBTTestSlotsPage() {
   // Session & Term
   const [sessions, setSessions] = useState<any[]>([])
   const [selectedSession, setSelectedSession] = useState<string>('')
+  const [loadingSessions, setLoadingSessions] = useState(false)
   const [terms, setTerms] = useState<any[]>([])
   const [selectedTerm, setSelectedTerm] = useState<string>('')
+  const [loadingTerms, setLoadingTerms] = useState(false)
 
   // Subject & Class
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [selectedSubject, setSelectedSubject] = useState<string>('')
+  const [loadingSubjects, setLoadingSubjects] = useState(false)
   const [classes, setClasses] = useState<Class[]>([])
   const [selectedClass, setSelectedClass] = useState<string>('')
+  const [loadingClasses, setLoadingClasses] = useState(false)
 
   // Test Slots
   const [testSlots, setTestSlots] = useState<TestSlot[]>([])
@@ -145,6 +149,7 @@ export default function CBTTestSlotsPage() {
 
   const loadSessions = async () => {
     try {
+      setLoadingSessions(true)
       const data = await AcademicSessionService.getAcademicSessions(user.school_id)
       setSessions(data)
       if (data.length > 0) {
@@ -153,11 +158,14 @@ export default function CBTTestSlotsPage() {
     } catch (err) {
       console.error('[CBT Test Slots] Load sessions error:', err)
       toast.error('Failed to load sessions')
+    } finally {
+      setLoadingSessions(false)
     }
   }
 
   const loadTerms = async () => {
     try {
+      setLoadingTerms(true)
       const data = await AcademicSessionService.getTerms(selectedSession)
       setTerms(data)
       if (data.length > 0) {
@@ -166,11 +174,14 @@ export default function CBTTestSlotsPage() {
     } catch (err) {
       console.error('[CBT Test Slots] Load terms error:', err)
       toast.error('Failed to load terms')
+    } finally {
+      setLoadingTerms(false)
     }
   }
 
   const loadSubjects = async () => {
     try {
+      setLoadingSubjects(true)
       const { data, error } = await supabase
         .from('subject_teacher_assignments')
         .select('subjects(id, name)')
@@ -190,11 +201,14 @@ export default function CBTTestSlotsPage() {
     } catch (err) {
       console.error('[CBT Test Slots] Load subjects error:', err)
       toast.error('Failed to load subjects')
+    } finally {
+      setLoadingSubjects(false)
     }
   }
 
   const loadClasses = async () => {
     try {
+      setLoadingClasses(true)
       const { data, error } = await supabase
         .from('class_arm_combos')
         .select('id, class_id, arm_id, classes(name), arms(name)')
@@ -209,6 +223,8 @@ export default function CBTTestSlotsPage() {
     } catch (err) {
       console.error('[CBT Test Slots] Load classes error:', err)
       toast.error('Failed to load classes')
+    } finally {
+      setLoadingClasses(false)
     }
   }
 
@@ -367,45 +383,69 @@ export default function CBTTestSlotsPage() {
       <div className={styles.filters}>
         <div className={styles.filterGroup}>
           <label>Session</label>
-          <select value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)}>
-            {sessions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.session_year}
-              </option>
-            ))}
+          <select value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)} disabled={loadingSessions}>
+            {loadingSessions ? (
+              <option>Loading sessions...</option>
+            ) : sessions.length === 0 ? (
+              <option>No sessions available</option>
+            ) : (
+              sessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.session_year}
+                </option>
+              ))
+            )}
           </select>
         </div>
 
         <div className={styles.filterGroup}>
           <label>Term</label>
-          <select value={selectedTerm} onChange={(e) => setSelectedTerm(e.target.value)}>
-            {terms.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.term_name}
-              </option>
-            ))}
+          <select value={selectedTerm} onChange={(e) => setSelectedTerm(e.target.value)} disabled={loadingTerms || !selectedSession}>
+            {loadingTerms ? (
+              <option>Loading terms...</option>
+            ) : terms.length === 0 ? (
+              <option>No terms available</option>
+            ) : (
+              terms.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.term_name}
+                </option>
+              ))
+            )}
           </select>
         </div>
 
         <div className={styles.filterGroup}>
           <label>Subject</label>
-          <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)}>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
+          <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={loadingSubjects || !selectedTerm}>
+            {loadingSubjects ? (
+              <option>Loading subjects...</option>
+            ) : subjects.length === 0 ? (
+              <option>No subjects available</option>
+            ) : (
+              subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
 
         <div className={styles.filterGroup}>
           <label>Class</label>
-          <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.classes?.name} {c.arms?.name}
-              </option>
-            ))}
+          <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)} disabled={loadingClasses || !selectedSubject}>
+            {loadingClasses ? (
+              <option>Loading classes...</option>
+            ) : classes.length === 0 ? (
+              <option>No classes available</option>
+            ) : (
+              classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.classes?.name} {c.arms?.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
       </div>
