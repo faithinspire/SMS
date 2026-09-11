@@ -205,18 +205,35 @@ const StaffPage: React.FC = () => {
   const handleDelete = async (staffId: string) => {
     try {
       setIsActionLoading(true);
+      
+      // Get the Supabase session token
+      const { data: { session } } = await getSupabaseClient().auth.getSession();
+      const token = session?.access_token;
+      
+      if (!token) {
+        toast.error('Authentication required');
+        return;
+      }
+
       const response = await fetch(`/api/school-admin/staff/${staffId}/delete`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       });
 
-      if (!response.ok) throw new Error('Failed to delete staff');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete staff');
+      }
 
       setStaff(staff.filter(s => s.id !== staffId));
       toast.success('Staff member deleted successfully');
       setModal({ type: null });
     } catch (error) {
       console.error('Error deleting staff:', error);
-      toast.error('Failed to delete staff member');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete staff member');
     } finally {
       setIsActionLoading(false);
     }

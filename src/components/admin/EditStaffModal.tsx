@@ -52,14 +52,33 @@ export default function EditStaffModal({
       setLoading(true)
       setError('')
 
-      // Get staff details
-      const { data: staff, error: staffError } = await supabase
-        .from('users')
-        .select('id, full_name, email, phone, employment_date, bank_name, account_number, account_holder_name, salary_amount')
-        .eq('id', staffId)
-        .single()
-
-      if (staffError) throw staffError
+      // Get staff details - try to include all fields, handle missing columns gracefully
+      let staff;
+      try {
+        const { data: userData, error: staffError } = await supabase
+          .from('users')
+          .select('id, full_name, email, phone, employment_date, bank_name, account_number, account_holder_name, salary_amount')
+          .eq('id', staffId)
+          .single()
+        
+        if (staffError) throw staffError
+        staff = userData
+      } catch (err: any) {
+        // If employment_date or payment columns don't exist, try without them
+        if (err.message?.includes('column') || err.message?.includes('employment_date')) {
+          const { data: userData, error: staffError } = await supabase
+            .from('users')
+            .select('id, full_name, email, phone')
+            .eq('id', staffId)
+            .single()
+          
+          if (staffError) throw staffError
+          staff = userData
+          setError('⚠️ Some payment fields not available. Please run database migration in Supabase.')
+        } else {
+          throw err
+        }
+      }
 
       setStaffData({
         full_name: staff.full_name || '',

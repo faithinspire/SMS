@@ -54,13 +54,13 @@ const NIGERIAN_CONFIG = {
     { name: 'Primary 5', level: 9, type: 'PRIMARY' },
     { name: 'Primary 6', level: 10, type: 'PRIMARY' },
     // SECONDARY - JSS
-    { name: 'JSS 1', level: 11, type: 'SECONDARY' },
-    { name: 'JSS 2', level: 12, type: 'SECONDARY' },
-    { name: 'JSS 3', level: 13, type: 'SECONDARY' },
+    { name: 'JSS 1', level: 9, type: 'SECONDARY' },
+    { name: 'JSS 2', level: 10, type: 'SECONDARY' },
+    { name: 'JSS 3', level: 11, type: 'SECONDARY' },
     // SECONDARY - SSS
-    { name: 'SS 1', level: 14, type: 'SECONDARY' },
-    { name: 'SS 2', level: 15, type: 'SECONDARY' },
-    { name: 'SS 3', level: 16, type: 'SECONDARY' },
+    { name: 'SS 1', level: 12, type: 'SECONDARY' },
+    { name: 'SS 2', level: 13, type: 'SECONDARY' },
+    { name: 'SS 3', level: 14, type: 'SECONDARY' },
   ],
   arms: ['A', 'B', 'C', 'D'],
   subjects: [
@@ -71,24 +71,24 @@ const NIGERIAN_CONFIG = {
     { name: 'Social Studies', code: 'SS', levels: [0,1,2,3,4,5,6,7,8,9,10] },
     { name: 'Physical Education', code: 'PE', levels: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16] },
     { name: 'Fine Arts', code: 'ART', levels: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16] },
-    { name: 'Computer Studies', code: 'CS', levels: [7,8,9,10,11,12,13,14,15,16] },
+    { name: 'Computer Studies', code: 'CS', levels: [7,8,9,10,11,12,13,14] },
     { name: 'Home Economics', code: 'HE', levels: [5,6,7,8,9,10,11,12,13,14,15,16] },
-    { name: 'Agricultural Science', code: 'AGR', levels: [7,8,9,10,11,12,13,14,15,16] },
+    { name: 'Agricultural Science', code: 'AGR', levels: [7,8,9,10,11,12,13,14] },
     // SECONDARY - Science
-    { name: 'Physics', code: 'PHY', levels: [11,12,13,14,15,16] },
-    { name: 'Chemistry', code: 'CHM', levels: [11,12,13,14,15,16] },
-    { name: 'Biology', code: 'BIO', levels: [11,12,13,14,15,16] },
+    { name: 'Physics', code: 'PHY', levels: [9,10,11,12,13,14] },
+    { name: 'Chemistry', code: 'CHM', levels: [9,10,11,12,13,14] },
+    { name: 'Biology', code: 'BIO', levels: [9,10,11,12,13,14] },
     // SECONDARY - Languages & Humanities
-    { name: 'Literature in English', code: 'LIT', levels: [11,12,13,14,15,16] },
-    { name: 'Government', code: 'GOV', levels: [11,12,13,14,15,16] },
-    { name: 'History', code: 'HIST', levels: [11,12,13,14,15,16] },
-    { name: 'Geography', code: 'GEOG', levels: [11,12,13,14,15,16] },
+    { name: 'Literature in English', code: 'LIT', levels: [9,10,11,12,13,14] },
+    { name: 'Government', code: 'GOV', levels: [9,10,11,12,13,14] },
+    { name: 'History', code: 'HIST', levels: [9,10,11,12,13,14] },
+    { name: 'Geography', code: 'GEOG', levels: [9,10,11,12,13,14] },
     // SECONDARY - Commercial
-    { name: 'Economics', code: 'ECO', levels: [11,12,13,14,15,16] },
-    { name: 'Commerce', code: 'COM', levels: [11,12,13,14,15,16] },
-    { name: 'Financial Accounting', code: 'ACC', levels: [11,12,13,14,15,16] },
-    { name: 'Civic Education', code: 'CIV', levels: [7,8,9,10,11,12,13,14,15,16] },
-    { name: 'Further Mathematics', code: 'FM', levels: [14,15,16] },
+    { name: 'Economics', code: 'ECO', levels: [9,10,11,12,13,14] },
+    { name: 'Commerce', code: 'COM', levels: [9,10,11,12,13,14] },
+    { name: 'Financial Accounting', code: 'ACC', levels: [9,10,11,12,13,14] },
+    { name: 'Civic Education', code: 'CIV', levels: [7,8,9,10,11,12,13,14] },
+    { name: 'Further Mathematics', code: 'FM', levels: [12,13,14] },
   ]
 }
 

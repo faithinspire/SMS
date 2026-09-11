@@ -254,18 +254,35 @@ const StudentsPage: React.FC = () => {
   const handleDelete = async (studentId: string) => {
     try {
       setIsActionLoading(true);
+      
+      // Get the Supabase session token
+      const { data: { session } } = await getSupabaseClient().auth.getSession();
+      const token = session?.access_token;
+      
+      if (!token) {
+        toast.error('Authentication required');
+        return;
+      }
+
       const response = await fetch(`/api/school-admin/students/${studentId}/delete`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       });
 
-      if (!response.ok) throw new Error('Failed to delete student');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete student');
+      }
 
       setStudents(students.filter(s => s.id !== studentId));
       toast.success('Student deleted successfully');
       setModal({ type: null });
     } catch (error) {
       console.error('Error deleting student:', error);
-      toast.error('Failed to delete student');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete student');
     } finally {
       setIsActionLoading(false);
     }
