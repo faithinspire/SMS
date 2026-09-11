@@ -148,30 +148,49 @@ export async function POST(req: NextRequest) {
       console.warn('Continuing registration without auth user...')
     }
 
-    // CREATE USERS TABLE RECORD
+    // CREATE USERS TABLE RECORD - CRITICAL FOR LOGIN
     try {
-      const { data: existingUser } = await supabaseAdmin
+      console.log(`📝 Creating users table record for ${admin_email}...`)
+      
+      // First check if user already exists
+      const { data: existingUser, error: existingError } = await supabaseAdmin
         .from('users')
         .select('id')
         .eq('email', admin_email)
-        .single()
-        .catch(() => ({ data: null }))
+        .maybeSingle()
+
+      if (existingError && existingError.code !== 'PGRST116') {
+        console.error('Error checking existing user:', existingError)
+        throw new Error(`Failed to check existing user: ${existingError.message}`)
+      }
 
       if (!existingUser) {
-        // Create user record in users table
-        await supabaseAdmin
+        // Create user record in users table - this is REQUIRED for login to work
+        const { data: newUser, error: insertError } = await supabaseAdmin
           .from('users')
           .insert({
+            id: authUser?.user?.id, // Use the auth user ID to link them
             school_id: school.id,
             email: admin_email,
             full_name: admin_name,
             role: 'SCHOOL_ADMIN',
             status: 'ACTIVE',
           })
-          .catch(err => console.warn('Could not create user record:', err.message))
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('❌ Error creating user record:', insertError)
+          throw new Error(`Failed to create user record: ${insertError.message}`)
+        }
+
+        console.log(`✅ User record created successfully for ${admin_email}`)
+      } else {
+        console.log(`ℹ️ User record already exists for ${admin_email}`)
       }
-    } catch (err) {
-      console.warn('User record creation skipped:', err)
+    } catch (err: any) {
+      console.error('❌ User record creation failed:', err.message)
+      throw new Error(`Failed to ensure user record exists: ${err.message}`)
     }
 
     console.log('School registration successful:', school.id)

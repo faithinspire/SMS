@@ -393,17 +393,17 @@ export class AuthService {
           .from('users')
           .select('role, school_id, full_name')
           .eq('id', data.user.id)
+          .maybeSingle()
 
-        if (!userError && userRecords && userRecords.length > 0) {
-          const userRecord = userRecords[0]
-          console.log('✅ User record found:', userRecord.role, 'School:', userRecord.school_id)
+        if (!userError && userRecords) {
+          console.log('✅ User record found:', userRecords.role, 'School:', userRecords.school_id)
           return {
             id: data.user.id,
             email: data.user.email || '',
-            name: userRecord.full_name || data.user.user_metadata?.name || '',
-            full_name: userRecord.full_name || data.user.user_metadata?.name || '', // Add this
-            role: (userRecord.role || 'STUDENT') as any,
-            school_id: userRecord.school_id,
+            name: userRecords.full_name || data.user.user_metadata?.name || '',
+            full_name: userRecords.full_name || data.user.user_metadata?.name || '',
+            role: (userRecords.role || 'STUDENT') as any,
+            school_id: userRecords.school_id,
             createdAt: data.user.created_at,
             loginMethod: 'auth',
           }
@@ -411,7 +411,7 @@ export class AuthService {
           // Log the specific error for debugging
           console.warn('⚠️ User table query error:', userError.message || userError)
         } else {
-          // User exists in auth but not in users table - use metadata
+          // User exists in auth but not in users table - use metadata as fallback
           console.warn('⚠️ User not found in users table, falling back to metadata')
         }
       } catch (dbError) {
@@ -419,11 +419,12 @@ export class AuthService {
       }
 
       // FALLBACK: Use metadata if database lookup fails
-      // This handles cases where the trigger hasn't created the users table record yet
+      // This handles cases where the user record hasn't been created yet
       const role = data.user.user_metadata?.role as string
       const school_id = data.user.user_metadata?.school_id as string
+      const fullName = data.user.user_metadata?.name as string
       
-      console.log('⚠️ Using metadata role:', role, 'school_id:', school_id)
+      console.log('⚠️ Using metadata - role:', role, 'school_id:', school_id)
       
       // Map 'ADMIN' role from old system to 'SCHOOL_ADMIN'
       let mappedRole = role || 'STUDENT'
@@ -431,13 +432,19 @@ export class AuthService {
         mappedRole = 'SCHOOL_ADMIN'
       }
       
+      // Validate that role and school_id are present for non-student roles
+      if (mappedRole === 'SCHOOL_ADMIN' && !school_id) {
+        console.error('❌ SCHOOL_ADMIN role detected but no school_id in metadata!')
+        throw new Error('School admin user is missing school_id - cannot proceed')
+      }
+      
       return {
         id: data.user.id,
         email: data.user.email || '',
-        name: data.user.user_metadata?.name || '',
-        full_name: data.user.user_metadata?.name || '', // Add this
+        name: fullName || '',
+        full_name: fullName || '',
         role: (mappedRole || 'STUDENT') as any,
-        school_id: school_id,
+        school_id: school_id || undefined,
         createdAt: data.user.created_at,
         loginMethod: 'auth',
       }

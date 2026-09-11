@@ -2,7 +2,6 @@
 import { supabase } from '@/lib/supabase-client'
 export const dynamic = 'force-dynamic'
 
-
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams
@@ -10,98 +9,65 @@ export async function GET(req: NextRequest) {
 
     if (!studentId) {
       return NextResponse.json(
-        { error: 'Student ID is required' },
+        { success: false, error: 'Student ID is required' },
         { status: 400 }
       )
     }
 
-    // Step 1: Get student details
+    // Get student details
     const { data: studentData, error: studentError } = await supabase
-      .from('students')
-      .select('id, admission_number, class_arm_combo_id, school_id, user_id')
+      .from('users')
+      .select(
+        `
+        id,
+        full_name,
+        email,
+        school_id,
+        phone
+        `
+      )
       .eq('id', studentId)
+      .eq('role', 'STUDENT')
       .single()
 
     if (studentError || !studentData) {
       console.error('Student query error:', studentError)
       return NextResponse.json(
-        { error: 'Student not found', details: studentError?.message },
+        { success: false, error: 'Student not found' },
         { status: 404 }
       )
     }
 
-    // Step 2: Get user details separately
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, full_name, email')
-      .eq('id', studentData.user_id)
+    // Get student registration details
+    const { data: registrationData, error: registrationError } = await supabase
+      .from('students')
+      .select(
+        `
+        id,
+        admission_number,
+        registration_date,
+        class_arm_combo_id,
+        class_arm_combos(
+          id,
+          class_id,
+          arm_id,
+          classes(name, level, type),
+          arms(name)
+        )
+        `
+      )
+      .eq('user_id', studentId)
       .single()
 
-    if (userError || !userData) {
-      console.error('User query error:', userError)
+    if (registrationError || !registrationData) {
+      console.error('Registration query error:', registrationError)
       return NextResponse.json(
-        { error: 'User information not found' },
+        { success: false, error: 'Student registration not found' },
         { status: 404 }
       )
     }
 
-    // Step 3: Get class_arm_combo details
-    const { data: classComboData, error: classComboError } = await supabase
-      .from('class_arm_combos')
-      .select('id, class_id, arm_id, school_id')
-      .eq('id', studentData.class_arm_combo_id)
-      .single()
-
-    if (classComboError || !classComboData) {
-      console.error('Class combo query error:', classComboError)
-      return NextResponse.json(
-        { error: 'Class information not found' },
-        { status: 404 }
-      )
-    }
-
-    // Step 4: Get class details
-    const { data: classData, error: classError } = await supabase
-      .from('classes')
-      .select('id, name, level, type')
-      .eq('id', classComboData.class_id)
-      .single()
-
-    if (classError || !classData) {
-      console.error('Class query error:', classError)
-      return NextResponse.json(
-        { error: 'Class information not found' },
-        { status: 404 }
-      )
-    }
-
-    // Step 5: Get arm details
-    const { data: armData, error: armError } = await supabase
-      .from('arms')
-      .select('id, name')
-      .eq('id', classComboData.arm_id)
-      .single()
-
-    if (armError || !armData) {
-      console.error('Arm query error:', armError)
-      return NextResponse.json(
-        { error: 'Class arm information not found' },
-        { status: 404 }
-      )
-    }
-
-    // Combine data into a single object
-    const student = {
-      ...studentData,
-      users: userData,
-      class_arm_combos: {
-        ...classComboData,
-        classes: classData,
-        arms: armData,
-      },
-    } as any
-
-    // Get school info separately
+    // Get school info
     const { data: schoolData, error: schoolError } = await supabase
       .from('schools')
       .select('id, name, address, phone, email, type')
@@ -111,33 +77,34 @@ export async function GET(req: NextRequest) {
     if (schoolError || !schoolData) {
       console.error('School query error:', schoolError)
       return NextResponse.json(
-        { error: 'School information not found' },
+        { success: false, error: 'School information not found' },
         { status: 404 }
       )
     }
 
+    const student = studentData as any
     const school = schoolData as any
-    const { data: studentSubjects, error: subjectsError } = await supabase
-      .from('student_subjects')
-      .select(
-        `
-        id,
-        subject_id,
-        subjects(id, name, code)
-        `
-      )
-      .eq('student_id', studentId)
-      .order('subjects(name)', { ascending: true })
+    const registration = registrationData as any
+    const classInfo = registration.class_arm_combos as any
 
-    const subjects = (studentSubjects || []).map((ss: any) => ({
-      name: ss.subjects?.name || 'Unknown',
-      code: ss.subjects?.code || ''
-    }))
-    const classInfo = student.class_arm_combos
-    const className = `${classInfo.classes.name} ${classInfo.arms.name}`
-    const user = student.users
+    const admissionNumber = registration.admission_number || 'TBD'
+    const registrationDate = registration.registration_date
+      ? new Date(registration.registration_date).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        })
+      : new Date().toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        })
 
-    // Generate admission letter
+    const className = classInfo
+      ? `${classInfo.classes.name} ${classInfo.arms.name}`
+      : 'Not assigned'
+
+    // Generate admission letter HTML
     const letterContent = `
     <!DOCTYPE html>
     <html>
@@ -203,6 +170,21 @@ export async function GET(req: NextRequest) {
         .info-value {
           display: inline-block;
         }
+        .admission-details {
+          margin: 20px 0;
+          padding: 15px;
+          background-color: #f0f8ff;
+          border-left: 4px solid #1a3a3a;
+          border-radius: 4px;
+        }
+        .admission-details strong {
+          display: block;
+          margin-bottom: 10px;
+        }
+        .detail-row {
+          margin: 8px 0;
+          padding: 5px 0;
+        }
         .footer {
           margin-top: 40px;
           padding-top: 20px;
@@ -236,87 +218,116 @@ export async function GET(req: NextRequest) {
           <p class="school-name">${school.name}</p>
           <p class="school-info">${school.address || 'Address'}</p>
           ${school.phone ? `<p class="school-info">Tel: ${school.phone}</p>` : ''}
+          ${school.email ? `<p class="school-info">Email: ${school.email}</p>` : ''}
         </div>
 
         <!-- Title -->
         <div class="letter-title">
-          ðŸ“œ Letter of Admission
+          📜 Letter of Admission
         </div>
 
         <!-- Recipient Info -->
         <div class="recipient-info">
           <div class="info-item">
             <span class="info-label">Student Name:</span>
-            <span class="info-value">${user.full_name}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Admission Number:</span>
-            <span class="info-value">${student.admission_number}</span>
+            <span class="info-value"><strong>${student.full_name}</strong></span>
           </div>
           <div class="info-item">
             <span class="info-label">Email Address:</span>
-            <span class="info-value">${user.email}</span>
+            <span class="info-value">${student.email || 'Not provided'}</span>
           </div>
           <div class="info-item">
-            <span class="info-label">Class Assigned:</span>
-            <span class="info-value"><span class="highlight">${className}</span></span>
+            <span class="info-label">Phone Number:</span>
+            <span class="info-value">${student.phone || 'Not provided'}</span>
           </div>
-          ${subjects.length > 0 ? `
-          <div class="info-item">
-            <span class="info-label">Subjects Enrolled:</span>
-            <span class="info-value">
-              ${subjects.map((s: any) => `<strong>${s.name}</strong> (${s.code})`).join(' â€¢ ')}
-            </span>
+        </div>
+
+        <!-- Admission Details -->
+        <div class="admission-details">
+          <strong>Admission Information</strong>
+          <div class="detail-row">
+            <span class="info-label">Admission Number:</span>
+            <span class="info-value"><strong>${admissionNumber}</strong></span>
           </div>
-          ` : ''}
+          <div class="detail-row">
+            <span class="info-label">Class/Arm Assignment:</span>
+            <span class="info-value">${className}</span>
+          </div>
+          <div class="detail-row">
+            <span class="info-label">Registration Date:</span>
+            <span class="info-value">${registrationDate}</span>
+          </div>
+          <div class="detail-row">
+            <span class="info-label">Academic Session:</span>
+            <span class="info-value">2024/2025</span>
+          </div>
         </div>
 
         <!-- Letter Content -->
         <div class="letter-content">
-          <p>Dear ${user.full_name},</p>
+          <p>Dear ${student.full_name},</p>
 
           <p>
-            Congratulations! We are pleased to inform you that you have been selected for admission to 
-            <strong>${school.name}</strong>. We are delighted to welcome you to our academic community.
+            On behalf of the entire management and staff of <strong>${school.name}</strong>, 
+            we are pleased to welcome you to our school community. Congratulations on your admission!
           </p>
 
           <p>
-            You have been <span class="highlight">admitted to ${className}</span> for the current academic session. 
-            This class placement is based on your performance, aptitude, and the school's assessment procedures.
-          </p>
-
-          ${subjects.length > 0 ? `
-          <p>
-            Your subjects for this session are:
-            <br><br>
-            ${subjects.map((s: any, i: number) => `${i + 1}. ${s.name} (${s.code})`).join('<br>')}
-          </p>
-          ` : ''}
-
-          <p>
-            We trust that you will make the most of the excellent educational opportunities available at our school. 
-            Our dedicated faculty and staff are committed to fostering academic excellence, character development, and 
-            holistic growth.
+            Your admission number is <span class="highlight">${admissionNumber}</span>. 
+            Please keep this number safe as it will be used for all official school transactions and identification purposes.
           </p>
 
           <p>
-            Please note that this admission is subject to the terms and conditions outlined in the school's admission policy. 
-            You are expected to abide by all school rules and regulations and to maintain high standards of conduct and academic 
-            performance throughout your stay with us.
+            You have been admitted to study in <strong>${className}</strong> for the 2024/2025 academic session. 
+            Your class assignment is based on your academic performance and school placement procedures.
           </p>
 
           <p>
-            Should you have any questions or require further information, please do not hesitate to contact the school administration.
+            As a student of our institution, you are expected to:
+          </p>
+          <ul>
+            <li>Maintain high standards of academic excellence and integrity</li>
+            <li>Adhere strictly to the school rules and regulations</li>
+            <li>Respect the rights and dignity of all members of the school community</li>
+            <li>Participate actively in both academic and co-curricular activities</li>
+            <li>Maintain proper conduct both within and outside the school premises</li>
+            <li>Pay all required fees and levies on time</li>
+            <li>Ensure regular attendance and punctuality</li>
+            <li>Contribute positively to creating a conducive learning environment</li>
+          </ul>
+
+          <p>
+            Please note the following important dates and information:
+          </p>
+          <ul>
+            <li><strong>School Opening Date:</strong> Check the school website for the official resumption date</li>
+            <li><strong>Reporting Time:</strong> Students should arrive at school by 7:00 AM daily</li>
+            <li><strong>School Hours:</strong> Normal school hours are from 8:00 AM to 3:00 PM</li>
+            <li><strong>Fees Payment:</strong> All fees must be paid through the school's designated channels</li>
+          </ul>
+
+          <p>
+            A comprehensive school handbook containing detailed information about our policies, 
+            curriculum, facilities, and expectations will be provided to you upon resumption. 
+            Please familiarize yourself with all policies and regulations as outlined in the handbook.
           </p>
 
-          <p>Welcome to our school family!</p>
+          <p>
+            Should you have any questions or require further information about your admission, 
+            please do not hesitate to contact the school office during working hours.
+          </p>
+
+          <p>
+            We wish you a successful academic year ahead and look forward to your positive contributions 
+            to the school community.
+          </p>
 
           <p>Yours in education,</p>
         </div>
 
         <!-- Signature -->
         <div>
-          <div class="signature-line">Principal</div>
+          <div class="signature-line">Principal/Director</div>
           <p style="text-align: center; margin-top: 30px; font-size: 12px; color: #999;">
             This document was generated on ${new Date().toLocaleDateString('en-US', {
               year: 'numeric',
@@ -329,7 +340,7 @@ export async function GET(req: NextRequest) {
         <!-- Footer -->
         <div class="footer">
           <p style="margin: 5px 0;">
-            Â© ${new Date().getFullYear()} ${school.name}. All rights reserved.
+            © ${new Date().getFullYear()} ${school.name}. All rights reserved.
           </p>
           <p style="margin: 5px 0;">
             This is an electronically generated letter and is valid without a signature.
@@ -340,29 +351,28 @@ export async function GET(req: NextRequest) {
     </html>
     `
 
-    // Return HTML for display/printing
+    // Return JSON with letter HTML
     return NextResponse.json(
       {
         success: true,
         letterHtml: letterContent,
-        studentName: user.full_name,
-        admissionNumber: student.admission_number,
+        studentName: student.full_name,
+        admissionNumber: admissionNumber,
         className: className,
         schoolName: school.name,
-        subjects: subjects,
       },
       { status: 200 }
     )
   } catch (error: any) {
     console.error('Admission letter error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to generate admission letter' },
+      { success: false, error: error.message || 'Failed to generate admission letter' },
       { status: 500 }
     )
   }
 }
 
-// Generate PDF version (optional)
+// POST for PDF generation (future enhancement)
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -370,14 +380,15 @@ export async function POST(req: NextRequest) {
 
     if (!studentId) {
       return NextResponse.json(
-        { error: 'Student ID is required' },
+        { success: false, error: 'Student ID is required' },
         { status: 400 }
       )
     }
 
     // Get admission letter HTML first
+    const queryParams = new URLSearchParams({ studentId })
     const getReq = new NextRequest(
-      new URL(`/api/documents/admission-letter?studentId=${studentId}`, req.url)
+      new URL(`/api/documents/admission-letter?${queryParams}`, req.url)
     )
     const getResponse = await GET(getReq)
     const letterData = await getResponse.json()
@@ -386,8 +397,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(letterData, { status: 404 })
     }
 
-    // For PDF generation, you would use a library like 'puppeteer' or 'html2pdf'
-    // This is a simplified response returning the HTML
+    // Return the HTML - actual PDF generation can be done client-side or with a service
     return NextResponse.json(
       {
         success: true,
@@ -396,16 +406,14 @@ export async function POST(req: NextRequest) {
         studentName: letterData.studentName,
         admissionNumber: letterData.admissionNumber,
         className: letterData.className,
-        subjects: letterData.subjects,
       },
       { status: 200 }
     )
   } catch (error: any) {
-    console.error('PDF generation error:', error)
+    console.error('Letter generation error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to generate PDF' },
+      { success: false, error: error.message || 'Failed to generate letter' },
       { status: 500 }
     )
   }
 }
-
