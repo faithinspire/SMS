@@ -17,7 +17,8 @@ interface EmailShareData {
 class SharingService {
   /**
    * Share letter via WhatsApp
-   * Opens WhatsApp Web or WhatsApp app with the message
+   * Opens WhatsApp App on mobile, or WhatsApp Web on desktop
+   * Mobile detection ensures direct app opening via whatsapp:// protocol
    */
   static shareViaWhatsApp(data: WhatsAppShareData): void {
     try {
@@ -39,11 +40,22 @@ class SharingService {
         message += `\n\n${data.letterContent.substring(0, 200)}...`
       }
 
-      // Encode message for URL
-      const encodedMessage = encodeURIComponent(message)
+      // Detect if user is on mobile
+      const isMobile = this.detectMobileDevice()
 
-      // Create WhatsApp URL
-      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`
+      let whatsappUrl: string
+
+      if (isMobile) {
+        // Use native WhatsApp app protocol for mobile phones
+        // Format: whatsapp://send?phone=PHONE_NUMBER&text=MESSAGE
+        const encodedMessage = encodeURIComponent(message)
+        whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodedMessage}`
+      } else {
+        // Use WhatsApp Web for desktop
+        // Format: https://wa.me/PHONE_NUMBER?text=MESSAGE
+        const encodedMessage = encodeURIComponent(message)
+        whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`
+      }
 
       // Open WhatsApp
       window.open(whatsappUrl, '_blank')
@@ -51,6 +63,32 @@ class SharingService {
       console.error('Error sharing via WhatsApp:', err)
       throw new Error('Failed to share via WhatsApp. Please ensure the phone number is valid.')
     }
+  }
+
+  /**
+   * Detect if device is mobile
+   * Checks user agent for mobile/tablet indicators
+   */
+  private static detectMobileDevice(): boolean {
+    if (typeof window === 'undefined') return false
+
+    const userAgent = navigator.userAgent.toLowerCase()
+    
+    // Check common mobile and tablet indicators
+    const mobileIndicators = [
+      /android/i,
+      /webos/i,
+      /iphone/i,
+      /ipad/i,
+      /ipod/i,
+      /blackberry/i,
+      /windows phone/i,
+      /opera mini/i,
+      /mobile/i,
+      /tablet/i,
+    ]
+
+    return mobileIndicators.some(indicator => indicator.test(userAgent))
   }
 
   /**

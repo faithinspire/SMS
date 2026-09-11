@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase-client'
+import { SharingService } from '@/services/sharing.service'
 
 interface School {
   id: string
@@ -336,21 +337,18 @@ Thank you!
         return
       }
 
-      // Clean phone number - remove spaces, dashes, parentheses
-      let cleanPhone = phone.replace(/[\s\-\(\)]/g, '')
-      
-      // If phone doesn't start with +, add Nigeria country code
-      if (!cleanPhone.startsWith('+')) {
-        if (cleanPhone.startsWith('0')) {
-          cleanPhone = '+234' + cleanPhone.substring(1)
-        } else {
-          cleanPhone = '+234' + cleanPhone
-        }
+      // Use SharingService which handles mobile detection and proper protocol
+      try {
+        SharingService.shareViaWhatsApp({
+          phoneNumber: phone,
+          message: `Here is your payment receipt from ${selectedPayment.school.name}`,
+          letterContent: receiptContent,
+        })
+        setSuccess('✅ Opening WhatsApp on your phone...')
+        setTimeout(() => setSuccess(''), 2000)
+      } catch (err: any) {
+        setError(err.message)
       }
-
-      const whatsappLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(receiptContent)}`
-      console.log('WhatsApp link:', whatsappLink)
-      window.open(whatsappLink, '_blank')
     }
   }
 
@@ -390,20 +388,18 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
         return
       }
 
-      // Clean phone number
-      let cleanPhone = phone.replace(/[\s\-\(\)]/g, '')
-      
-      // Add Nigeria country code if needed
-      if (!cleanPhone.startsWith('+')) {
-        if (cleanPhone.startsWith('0')) {
-          cleanPhone = '+234' + cleanPhone.substring(1)
-        } else {
-          cleanPhone = '+234' + cleanPhone
-        }
+      // Use SharingService which handles mobile detection and proper protocol
+      try {
+        SharingService.shareViaWhatsApp({
+          phoneNumber: phone,
+          message: `Here is your payment history from ${selectedPayment.school.name}`,
+          letterContent: content,
+        })
+        setSuccess('✅ Opening WhatsApp on your phone...')
+        setTimeout(() => setSuccess(''), 2000)
+      } catch (err: any) {
+        setError(err.message)
       }
-
-      const whatsappLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(content)}`
-      window.open(whatsappLink, '_blank')
     }
   }
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase-client'
+import { SharingService } from '@/services/sharing.service'
 
 interface StudentPaymentModalProps {
   student: any
@@ -148,15 +149,31 @@ Please keep this for your records.
 
   const handleShareViaWhatsApp = async () => {
     try {
-      const message = encodeURIComponent(generatePaymentReceipt())
-      window.open(`https://web.whatsapp.com/send?text=${message}`, '_blank')
+      setProcessing(true)
+      
+      // Get phone number from student
+      const phoneNumber = student?.phone
+      if (!phoneNumber) {
+        setError('No phone number available for this student')
+        setProcessing(false)
+        return
+      }
 
-      setSuccess('💬 WhatsApp opened successfully!')
+      // Use SharingService which handles mobile detection
+      SharingService.shareViaWhatsApp({
+        phoneNumber: phoneNumber,
+        message: `Here is your payment receipt from ${school?.name}`,
+        letterContent: generatePaymentReceipt(),
+      })
+
+      setSuccess('💬 Opening WhatsApp to send payment receipt...')
       setTimeout(() => {
         onClose()
       }, 2000)
     } catch (err: any) {
       setError(err.message || 'Failed to open WhatsApp')
+    } finally {
+      setProcessing(false)
     }
   }
 

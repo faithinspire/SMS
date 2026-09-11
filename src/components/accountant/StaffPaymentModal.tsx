@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase-client'
+import { SharingService } from '@/services/sharing.service'
 
 interface StaffPaymentModalProps {
   staff: any
@@ -140,17 +141,31 @@ Please keep this receipt for your records.
 
   const handleShareViaWhatsApp = async () => {
     try {
-      // For WhatsApp, we would need phone number from staff
-      const message = encodeURIComponent(generatePaymentSlip())
-      // Open WhatsApp Web or app
-      window.open(`https://web.whatsapp.com/send?text=${message}`, '_blank')
+      setProcessing(true)
+      
+      // Get phone number from staff
+      const phoneNumber = staff?.phone
+      if (!phoneNumber) {
+        setError('No phone number available for this staff member')
+        setProcessing(false)
+        return
+      }
 
-      setSuccess('💬 WhatsApp opened successfully!')
+      // Use SharingService which handles mobile detection
+      SharingService.shareViaWhatsApp({
+        phoneNumber: phoneNumber,
+        message: `Here is your salary payment slip from ${school?.name}`,
+        letterContent: generatePaymentSlip(),
+      })
+
+      setSuccess('💬 Opening WhatsApp to send payment slip...')
       setTimeout(() => {
         onClose()
       }, 2000)
     } catch (err: any) {
       setError(err.message || 'Failed to open WhatsApp')
+    } finally {
+      setProcessing(false)
     }
   }
 
