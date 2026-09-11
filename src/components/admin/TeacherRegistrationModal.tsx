@@ -50,6 +50,7 @@ export function TeacherRegistrationModal({
   // Form Data - Step 4: Teaching Assignment
   const [selectedComboId, setSelectedComboId] = useState<string | null>(null)
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([])
+  const [selectedDepartment, setSelectedDepartment] = useState<'SCIENCE' | 'COMMERCIAL' | 'HUMANITIES' | 'TECHNICAL' | 'VOCATIONAL' | ''>('') // ✅ NEW: Department/stream
 
   // Data State
   const [combos, setCombos] = useState<ClassArmCombo[]>([])
@@ -190,6 +191,13 @@ export function TeacherRegistrationModal({
     e.preventDefault()
     if (!selectedComboId || selectedSubjects.length === 0) {
       setError('Please select a class and at least one subject')
+      return
+    }
+    // ✅ NEW: Require department for SS classes (levels 12-14)
+    const combo = combos.find(c => c.id === selectedComboId)
+    const classLevel = (combo?.classes as any)?.level
+    if (classLevel !== undefined && classLevel >= 12 && !selectedDepartment) {
+      setError('Please select a department for Senior Secondary classes')
       return
     }
     handleFinalSubmit()
@@ -356,6 +364,7 @@ export function TeacherRegistrationModal({
         account_name: accountName,
         salary: parseFloat(salary),
         teaching_level: teacherLevel,
+        department: selectedDepartment || undefined, // ✅ NEW: Pass department if selected
       })
 
       console.log('✅ Teacher created:', teacherId)
@@ -393,6 +402,7 @@ export function TeacherRegistrationModal({
       setSalary('')
       setSelectedComboId(null)
       setSelectedSubjects([])
+      setSelectedDepartment('') // ✅ NEW: Reset department
 
       // Call success callback
       if (onSuccess) {
@@ -674,6 +684,7 @@ export function TeacherRegistrationModal({
                       onChange={(e) => {
                         setSelectedComboId(e.target.value)
                         setSelectedSubjects([])
+                        setSelectedDepartment('') // Reset department when class changes
                       }}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
                     >
@@ -686,6 +697,33 @@ export function TeacherRegistrationModal({
                       ))}
                     </select>
                   </div>
+
+                  {/* ✅ NEW: Department selection for SS classes */}
+                  {selectedComboId && (
+                    (() => {
+                      const combo = combos.find(c => c.id === selectedComboId)
+                      const classLevel = (combo?.classes as any)?.level
+                      return classLevel !== undefined && classLevel >= 12 ? (
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-900 mb-3">
+                            Department (Stream) * {/* Required for SS */}
+                          </label>
+                          <select
+                            value={selectedDepartment}
+                            onChange={(e) => setSelectedDepartment(e.target.value as any)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+                          >
+                            <option value="">Choose a department...</option>
+                            <option value="SCIENCE">Science</option>
+                            <option value="COMMERCIAL">Commercial</option>
+                            <option value="HUMANITIES">Humanities</option>
+                            <option value="TECHNICAL">Technical</option>
+                            <option value="VOCATIONAL">Vocational</option>
+                          </select>
+                        </div>
+                      ) : null
+                    })()
+                  )}
 
                   {/* Subject Selection */}
                   {selectedComboId && (

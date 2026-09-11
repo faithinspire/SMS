@@ -167,13 +167,24 @@ export default function SchoolAdminDashboard() {
   const handleDelete = async (type: 'STAFF' | 'STUDENT', id: string) => {
     try {
       setDeletingId(id)
-      const endpoint = type === 'STAFF' ? '/api/admin/delete-staff' : '/api/admin/delete-student'
-      const key = type === 'STAFF' ? 'staffId' : 'studentId'
+      
+      // Get auth token for deletion verification
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      if (!token) {
+        setError('Authentication required for deletion');
+        return;
+      }
+
+      const endpoint = type === 'STAFF' ? `/api/school-admin/staff/${id}/delete` : `/api/school-admin/students/${id}/delete`
 
       const response = await fetch(endpoint, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [key]: id }),
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       })
 
       if (!response.ok) {

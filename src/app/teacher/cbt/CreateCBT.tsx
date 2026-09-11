@@ -33,6 +33,11 @@ interface ClassArm {
   arm: { name: string };
 }
 
+interface Term {
+  id: string;
+  name: string;
+}
+
 interface Question {
   id: string;
   type: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'THEORY';
@@ -47,6 +52,7 @@ const CreateCBTForm: React.FC = () => {
   const [userId, setUserId] = useState<string>('');
   const [subjects, setSubjects] = useState<CanonicalSubject[]>([]);
   const [classArms, setClassArms] = useState<ClassArm[]>([]);
+  const [terms, setTerms] = useState<Term[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -56,6 +62,8 @@ const CreateCBTForm: React.FC = () => {
     description: '',
     subject_id: '',
     class_arm_combo_id: '',
+    term_id: '', // ✅ NEW: Required for score_sheets
+    assessment_type: 'CA1' as 'CA1' | 'CA2' | 'CA3' | 'CA4' | 'EXAM', // ✅ NEW: Required for score_sheets
     exam_type: 'TEST' as 'TEST' | 'EXAM',
     test_number: 1,
     start_time: '',
@@ -136,6 +144,30 @@ const CreateCBTForm: React.FC = () => {
         
         console.log('✅ Class arms loaded:', classArmsData?.length || 0, classArmsData?.[0]);
         setClassArms(classArmsData || []);
+
+        // ✅ NEW: Fetch academic terms for CBT
+        const { data: termsData, error: termsError } = await supabase
+          .from('academic_terms')
+          .select('id, name')
+          .eq('school_id', schoolId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (termsError) {
+          console.error('❌ Error fetching terms:', termsError);
+          // Fallback to legacy terms table
+          const { data: legacyTerms } = await supabase
+            .from('terms')
+            .select('id, name')
+            .eq('school_id', schoolId)
+            .order('created_at', { ascending: false })
+            .limit(10);
+          setTerms(legacyTerms || []);
+        } else {
+          setTerms(termsData || []);
+        }
+        
+        console.log('✅ Terms loaded:', (termsData || []).length);
       } catch (error) {
         console.error('❌ Error fetching data:', error);
         toast.error('Failed to load classes and subjects');
@@ -198,8 +230,8 @@ const CreateCBTForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title || !formData.subject_id || !formData.class_arm_combo_id) {
-      toast.error('Please fill in all required fields');
+    if (!formData.title || !formData.subject_id || !formData.class_arm_combo_id || !formData.term_id || !formData.assessment_type) {
+      toast.error('Please fill in all required fields including Term and Assessment Type');
       return;
     }
 
@@ -217,33 +249,31 @@ const CreateCBTForm: React.FC = () => {
     try {
       setIsSubmitting(true);
 
-      // Create CBT exam
-      const { data: cbtExam, error: examError } = await supabase
-        .from('cbt_exams')
-        .insert([
-          {
-            school_id: schoolId,
-            subject_id: formData.subject_id,
-            class_arm_combo_id: formData.class_arm_combo_id,
-            created_by: userId,
-            title: formData.title,
-            description: formData.description,
-            exam_type: formData.exam_type,
-            test_number: formData.test_number,
-            start_time: formData.start_time,
-            end_time: formData.end_time,
-            duration_minutes: formData.duration_minutes,
-            total_marks: formData.total_marks,
-            passing_percentage: formData.passing_percentage,
-            allow_review: formData.allow_review,
-            randomize_questions: formData.randomize_questions,
-            randomize_options: formData.randomize_options,
-          },
-        ])
-        .select()
-        .single();
+      // ✅ NEW: Use API endpoint instead of direct insert to ensure validation
+      const examResponse = await fetch('/api/teacher/cbt/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          school_id: schoolId,
+          subject_id: formData.subject_id,
+          class_arm_combo_id: formData.class_arm_combo_id,
+          teacher_id: userId,
+          title: formData.title,
+          description: formData.description,
+          assessment_type: formData.assessment_type, // ✅ REQUIRED for score_sheets
+          term_id: formData.term_id, // ✅ REQUIRED for score_sheets
+          duration_minutes: formData.duration_minutes,
+          total_marks: formData.total_marks,
+          passing_percentage: formData.passing_percentage,
+        }),
+      });
 
-      if (examError) throw examError;
+      if (!examResponse.ok) {
+        const error = await examResponse.json();
+        throw new Error(error.error || 'Failed to create exam');
+      }
+
+      const { exam: cbtExam } = await examResponse.json();
 
       // Create questions
       for (let i = 0; i < questions.length; i++) {
@@ -305,6 +335,8 @@ const CreateCBTForm: React.FC = () => {
         description: '',
         subject_id: '',
         class_arm_combo_id: '',
+        term_id: '', // ✅ Reset new field
+        assessment_type: 'CA1', // ✅ Reset new field
         exam_type: 'TEST',
         test_number: 1,
         start_time: '',
@@ -375,6 +407,42 @@ const CreateCBTForm: React.FC = () => {
                 ))
               ) : (
                 <option disabled>Loading classes...</option>
+              )}
+            </select>
+          </div>
+
+          {/* ✅ NEW: Assessment Type - Required for score_sheets */}
+          <div>
+            <label className="block text-sm font-semibold mb-2">Assessment Type *</label>
+            <select
+              value={formData.assessment_type}
+              onChange={(e) => setFormData({ ...formData, assessment_type: e.target.value as any })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Type</option>
+              <option value="CA1">CA1 (Continuous Assessment 1)</option>
+              <option value="CA2">CA2 (Continuous Assessment 2)</option>
+              <option value="CA3">CA3 (Continuous Assessment 3)</option>
+              <option value="CA4">CA4 (Continuous Assessment 4)</option>
+              <option value="EXAM">Exam (Final Exam)</option>
+            </select>
+          </div>
+
+          {/* ✅ NEW: Term - Required for score_sheets */}
+          <div>
+            <label className="block text-sm font-semibold mb-2">Academic Term *</label>
+            <select
+              value={formData.term_id}
+              onChange={(e) => setFormData({ ...formData, term_id: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Term</option>
+              {terms.length > 0 ? (
+                terms.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))
+              ) : (
+                <option disabled>Loading terms...</option>
               )}
             </select>
           </div>

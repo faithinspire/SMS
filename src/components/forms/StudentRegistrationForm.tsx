@@ -36,6 +36,7 @@ export default function StudentRegistrationForm({
     guardian_full_name: '',
     guardian_phone: '',
     guardian_email: '',
+    department: '' as 'SCIENCE' | 'COMMERCIAL' | 'HUMANITIES' | 'TECHNICAL' | 'VOCATIONAL' | '', // ✅ NEW: SS stream selection
     photo: null as File | null,
   })
 
@@ -134,6 +135,7 @@ export default function StudentRegistrationForm({
         guardian_full_name: formData.guardian_full_name,
         guardian_phone: formData.guardian_phone,
         guardian_email: formData.guardian_email,
+        department: formData.department, // ✅ NEW: Include department
       }
 
       // Validate required fields
@@ -141,6 +143,10 @@ export default function StudentRegistrationForm({
       if (!validated.date_of_birth) throw new Error('Date of birth is required')
       if (!validated.class_arm_combo_id) throw new Error('Class selection is required')
       if (validated.subject_ids.length === 0) throw new Error('Please select at least one subject')
+      // ✅ NEW: Require department for SS classes (levels 12-14)
+      if (selectedClassLevel && selectedClassLevel >= 12 && !validated.department) {
+        throw new Error('Department is required for Senior Secondary classes')
+      }
       if (!validated.guardian_full_name?.trim()) throw new Error('Guardian name is required')
       if (!validated.guardian_phone?.trim()) throw new Error('Guardian phone is required')
 
@@ -154,7 +160,8 @@ export default function StudentRegistrationForm({
         validated.guardian_full_name,
         validated.guardian_phone,
         validated.guardian_email,
-        formData.photo || undefined
+        formData.photo || undefined,
+        validated.department || undefined // ✅ NEW: Pass department
       )
 
       // Show PIN and admission number to admin
@@ -173,6 +180,7 @@ export default function StudentRegistrationForm({
         guardian_full_name: '',
         guardian_phone: '',
         guardian_email: '',
+        department: '', // ✅ NEW: Reset department
         photo: null,
       })
     } catch (error: any) {
@@ -287,6 +295,32 @@ export default function StudentRegistrationForm({
               <p className="form-error">{errors.class_arm_combo_id}</p>
             )}
           </div>
+
+          {/* ✅ NEW: Department selection for SS classes (levels 12-14) */}
+          {selectedClassLevel !== null && selectedClassLevel >= 12 && (
+            <div>
+              <label htmlFor="department" className="form-label">
+                Department (Stream) * {/* Required for SS classes */}
+              </label>
+              <select
+                id="department"
+                value={formData.department}
+                onChange={(e) => setFormData({ ...formData, department: e.target.value as any })}
+                className="input-field"
+                disabled={loading}
+              >
+                <option value="">-- Select Department --</option>
+                <option value="SCIENCE">Science</option>
+                <option value="COMMERCIAL">Commercial</option>
+                <option value="HUMANITIES">Humanities</option>
+                <option value="TECHNICAL">Technical</option>
+                <option value="VOCATIONAL">Vocational</option>
+              </select>
+              {errors.department && (
+                <p className="form-error">{errors.department}</p>
+              )}
+            </div>
+          )}
 
           {/* Subject Selection */}
           {subjects.length > 0 && (

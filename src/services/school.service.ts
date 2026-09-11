@@ -126,8 +126,20 @@ export class SchoolService {
   // Delete school (Super Admin)
   static async deleteSchool(schoolId: string): Promise<void> {
     try {
-      const response = await fetch(`/api/schools/${schoolId}`, {
+      // Get auth token for superadmin verification
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      if (!token) {
+        throw new Error('Authentication required for school deletion')
+      }
+
+      const response = await fetch(`/api/superadmin/schools/${schoolId}/delete`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       })
 
       if (!response.ok) {
