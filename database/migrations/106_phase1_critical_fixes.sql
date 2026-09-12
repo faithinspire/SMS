@@ -7,7 +7,30 @@
 -- ============================================================================
 
 -- ============================================================================
--- STEP 1: ENSURE TERMS TABLE HAS PROPER DATA
+-- STEP 1: ENSURE ACADEMIC SESSIONS EXIST
+-- ============================================================================
+
+-- Ensure academic sessions exist for current and previous years
+INSERT INTO academic_sessions (id, school_id, name, start_year, end_year, is_active, created_at)
+SELECT 
+  gen_random_uuid(),
+  s.id as school_id,
+  '2023/2024' as name,
+  2023,
+  2024,
+  TRUE as is_active,
+  NOW() as created_at
+FROM schools s
+WHERE NOT EXISTS (
+  SELECT 1 FROM academic_sessions a 
+  WHERE a.school_id = s.id 
+    AND a.start_year = 2023 
+    AND a.end_year = 2024
+)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- STEP 1B: ENSURE TERMS TABLE HAS PROPER DATA
 -- ============================================================================
 
 -- Ensure terms exist for test school
@@ -183,33 +206,11 @@ END $$;
 -- ============================================================================
 
 -- Show terms table content
-SELECT 'TERMS TABLE CONTENT:' as section;
-SELECT school_id, name, session_year, start_date, end_date, is_current, COUNT(*) as count
+SELECT 'TERMS TABLE CONTENT - Migration 106 Executed Successfully' as status;
+SELECT school_id, name, session_year, is_current, start_date, end_date
 FROM terms
-GROUP BY school_id, name, session_year, start_date, end_date, is_current
-ORDER BY school_id, session_year DESC;
-
--- Show table record counts
-SELECT 'RECORD COUNTS:' as section;
-SELECT 'schools' as table_name, COUNT(*) as row_count FROM schools
-UNION ALL
-SELECT 'users', COUNT(*) FROM users
-UNION ALL
-SELECT 'students', COUNT(*) FROM students
-UNION ALL
-SELECT 'teachers', COUNT(*) FROM teachers
-UNION ALL
-SELECT 'classes', COUNT(*) FROM classes
-UNION ALL
-SELECT 'subjects', COUNT(*) FROM subjects
-UNION ALL
-SELECT 'terms', COUNT(*) FROM terms
-UNION ALL
-SELECT 'score_sheets', COUNT(*) FROM score_sheets
-UNION ALL
-SELECT 'cbt_exams', COUNT(*) FROM cbt_exams
-UNION ALL
-SELECT 'class_arm_combos', COUNT(*) FROM class_arm_combos;
+ORDER BY school_id, session_year DESC, name
+LIMIT 15;
 
 -- ============================================================================
 -- MIGRATION COMPLETE
