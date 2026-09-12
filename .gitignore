@@ -38,3 +38,5 @@ Thumbs.db
 
 # Supabase
 .supabase
+.vercel
+.env*.local

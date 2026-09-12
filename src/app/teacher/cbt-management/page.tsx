@@ -107,6 +107,18 @@ export default function CBTManagementPage() {
 
         setSchool(schoolData)
 
+        // ✅ NEW: Initialize default sessions if none exist
+        try {
+          await fetch('/api/sessions/initialize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ school_id: currentUser.school_id }),
+          })
+        } catch (err) {
+          console.warn('[CBT] Warning: Could not initialize default sessions:', err)
+          // Continue anyway - will show empty dropdown
+        }
+
         // Get teacher context
         const context = await TeacherContextService.getCurrentTeacherContext()
 
