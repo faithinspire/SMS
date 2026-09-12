@@ -1,0 +1,10 @@
+FORCE REBUILD TRIGGER - Version 0.1.1
+
+This file forces Vercel to detect a change and rebuild from scratch.
+
+Changes included:
+- CBT page.tsx: Complete rebuild with CreateCBTForm component
+- Term dropdown: Now available in CBT form
+- Assessment Type dropdown: Now available in CBT form
+
+Build timestamp: 2026-09-11 - Forced cache clear

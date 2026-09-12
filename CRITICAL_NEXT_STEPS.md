@@ -1,196 +1,115 @@
-# 🚨 CRITICAL NEXT STEPS - DO THIS NOW
+# ⚠️ CRITICAL NEXT STEPS - READ FIRST
 
-## Issue Found & Fixed
-Migration SQL had a bug: `SELECT DISTINCT school_id FROM schools` → Fixed to `SELECT id FROM schools`
+## Problem We're Trying to Solve
+The CBT page dropdowns are NOT showing because Vercel is serving OLD cached code, even though we've made commits.
 
-**Fixed file:** `database/migrations/046_add_academic_session_to_scores.sql`
+## Solution: Force Fresh Deployment
+
+### YOU MUST DO THIS MANUALLY - I Cannot Execute Directly
+
+Due to terminal shell issues, I need you to complete these steps:
 
 ---
 
-## ⚠️ YOUR IMMEDIATE ACTION REQUIRED
+## OPTION A: Using Git Bash / Terminal (Recommended)
 
-### Step 1: Execute Fixed Migration on Supabase
-
-**YOU MUST DO THIS FIRST - Server won't work without it**
-
-1. Open **Supabase Dashboard** → Go to **SQL Editor**
-2. Click "New Query"
-3. Copy **ENTIRE** content from this file:
-   ```
-   database/migrations/046_add_academic_session_to_scores.sql
-   ```
-4. Paste into Supabase SQL Editor
-5. Click **RUN** button
-6. **Wait for completion** - should see ✅ with no errors
-
-**Expected output:**
-```
-CREATE TABLE IF NOT EXISTS
-ALTER TABLE
-ALTER TABLE
-COMMIT
-CREATE INDEX
-CREATE INDEX
-CREATE INDEX
-CREATE INDEX
+**Step 1:** Open Git Bash or Terminal and run:
+```bash
+cd c:\Users\OLU\Desktop\SMS
+git status
 ```
 
----
-
-### Step 2: Verify Migration Succeeded
-
-Run this in Supabase SQL Editor to verify:
-
-```sql
--- Check academic_sessions table created
-SELECT COUNT(*) as session_count FROM academic_sessions;
-
--- Check score_sheets linked to sessions
-SELECT COUNT(*) as linked_scores 
-FROM score_sheets 
-WHERE academic_session_id IS NOT NULL;
-
--- Check indices created
-SELECT COUNT(*) as index_count 
-FROM pg_indexes 
-WHERE tablename = 'academic_sessions' OR tablename = 'score_sheets';
+**Step 2:** Push all changes:
+```bash
+git add -A
+git commit -m "CRITICAL FIX: CBT page rebuild + version bump for Vercel cache clear"
+git push origin main
 ```
 
-**You should see:**
-- `session_count`: at least 1 per school (auto-created)
-- `linked_scores`: should be > 0 if you have existing scores
-- `index_count`: should be 4+ indices
+**Step 3:** Monitor Vercel
+- Go to https://vercel.com/your-team/sms/deployments
+- Wait for a NEW deployment to start (usually within 1 minute)
+- Wait for it to finish (5-10 minutes)
+- Should show 🟢 Production ready
 
 ---
 
-### Step 3: Restart Dev Server
+## OPTION B: Using GitHub Web UI (Fastest Alternative)
 
-Once migration is done, restart the server:
+If you prefer NOT to use terminal:
 
-1. Go back to terminal running `npm run dev`
-2. Press **Ctrl+C** to stop it
-3. Run again:
-   ```bash
-   npm run dev
-   ```
+**Step 1:** Go to: https://github.com/faithinspire/SMS
 
-**Server should start on:** http://localhost:3001
+**Step 2:** Check if you see a NEW commit with your changes
+- Look at the file list in the repo
+- Look for recent commit messages
 
----
+**If you see new commits:**
+- Vercel will automatically deploy within 1 minute
+- Go to Vercel dashboard and wait
 
-### Step 4: Test Score Entry Flow
-
-**DO NOT SKIP THIS - Verify it actually works**
-
-1. Open browser → http://localhost:3001
-2. Login as **TEACHER**
-3. Navigate to **Score Sheet**
-4. **Check:** 
-   - [ ] Academic Session dropdown appears (top left)
-   - [ ] Sessions show real data (e.g., "2026/2027")
-   - [ ] Current session marked with "(Current)" badge
-   - [ ] Term dropdown appears (far right)
-   - [ ] Terms show real data
-
-5. **If dropdowns are empty:**
-   - Check browser console (F12 → Console tab)
-   - Look for red errors
-   - Check Network tab: 
-     - `GET /api/teacher/academic-sessions?school_id=...` should return 200
-     - Response should have `"success": true`
-
-6. **Select values and enter scores:**
-   - Select: Session, Subject, Class, Term
-   - Click student → ENTER SCORES button
-   - Enter test scores (0-10) and exam (0-60)
-   - Click "✅ Save Scores"
-
-7. **CRITICAL CHECK:**
-   - Browser Network tab (F12 → Network)
-   - Find: `POST /api/teacher/student-scores`
-   - Response should show: `"success": true`
-   - **NOT** 400 or 500 error
-   - If it shows error, check the error message
-
-8. **Verify persistence:**
-   - Press F5 to refresh page
-   - Navigate back to Score Sheet
-   - Scores should still be there
+**If you DON'T see new commits:**
+- The git push didn't work
+- Go back to OPTION A and use terminal
 
 ---
 
-## 🐛 If Migration Fails
+## OPTION C: Vercel Dashboard Manual Redeploy
 
-**Error: "column 'school_id' does not exist"**
-- Already fixed in the file
-- Make sure you copied the LATEST version of `046_add_academic_session_to_scores.sql`
+**This is your BACKUP if Vercel isn't auto-deploying:**
 
-**Error: "permission denied for schema public"**
-- This is a Supabase RLS issue
-- Try running this first in SQL Editor:
-  ```sql
-  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
-  ```
-
-**Error: "table 'academic_sessions' already exists"**
-- That's OK - means it was created in a previous attempt
-- The migration uses `CREATE TABLE IF NOT EXISTS`
-- Just run the verification queries above to confirm
+1. Go to: https://vercel.com/dashboard
+2. Click on SMS project
+3. Click "Deployments" tab
+4. Find the LATEST deployment (the most recent one)
+5. Click the ⋮ (three dots) menu
+6. Click "Redeploy"
+7. Choose "Redeploy without cache"
+8. Wait 5-10 minutes
 
 ---
 
-## 🎯 Expected Result After All Steps
+## What We Changed
 
-✅ Database has `academic_sessions` table  
-✅ Database has `academic_session_id` column in `score_sheets`  
-✅ Server starts without build errors  
-✅ Score sheet page loads  
-✅ Session & Term dropdowns populated  
-✅ Can enter scores  
-✅ POST returns 200 (success)  
-✅ Scores persist after refresh  
+**Files Modified:**
+- ✅ `src/app/teacher/cbt/page.tsx` - Complete rewrite using CreateCBTForm
+- ✅ `package.json` - Version 0.1.0 → 0.1.1
+- ✅ `VERCEL_FORCE_REDEPLOY.txt` - Trigger file
+
+**These need to be pushed to GitHub and Vercel will auto-deploy.**
 
 ---
 
-## 📋 Summary of What Was Fixed
+## Testing After Deployment
 
-**Migration issue:** Column name typo in PL/pgSQL loop
-- **Before:** `FOR school_record IN SELECT DISTINCT school_id FROM schools`
-- **After:** `FOR school_record IN SELECT id FROM schools`
-- Reason: `schools` table has column named `id`, not `school_id`
+Once Vercel shows 🟢 Production ready:
 
-**Code changes:**
-- ✅ Academic session frontend dropdown implemented
-- ✅ Session + term both mandatory before save
-- ✅ POST endpoint validates both are present and are UUIDs
-- ✅ Database migration creates session tracking structure
+1. **Hard refresh your app:** Ctrl+Shift+R
+2. **Go to Teacher Dashboard → CBT Management**
+3. **Click "Create New Exam"**
+4. **Check for TWO dropdowns:**
+   - "Academic Term *"
+   - "Assessment Type *"
 
----
-
-## ⏱️ Timeline
-
-1. **Migration on Supabase:** ~30 seconds
-2. **Verification queries:** ~5 seconds
-3. **Dev server restart:** ~30-60 seconds
-4. **Test flow:** ~2 minutes
-
-**Total time:** ~3 minutes if migration succeeds first try
+**Report back:**
+- ✅ YES = Dropdowns now show (we fixed it!)
+- ❌ NO = Still the same (bigger issue)
 
 ---
 
-## 🆘 If Still Not Working
+## Deadline
 
-1. **Screenshot the error** - take a picture of the red error message
-2. **Check Network tab** - F12 → Network → find the failed request
-3. **Share these details:**
-   - Error message text
-   - API endpoint that failed
-   - Response status code
-   - Response body
+⏱️ **Do this NOW before next step**
 
-Then I can diagnose further.
+Once this is done and tested, we move to:
+- PHASE 2: SuperAdmin delete fix
+- PHASE 3: Missing subjects
+- PHASE 4: CBT auto-population
+
+**Without fixing the deployment, nothing else will deploy either.**
 
 ---
 
-**NEXT ACTION:** Go execute the migration in Supabase right now! ⏱️
+## Questions?
 
+Read the MANUAL_DEPLOYMENT_INSTRUCTIONS.md file for detailed steps.
