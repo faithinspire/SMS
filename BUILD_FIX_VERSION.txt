@@ -1,0 +1,6 @@
+BUILD FIX - VERCEL FORCE REBUILD
+Generated: 2026-09-12
+Latest Commit: 3e3ba17
+Package.json: FIXED with @supabase/auth-helpers-nextjs dependency
+
+This file forces Vercel to rebuild with the latest code that includes all fixes.
