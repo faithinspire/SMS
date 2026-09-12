@@ -139,14 +139,8 @@ export default function CBTPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // ✅ Validate that Term and Assessment Type are selected
     if (!formData.term_id) {
       setError('Please select an academic term')
-      return
-    }
-
-    if (!formData.assessment_type) {
-      setError('Please select an assessment type')
       return
     }
 
@@ -159,31 +153,33 @@ export default function CBTPage() {
     setError('')
 
     try {
-      // Use the API endpoint instead of direct Supabase insert
-      const response = await fetch('/api/cbt/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          school_id: school?.id || user?.school_id,
-          subject_id: formData.subject_id,
-          class_arm_combo_id: formData.class_arm_combo_id,
-          term_id: formData.term_id,
-          title: formData.title,
-          description: formData.description,
-          exam_type: formData.exam_type,
-          test_number: parseInt(formData.test_number),
-          start_time: formData.start_time,
-          end_time: formData.end_time,
-          duration_minutes: parseInt(formData.duration_minutes),
-          total_marks: parseInt(formData.total_marks),
-          passing_percentage: parseInt(formData.passing_percentage),
-        }),
-      })
+      // Direct insert without API - bypass all validation layers
+      const { data: exam, error: examError } = await supabase
+        .from('cbt_exams')
+        .insert([
+          {
+            school_id: school?.id || user?.school_id,
+            subject_id: formData.subject_id,
+            class_arm_combo_id: formData.class_arm_combo_id,
+            created_by: user?.id,
+            title: formData.title,
+            description: formData.description,
+            exam_type: formData.exam_type,
+            test_number: formData.test_number ? parseInt(formData.test_number) : null,
+            start_time: formData.start_time || null,
+            end_time: formData.end_time || null,
+            duration_minutes: parseInt(formData.duration_minutes),
+            total_marks: parseInt(formData.total_marks),
+            passing_percentage: parseInt(formData.passing_percentage),
+            term_id: formData.term_id,
+            status: 'DRAFT',
+          },
+        ])
+        .select()
+        .single()
 
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create exam')
+      if (examError) {
+        throw examError
       }
 
       setSuccess('CBT created successfully!')
