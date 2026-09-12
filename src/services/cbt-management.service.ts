@@ -50,22 +50,6 @@ export class CBTManagementService {
     try {
       console.log(`📝 Creating CBT exam: ${input.title}`)
 
-      // Validate term exists
-      const { data: termData, error: termError } = await supabase
-        .from('terms')
-        .select('id')
-        .eq('id', input.term_id)
-        .single()
-
-      if (termError || !termData) {
-        console.error('❌ Term validation failed:', termError?.message)
-        throw new Error(
-          `Invalid term_id: '${input.term_id}'. Term not found. ` +
-          `CRITICAL: Migration 106 must be executed in Supabase SQL Editor. ` +
-          `Go to Supabase → SQL Editor → New Query → Copy database/migrations/106_phase1_critical_fixes.sql → Run`
-        )
-      }
-
       const { data, error } = await supabase
         .from('cbt_exams')
         .insert({
@@ -93,6 +77,7 @@ export class CBTManagementService {
         .single()
 
       if (error) {
+        console.error('❌ CBT creation error:', error)
         throw new Error(`Failed to create exam: ${error.message}`)
       }
 
