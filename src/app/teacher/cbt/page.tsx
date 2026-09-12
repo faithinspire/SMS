@@ -106,26 +106,23 @@ export default function CBTPage() {
             setClassArms(formatted)
           }
 
-          // ✅ NEW: Load academic terms from database
-          const { data: termsData } = await supabase
-            .from('academic_terms')
+          // ✅ NEW: Load terms from database - try 'terms' table first (canonical)
+          const { data: termsData, error: termsError } = await supabase
+            .from('terms')
             .select('id, name')
             .eq('school_id', currentUser.school_id)
             .order('created_at', { ascending: false })
 
+          if (termsError) {
+            console.error('Error loading terms:', termsError)
+          }
+
           if (termsData && termsData.length > 0) {
+            console.log(`✅ Loaded ${termsData.length} terms from 'terms' table`)
             setTerms(termsData as Term[])
           } else {
-            // Fallback to legacy terms table
-            const { data: legacyTerms } = await supabase
-              .from('terms')
-              .select('id, name')
-              .eq('school_id', currentUser.school_id)
-              .order('created_at', { ascending: false })
-
-            if (legacyTerms) {
-              setTerms(legacyTerms as Term[])
-            }
+            console.warn('⚠️ No terms found in database for school:', currentUser.school_id)
+            // Don't try academic_terms - use canonical terms table only
           }
         }
 
@@ -162,32 +159,32 @@ export default function CBTPage() {
     setError('')
 
     try {
-      // Create exam with term and assessment type
-      const { data: exam, error: examError } = await supabase
-        .from('cbt_exams')
-        .insert([
-          {
-            school_id: school?.id || user?.school_id,
-            subject_id: formData.subject_id,
-            class_arm_combo_id: formData.class_arm_combo_id,
-            teacher_id: user?.id,
-            title: formData.title,
-            description: formData.description,
-            exam_type: formData.exam_type,
-            test_number: parseInt(formData.test_number),
-            start_time: formData.start_time,
-            end_time: formData.end_time,
-            duration_minutes: parseInt(formData.duration_minutes),
-            total_marks: parseInt(formData.total_marks),
-            passing_percentage: parseInt(formData.passing_percentage),
-            term_id: formData.term_id, // ✅ Include term
-            assessment_type: formData.assessment_type, // ✅ Include assessment type
-          },
-        ])
-        .select()
-        .single()
+      // Use the API endpoint instead of direct Supabase insert
+      const response = await fetch('/api/cbt/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          school_id: school?.id || user?.school_id,
+          subject_id: formData.subject_id,
+          class_arm_combo_id: formData.class_arm_combo_id,
+          term_id: formData.term_id,
+          title: formData.title,
+          description: formData.description,
+          exam_type: formData.exam_type,
+          test_number: parseInt(formData.test_number),
+          start_time: formData.start_time,
+          end_time: formData.end_time,
+          duration_minutes: parseInt(formData.duration_minutes),
+          total_marks: parseInt(formData.total_marks),
+          passing_percentage: parseInt(formData.passing_percentage),
+        }),
+      })
 
-      if (examError) throw examError
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create exam')
+      }
 
       setSuccess('CBT created successfully!')
       setFormData({
