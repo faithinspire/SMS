@@ -6,6 +6,7 @@ import { CBTService } from '@/services/cbt.service'
 import { TeacherService } from '@/services/teacher.service'
 import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
+import CreateCBTForm from './CreateCBT'
 
 interface Exam {
   id: string
@@ -39,18 +40,6 @@ export default function CBTExamsPage() {
   const [subjectClasses, setSubjectClasses] = useState<SubjectClass[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    examType: 'TEST' as 'TEST' | 'EXAM',
-    testNumber: '',
-    startTime: '',
-    endTime: '',
-    durationMinutes: '',
-    totalMarks: '',
-    passingPercentage: '',
-  })
-  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string>('')
   const [success, setSuccess] = useState<string>('')
 
@@ -164,70 +153,6 @@ export default function CBTExamsPage() {
     }
   }
 
-  const handleCreateExam = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selectedSubjectClass || !school || !user) return
-
-    // Validate times
-    const startTime = new Date(formData.startTime)
-    const endTime = new Date(formData.endTime)
-
-    if (endTime <= startTime) {
-      setError('End time must be after start time')
-      return
-    }
-
-    setSubmitting(true)
-    setError('')
-    setSuccess('')
-
-    try {
-      const schoolId = school.id || (user as any).school_id
-      const userId = user.id
-
-      await CBTService.createExam({
-        schoolId: schoolId,
-        subjectId: selectedSubjectClass.subjectId,
-        classArmComboId: selectedSubjectClass.classArmComboId,
-        createdBy: userId,
-        title: formData.title,
-        description: formData.description,
-        examType: formData.examType,
-        testNumber: formData.testNumber ? parseInt(formData.testNumber) : undefined,
-        startTime: formData.startTime,
-        endTime: formData.endTime,
-        durationMinutes: parseInt(formData.durationMinutes),
-        totalMarks: formData.totalMarks ? parseFloat(formData.totalMarks) : undefined,
-        passingPercentage: formData.passingPercentage
-          ? parseFloat(formData.passingPercentage)
-          : undefined,
-        allowReview: true,
-        randomizeQuestions: false,
-        randomizeOptions: false,
-      })
-
-      setSuccess('Exam created successfully! Now add questions.')
-      setFormData({
-        title: '',
-        description: '',
-        examType: 'TEST',
-        testNumber: '',
-        startTime: '',
-        endTime: '',
-        durationMinutes: '',
-        totalMarks: '',
-        passingPercentage: '',
-      })
-      setShowForm(false)
-
-      await loadExams(selectedSubjectClass)
-    } catch (err: any) {
-      setError(err.message || 'Failed to create exam')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   const handleManageQuestions = (examId: string) => {
     router.push(`/teacher/cbt/${examId}/questions`)
   }
@@ -305,9 +230,12 @@ export default function CBTExamsPage() {
           </button>
         </div>
 
-        {/* Create Form */}
+        {/* Create Form - Use CreateCBTForm Component */}
         {showForm && (
-          <div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-gray-200 overflow-auto">
+          <div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-gray-200">
+            <CreateCBTForm />
+          </div>
+        )}
             <h2 className="text-xl font-semibold mb-4">Create New Exam</h2>
             <form onSubmit={handleCreateExam} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
