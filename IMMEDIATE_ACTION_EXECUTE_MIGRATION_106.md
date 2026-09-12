@@ -1,20 +1,23 @@
 # 🚀 IMMEDIATE ACTION: Execute Migration 106 in Supabase
 
 **Time to execute**: ~2 minutes
-**Status**: ✅ Code committed to git - Now execute in Supabase
+**Status**: ✅ Code committed to git - CORRECTED schema
+**Latest Commit**: 8bf8860 - CRITICAL FIX: correct academic_sessions schema
 
 ---
 
-## The Problem
+## The Problem (NOW FIXED)
 
-Your SMS system code is complete and pushed to GitHub/Vercel, BUT the database migration hasn't been executed yet. This causes errors like:
-- "TERM NOT FOUND IN EITHER ACADEMIC_TERMS OR TERMS TABLE"
-- "Column level does not exist"
-- "school_id does not exist in academic_sessions"
+Your SMS system code is complete and pushed to GitHub/Vercel. Migration 106 had schema errors that are NOW CORRECTED:
+
+**Original Error**: "column 'name' does not exist in academic_sessions"
+**Fix Applied**: Changed to use correct columns - `session_year`, `start_year`, `end_year`
+
+---
 
 ## The Solution
 
-Execute Migration 106 SQL in your Supabase database. Follow these exact steps:
+Execute the CORRECTED Migration 106 SQL in your Supabase database. Follow these exact steps:
 
 ---
 
@@ -51,11 +54,11 @@ Or copy this entire SQL below:
 -- ============================================================================
 
 -- Ensure academic sessions exist for current and previous years
-INSERT INTO academic_sessions (id, school_id, name, start_year, end_year, is_active, created_at)
+INSERT INTO academic_sessions (id, school_id, session_year, start_year, end_year, is_active, created_at)
 SELECT 
   gen_random_uuid(),
   s.id as school_id,
-  '2023/2024' as name,
+  '2023/2024' as session_year,
   2023,
   2024,
   TRUE as is_active,
@@ -67,7 +70,7 @@ WHERE NOT EXISTS (
     AND a.start_year = 2023 
     AND a.end_year = 2024
 )
-ON CONFLICT DO NOTHING;
+ON CONFLICT (school_id, session_year) DO NOTHING;
 
 -- ============================================================================
 -- STEP 1B: ENSURE TERMS TABLE HAS PROPER DATA
