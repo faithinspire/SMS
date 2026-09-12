@@ -11,11 +11,11 @@
 -- ============================================================================
 
 -- Ensure academic sessions exist for current and previous years
-INSERT INTO academic_sessions (id, school_id, name, start_year, end_year, is_active, created_at)
+INSERT INTO academic_sessions (id, school_id, session_year, start_year, end_year, is_active, created_at)
 SELECT 
   gen_random_uuid(),
   s.id as school_id,
-  '2023/2024' as name,
+  '2023/2024' as session_year,
   2023,
   2024,
   TRUE as is_active,
@@ -27,7 +27,7 @@ WHERE NOT EXISTS (
     AND a.start_year = 2023 
     AND a.end_year = 2024
 )
-ON CONFLICT DO NOTHING;
+ON CONFLICT (school_id, session_year) DO NOTHING;
 
 -- ============================================================================
 -- STEP 1B: ENSURE TERMS TABLE HAS PROPER DATA
