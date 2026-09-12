@@ -1,12 +1,12 @@
 /**
- * GET /api/teacher/dashboard
- * Get teacher dashboard data
+ * GET /api/student/dashboard
+ * Get student dashboard data
  */
 
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
-import { TeacherDashboardService } from '@/services/teacher-dashboard.service'
+import { StudentDashboardService } from '@/services/student-dashboard.service'
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,22 +25,22 @@ export async function GET(request: NextRequest) {
       .eq('id', session.user.id)
       .single()
 
-    if (userError || !user || user.role !== 'TEACHER') {
+    if (userError || !user || user.role !== 'STUDENT') {
       return NextResponse.json(
-        { error: 'Unauthorized: Only teachers can access this' },
+        { error: 'Unauthorized: Only students can access this' },
         { status: 403 }
       )
     }
 
     // Get dashboard data
-    const dashboardData = await TeacherDashboardService.getDashboardData(
+    const dashboardData = await StudentDashboardService.getDashboardData(
       session.user.id,
       user.school_id
     )
 
     return NextResponse.json(dashboardData, { status: 200 })
   } catch (err: any) {
-    console.error('❌ Exception in teacher dashboard:', err)
+    console.error('❌ Exception in student dashboard:', err)
     return NextResponse.json(
       { error: err.message || 'Internal server error' },
       { status: 500 }

@@ -290,7 +290,7 @@ const handleCreateCBT = async () => {
 
 ---
 
-### 📋 STEP 6: Remove Hardcoded Subject Arrays
+### 📋 STEP 6: , 
 
 **Files to Update/Delete**:
 

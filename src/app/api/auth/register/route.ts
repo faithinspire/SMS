@@ -1,134 +1,98 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase-client'
-
-// Force dynamic rendering - this route must run at request time, not build time
-export const dynamic = 'force-dynamic'
-
-// CRITICAL: Use dummy values if env vars missing during build to prevent errors
-const DUMMY_SUPABASE_URL = 'https://dummy.supabase.co'
-const DUMMY_SERVICE_KEY = 'dummy-key'
-
-// Create admin client with service role key for bypassing auth restrictions
-// Use dummy values if env vars are missing (happens during Vercel build)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || DUMMY_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY || DUMMY_SERVICE_KEY,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-)
-
-interface RegisterRequest {
-  email: string
-  password: string
-  full_name: string
-  role: string
-  school_id: string
-  user_type: string
-}
-
 /**
- * Server-side user registration
- * Uses admin client to bypass email validation restrictions
- * Handles existing users gracefully
+ * POST /api/auth/register
+ * Backend auth registration route to avoid rate limiting
+ * Creates user in Supabase Auth
  */
+
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+import { NextRequest, NextResponse } from 'next/server'
+
 export async function POST(request: NextRequest) {
   try {
-    // CRITICAL: Reject if Supabase env vars are not set (happens at build time)
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
-      return NextResponse.json(
-        { error: 'Service not available - Supabase credentials missing' },
-        { status: 503 }
-      )
-    }
+    const { email, password, full_name, role, school_id, user_type } = await request.json()
 
-    const body: RegisterRequest = await request.json()
-
-    // Validate required fields
-    if (!body.email || !body.password || !body.full_name || !body.school_id) {
+    // Validate inputs
+    if (!email || !password || !full_name || !role || !school_id) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields: email, password, full_name, role, school_id' },
         { status: 400 }
       )
     }
 
-    // Normalize email
-    const email = body.email.trim().toLowerCase()
-
-    console.log('[Auth Register] Creating user:', { email, role: body.role })
-
-    // ✅ CHECK IF USER ALREADY EXISTS
-    console.log('[Auth Register] Checking if user exists:', email)
-    const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers()
-    
-    let existingUser = null
-    if (!listError && existingUsers) {
-      existingUser = existingUsers.users.find(u => u.email?.toLowerCase() === email)
+    if (password.length < 6) {
+      return NextResponse.json(
+        { error: 'Password must be at least 6 characters' },
+        { status: 400 }
+      )
     }
 
-    // If user already exists, return their data instead of failing
+    // Validate school_id is a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(school_id)) {
+      return NextResponse.json(
+        { error: 'Invalid school_id format' },
+        { status: 400 }
+      )
+    }
+
+    // Create Supabase client on server
+    const supabase = createServerComponentClient({ cookies })
+
+    // Check if user already exists
+    const { data: existingUser } = await supabase.auth.admin.getUserByEmail(email)
+    
     if (existingUser) {
-      console.log('[Auth Register] User already exists:', existingUser.id)
+      // User already exists - this is OK, return existing user
       return NextResponse.json(
         {
           user: {
             id: existingUser.id,
             email: existingUser.email,
-            role: body.role,
-            message: 'User already exists - using existing account',
-          },
+            message: 'User already exists'
+          }
         },
-        { status: 200 } // 200 OK because we're returning valid user data
+        { status: 200 }
       )
     }
 
-    // Use admin API to create user (bypasses email validation)
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email: email,
-      password: body.password,
-      email_confirm: true, // Auto-confirm email
+    // Create new auth user
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
       user_metadata: {
-        name: body.full_name,
-        role: body.role,
-        school_id: body.school_id,
-        user_type: body.user_type,
+        full_name,
+        role,
+        school_id,
+        user_type,
       },
     })
 
     if (error) {
-      console.error('[Auth Register] Error:', error)
+      console.error('❌ Auth registration error:', error)
       return NextResponse.json(
-        { error: `Registration failed: ${error.message}` },
+        { error: error.message || 'Failed to create auth user' },
         { status: 400 }
       )
     }
 
-    if (!data.user) {
-      return NextResponse.json(
-        { error: 'User creation returned no data' },
-        { status: 400 }
-      )
-    }
-
-    console.log('[Auth Register] User created successfully:', data.user.id)
+    console.log('✅ Auth user created:', data.user?.id)
 
     return NextResponse.json(
       {
         user: {
-          id: data.user.id,
-          email: data.user.email,
-          role: body.role,
-        },
+          id: data.user?.id,
+          email: data.user?.email,
+          message: 'User registered successfully'
+        }
       },
-      { status: 201 }
+      { status: 200 }
     )
-  } catch (error: any) {
-    console.error('[Auth Register] Error:', error)
+  } catch (err: any) {
+    console.error('❌ Exception in auth register:', err)
     return NextResponse.json(
-      { error: error.message || 'Registration failed' },
+      { error: err.message || 'Internal server error' },
       { status: 500 }
     )
   }

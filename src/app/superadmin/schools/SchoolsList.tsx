@@ -152,8 +152,14 @@ const SchoolsList: React.FC = () => {
   const handleDelete = async (schoolId: string) => {
     try {
       setIsActionLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      
       const response = await fetch(`/api/superadmin/schools/${schoolId}/delete`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token || ''}`,
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) throw new Error('Failed to delete school');
