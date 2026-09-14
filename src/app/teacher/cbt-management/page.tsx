@@ -41,8 +41,13 @@ export default function CBTManagementPage() {
   const [cbts, setCBTs] = useState<CBTExam[]>([])
   const [loadingCBTs, setLoadingCBTs] = useState(false)
 
-  // ✅ NEW: Load real terms from database instead of hardcoding
-  const [termsOptions, setTermsOptions] = useState<Array<{ id: string; name: string }>>([])
+  // ✅ Load real terms from database with fallback
+  const [termsOptions, setTermsOptions] = useState<Array<{ id: string; name: string }>>([
+    // Fallback: will be replaced with real data from DB
+    { id: 'term-1', name: 'First Term' },
+    { id: 'term-2', name: 'Second Term' },
+    { id: 'term-3', name: 'Third Term' },
+  ])
   const sessions = [
     { id: 'session-2026-2027', session_year: '2026/2027' },
     { id: 'session-2025-2026', session_year: '2025/2026' },
@@ -70,7 +75,7 @@ export default function CBTManagementPage() {
     subject_id: '',
     class_arm_combo_id: '',
     session_id: 'session-2026-2027', // ✅ Default to 2026/2027
-    term_id: 'term-1', // ✅ Default to First Term
+    term_id: 'term-1', // ✅ Will be updated to real UUID when DB loads
     assessment_type: 'CA1', // ✅ NEW: Assessment type (CA1/CA2/CA3/CA4/EXAM)
     exam_type: 'TEST' as 'TEST' | 'EXAM',
     duration_minutes: 60,
@@ -164,28 +169,35 @@ export default function CBTManagementPage() {
         // Load CBTs - pass userId to avoid async state timing issue
         await loadCBTs(currentUser.school_id, currentUser.id)
         
-        // ✅ NEW: Load real terms from database
-        const { data: termsFromDB, error: termsError } = await supabase
-          .from('terms')
-          .select('id, name')
-          .eq('school_id', currentUser.school_id)
-          .order('created_at', { ascending: false })
+        // ✅ Load real terms from database
+        try {
+          console.log(`🔍 Loading terms for school: ${currentUser.school_id}`)
+          const { data: termsFromDB, error: termsError } = await supabase
+            .from('terms')
+            .select('id, name')
+            .eq('school_id', currentUser.school_id)
+            .order('created_at', { ascending: false })
 
-        if (termsError) {
-          console.error('[CBT] Error loading terms:', termsError)
-        }
-
-        if (termsFromDB && termsFromDB.length > 0) {
-          console.log(`✅ Loaded ${termsFromDB.length} real terms from database`)
-          setTermsOptions(termsFromDB.map(t => ({ id: t.id, name: t.name })))
-          setTerms(termsFromDB.map(t => ({ id: t.id, name: t.name })))
-          // Update default form term_id to first real term UUID
-          setFormData(prev => ({
-            ...prev,
-            term_id: termsFromDB[0].id
-          }))
-        } else {
-          console.warn('⚠️ No terms found in database, using fallback')
+          if (termsError) {
+            console.error('[CBT] Error loading terms:', termsError)
+            console.log('[CBT] Using fallback hardcoded terms')
+          } else if (termsFromDB && termsFromDB.length > 0) {
+            console.log(`✅ Loaded ${termsFromDB.length} real terms from database:`, termsFromDB)
+            const realTerms = termsFromDB.map(t => ({ id: t.id, name: t.name }))
+            setTermsOptions(realTerms)
+            setTerms(realTerms)
+            // Update default form term_id to first real term UUID
+            setFormData(prev => ({
+              ...prev,
+              term_id: realTerms[0].id
+            }))
+          } else {
+            console.warn('⚠️ No terms found in database for school:', currentUser.school_id)
+            console.log('[CBT] Using fallback hardcoded terms')
+          }
+        } catch (err) {
+          console.error('[CBT] Exception loading terms:', err)
+          console.log('[CBT] Using fallback hardcoded terms')
         }
       } catch (err) {
         console.error('[CBT] Error initializing:', err)
