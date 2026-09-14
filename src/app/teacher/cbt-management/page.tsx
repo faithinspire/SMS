@@ -67,7 +67,7 @@ export default function CBTManagementPage() {
     { id: 'exam', value: 'EXAM', label: 'EXAM - Final Examination' },
   ]
 
-  const [terms, setTerms] = useState<Array<{ id: string; term_name: string }>>(termsOptions)
+  const [terms, setTerms] = useState<Array<{ id: string; name: string }>>(termsOptions)
   const [loadingSessions, setLoadingSessions] = useState(false)
 
   // Create form
@@ -620,7 +620,7 @@ export default function CBTManagementPage() {
                   >
                     {terms.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.term_name}
+                        {t.name}
                       </option>
                     ))}
                   </select>
