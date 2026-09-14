@@ -41,17 +41,12 @@ export default function CBTManagementPage() {
   const [cbts, setCBTs] = useState<CBTExam[]>([])
   const [loadingCBTs, setLoadingCBTs] = useState(false)
 
-  // ✅ NEW: Hardcoded sessions and terms (bypasses API errors)
+  // ✅ NEW: Load real terms from database instead of hardcoding
+  const [termsOptions, setTermsOptions] = useState<Array<{ id: string; name: string }>>([])
   const sessions = [
     { id: 'session-2026-2027', session_year: '2026/2027' },
     { id: 'session-2025-2026', session_year: '2025/2026' },
     { id: 'session-2027-2028', session_year: '2027/2028' },
-  ]
-
-  const termsOptions = [
-    { id: 'term-1', term_name: 'First Term' },
-    { id: 'term-2', term_name: 'Second Term' },
-    { id: 'term-3', term_name: 'Third Term' },
   ]
 
   const assessmentTypeOptions = [
@@ -169,8 +164,29 @@ export default function CBTManagementPage() {
         // Load CBTs - pass userId to avoid async state timing issue
         await loadCBTs(currentUser.school_id, currentUser.id)
         
-        // ✅ NEW: No need to load sessions - using hardcoded values
-        setTerms(termsOptions)
+        // ✅ NEW: Load real terms from database
+        const { data: termsFromDB, error: termsError } = await supabase
+          .from('terms')
+          .select('id, name')
+          .eq('school_id', currentUser.school_id)
+          .order('created_at', { ascending: false })
+
+        if (termsError) {
+          console.error('[CBT] Error loading terms:', termsError)
+        }
+
+        if (termsFromDB && termsFromDB.length > 0) {
+          console.log(`✅ Loaded ${termsFromDB.length} real terms from database`)
+          setTermsOptions(termsFromDB.map(t => ({ id: t.id, name: t.name })))
+          setTerms(termsFromDB.map(t => ({ id: t.id, name: t.name })))
+          // Update default form term_id to first real term UUID
+          setFormData(prev => ({
+            ...prev,
+            term_id: termsFromDB[0].id
+          }))
+        } else {
+          console.warn('⚠️ No terms found in database, using fallback')
+        }
       } catch (err) {
         console.error('[CBT] Error initializing:', err)
         setError(err instanceof Error ? err.message : 'Failed to initialize')
@@ -213,11 +229,11 @@ export default function CBTManagementPage() {
   }
 
   const handleSessionChange = (sessionId: string) => {
-    // ✅ NEW: Just update form, no API call needed
+    // ✅ NEW: Update form with first real term UUID when session changes
     setFormData((prev) => ({
       ...prev,
       session_id: sessionId,
-      term_id: 'term-1', // Auto-select First Term when session changes
+      term_id: termsOptions.length > 0 ? termsOptions[0].id : 'term-1', // Use first real term
     }))
   }
 
@@ -415,7 +431,7 @@ export default function CBTManagementPage() {
         subject_id: '',
         class_arm_combo_id: '',
         session_id: 'session-2026-2027', // ✅ Default
-        term_id: 'term-1', // ✅ Default
+        term_id: termsOptions.length > 0 ? termsOptions[0].id : '', // ✅ Use first real term UUID
         assessment_type: 'CA1', // ✅ Default
         exam_type: 'TEST',
         duration_minutes: 60,

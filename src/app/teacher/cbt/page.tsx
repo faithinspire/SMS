@@ -107,6 +107,8 @@ export default function CBTPage() {
           }
 
           // ✅ NEW: Load terms from database - try 'terms' table first (canonical)
+          console.log(`🔍 Loading terms for school: ${currentUser.school_id}`)
+          
           const { data: termsData, error: termsError } = await supabase
             .from('terms')
             .select('id, name')
@@ -119,6 +121,7 @@ export default function CBTPage() {
 
           if (termsData && termsData.length > 0) {
             console.log(`✅ Loaded ${termsData.length} terms from 'terms' table:`, termsData)
+            console.log(`First term ID type: ${typeof termsData[0].id}, value: ${termsData[0].id}`)
             setTerms(termsData as Term[])
           } else {
             console.warn('⚠️ No terms found in database for school:', currentUser.school_id)
