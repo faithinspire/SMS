@@ -174,6 +174,13 @@ export default function CBTManagementPage() {
         // Load CBTs - pass userId to avoid async state timing issue
         await loadCBTs(currentUser.school_id, currentUser.id)
         
+        // ✅ Always ensure terms are populated (fallback or from DB)
+        setTerms([
+          { id: 'term-1', name: 'First Term' },
+          { id: 'term-2', name: 'Second Term' },
+          { id: 'term-3', name: 'Third Term' },
+        ])
+        
         // ✅ Load real terms from database and update mapping
         try {
           console.log(`🔍 Loading real term UUIDs for school: ${currentUser.school_id}`)
