@@ -63,6 +63,14 @@ export function TeacherRegistrationModal({
     }
   }, [isOpen, currentStep])
 
+  // Update subject filtering when department changes (for SS classes)
+  useEffect(() => {
+    if (selectedComboId && selectedDepartment) {
+      // Re-filter subjects based on new department
+      setSelectedSubjects([])
+    }
+  }, [selectedComboId, selectedDepartment])
+
   const loadTeachingData = async () => {
     if (!teacherLevel) {
       setError('Teacher level not selected')
@@ -113,7 +121,7 @@ export function TeacherRegistrationModal({
     }
   }
 
-  // Get subjects for selected combo - filters by class level
+  // Get subjects for selected combo - filters by class level AND department (for SS classes)
   const getSubjectsForCombo = () => {
     if (!selectedComboId) return []
 
@@ -123,8 +131,17 @@ export function TeacherRegistrationModal({
     const level = (combo.classes as any)?.level
     if (level === undefined || level === null) return []
 
-    // ✅ NEW: Filter subjects by level using canonical service helper
-    return subjects.filter(s => s.applicable_to_levels.includes(level))
+    // ✅ Filter by level and department (if applicable)
+    let filtered = subjects.filter(s => s.applicable_to_levels.includes(level))
+    
+    // For SS classes (level 12-14), filter by department if selected
+    if (CanonicalSubjectService.isSeniorSecondary(level) && selectedDepartment) {
+      filtered = filtered.filter(s =>
+        !s.department || s.department === selectedDepartment
+      )
+    }
+    
+    return filtered
   }
 
   // Handle photo selection

@@ -23,6 +23,11 @@ export interface CanonicalSubject {
   code: string
   school_id: string
   applicable_to_levels: number[]
+  section?: string
+  is_active?: boolean
+  compulsory?: boolean
+  department?: string | null
+  category?: string
   created_at: string
 }
 
@@ -41,8 +46,9 @@ export class CanonicalSubjectService {
   static async getAllSubjectsForSchool(schoolId: string): Promise<CanonicalSubject[]> {
     const { data, error } = await clientSupabase
       .from('subjects')
-      .select('id, name, code, school_id, applicable_to_levels, created_at')
+      .select('id, name, code, school_id, applicable_to_levels, section, is_active, compulsory, department, category, created_at')
       .eq('school_id', schoolId)
+      .eq('is_active', true)
       .order('name', { ascending: true })
 
     if (error) throw new Error(`Failed to fetch subjects: ${error.message}`)
@@ -51,9 +57,9 @@ export class CanonicalSubjectService {
 
   /**
    * Get subjects applicable to a specific class level
-   * Level mapping: 0-8 (Primary), 9-11 (JSS), 12-14 (SSS)
+   * Level mapping: 0-2 (Early Years), 3-8 (Primary), 9-11 (JSS), 12-14 (SSS)
    * 
-   * Example: getSubjectsForLevel(schoolId, 3) returns Primary 3 subjects
+   * Example: getSubjectsForLevel(schoolId, 3) returns Primary 1 subjects
    * Example: getSubjectsForLevel(schoolId, 12) returns SS1 subjects
    */
   static async getSubjectsForLevel(
@@ -64,8 +70,9 @@ export class CanonicalSubjectService {
     // applicable_to_levels @> ARRAY[level] means level is in the array
     const { data, error } = await clientSupabase
       .from('subjects')
-      .select('id, name, code, school_id, applicable_to_levels, created_at')
+      .select('id, name, code, school_id, applicable_to_levels, section, is_active, compulsory, department, category, created_at')
       .eq('school_id', schoolId)
+      .eq('is_active', true)
       .contains('applicable_to_levels', [level])
       .order('name', { ascending: true })
 
@@ -95,6 +102,72 @@ export class CanonicalSubjectService {
 
     const classLevel = (comboData.classes as any).level
     return this.getSubjectsForLevel(schoolId, classLevel)
+  }
+
+  /**
+   * Get subjects for a specific level and department (for SS streams)
+   * Filters by level first, then by department if applicable
+   * 
+   * Example: getSubjectsForDepartment(schoolId, 12, 'SCIENCE')
+   *   Returns: Biology, Chemistry, Physics, Further Mathematics, + core subjects
+   * 
+   * Example: getSubjectsForDepartment(schoolId, 12, 'COMMERCIAL')
+   *   Returns: Accounting, Economics, Business Studies, + core subjects
+   * 
+   * @param schoolId - School UUID
+   * @param level - Class level (12-14 for SS)
+   * @param department - Optional department/stream (SCIENCE, COMMERCIAL, HUMANITIES)
+   * @returns Array of subjects applicable to this level and department
+   */
+  static async getSubjectsForDepartment(
+    schoolId: string,
+    level: number,
+    department?: string | null
+  ): Promise<CanonicalSubject[]> {
+    // Get all subjects for the level
+    let subjects = await this.getSubjectsForLevel(schoolId, level)
+
+    // If department specified and it's a valid SS level, filter by department
+    if (department && level >= 12 && level <= 14) {
+      // Keep subjects that are either:
+      // 1. Marked for this specific department, OR
+      // 2. Have no department (general subjects for all streams)
+      subjects = subjects.filter(
+        s => !s.department || s.department === department
+      )
+    }
+
+    return subjects
+  }
+
+  /**
+   * Get subjects for a class_arm_combo with optional department filtering
+   * Higher-level wrapper that combines combo lookup with department filtering
+   * 
+   * @param classArmComboId - The class-arm combo UUID
+   * @param schoolId - School UUID
+   * @param department - Optional department for SS classes
+   * @returns Array of subjects for this combo and department
+   */
+  static async getSubjectsForClassWithDepartment(
+    classArmComboId: string,
+    schoolId: string,
+    department?: string | null
+  ): Promise<CanonicalSubject[]> {
+    // Get class level from the combo
+    const { data: comboData, error: comboError } = await clientSupabase
+      .from('class_arm_combos')
+      .select('classes(level)')
+      .eq('id', classArmComboId)
+      .eq('school_id', schoolId)
+      .single()
+
+    if (comboError || !comboData) {
+      throw new Error('Class not found')
+    }
+
+    const classLevel = (comboData.classes as any).level
+    return this.getSubjectsForDepartment(schoolId, classLevel, department)
   }
 
   /**
@@ -313,7 +386,7 @@ export class CanonicalSubjectService {
 
   /**
    * Map class level (0-14) to human-readable class name
-   * Example: 0 → "Nursery", 3 → "Primary 3", 12 → "SS1"
+   * Example: 0 → "Nursery", 3 → "Primary 1", 12 → "SS1"
    */
   static getLevelLabel(level: number): string {
     const levelMap: Record<number, string> = {
@@ -334,6 +407,51 @@ export class CanonicalSubjectService {
       14: 'SS3',
     }
     return levelMap[level] || `Level ${level}`
+  }
+
+  /**
+   * Get the section type for a given level
+   * Returns the section name (EARLY_YEARS, PRIMARY, JUNIOR_SECONDARY, SENIOR_SECONDARY)
+   */
+  static getSectionForLevel(level: number): 'EARLY_YEARS' | 'PRIMARY' | 'JUNIOR_SECONDARY' | 'SENIOR_SECONDARY' | null {
+    if (level >= 0 && level <= 2) return 'EARLY_YEARS'
+    if (level >= 3 && level <= 8) return 'PRIMARY'
+    if (level >= 9 && level <= 11) return 'JUNIOR_SECONDARY'
+    if (level >= 12 && level <= 14) return 'SENIOR_SECONDARY'
+    return null
+  }
+
+  /**
+   * Check if a level is in the Senior Secondary range (SS1-SS3)
+   */
+  static isSeniorSecondary(level: number): boolean {
+    return level >= 12 && level <= 14
+  }
+
+  /**
+   * Get valid departments for a given level
+   * Returns departments that apply to this level
+   */
+  static getValidDepartmentsForLevel(level: number): string[] {
+    if (!this.isSeniorSecondary(level)) {
+      return [] // Only SS levels have departments
+    }
+    return ['SCIENCE', 'COMMERCIAL', 'HUMANITIES', 'TECHNICAL', 'VOCATIONAL']
+  }
+
+  /**
+   * Map department name to subject focus areas
+   * Used for filtering and categorization
+   */
+  static getSubjectCategoriesForDepartment(department: string): string[] {
+    const categoryMap: Record<string, string[]> = {
+      SCIENCE: ['SCIENCE', 'TECHNICAL'],
+      COMMERCIAL: ['COMMERCIAL', 'SOCIAL'],
+      HUMANITIES: ['HUMANITIES', 'LANGUAGE', 'SOCIAL'],
+      TECHNICAL: ['TECHNICAL'],
+      VOCATIONAL: ['TECHNICAL', 'VOCATIONAL'],
+    }
+    return categoryMap[department] || ['GENERAL']
   }
 
   /**

@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase-client'
 import { RegistrationConfigService } from '@/services/registration-config.service'
+import CanonicalSubjectService from '@/services/canonical-subject.service'
+import type { CanonicalSubject } from '@/services/canonical-subject.service'
 import type { ClassArmCombo, RegistrationClass, RegistrationArm, Stream, Subject } from '@/services/registration-config.service'
 
 interface StudentRegistrationModalProps {
@@ -44,6 +46,7 @@ export function StudentRegistrationModal({
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
   const [selectedArmId, setSelectedArmId] = useState<string | null>(null)
   const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null)
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null)
 
   // Form Data - Step 4: Subject Selection
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([])
@@ -52,7 +55,7 @@ export function StudentRegistrationModal({
   const [classes, setClasses] = useState<RegistrationClass[]>([])
   const [arms, setArms] = useState<RegistrationArm[]>([])
   const [streams, setStreams] = useState<Stream[]>([])
-  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [subjects, setSubjects] = useState<CanonicalSubject[]>([])
 
   // Load classes when section changes
   useEffect(() => {
@@ -72,15 +75,17 @@ export function StudentRegistrationModal({
   useEffect(() => {
     if (selectedArmId && selectedClassId && isOpen) {
       loadStreams()
+      // Reset department when arm changes
+      setSelectedDepartment(null)
     }
   }, [selectedArmId, selectedClassId, isOpen])
 
-  // Load subjects when academic placement is complete
+  // Load/update subjects when academic placement or department changes
   useEffect(() => {
     if (currentStep === 4 && selectedClassId && isOpen) {
       loadSubjects()
     }
-  }, [currentStep, selectedClassId, isOpen])
+  }, [currentStep, selectedClassId, selectedDepartment, isOpen])
 
   const loadClasses = async () => {
     if (!selectedSection) return
@@ -133,20 +138,34 @@ export function StudentRegistrationModal({
   const loadSubjects = async () => {
     setDataLoading(true)
     try {
-      const allSubjects = await RegistrationConfigService.getSubjectsForSchool(schoolId)
-      
-      // Filter by class level
       const selectedClass = classes.find(c => c.id === selectedClassId)
-      if (selectedClass) {
-        const filtered = allSubjects.filter(s =>
-          s.applicable_to_levels.includes(selectedClass.level)
+      if (!selectedClass) return
+
+      // ✅ Use CanonicalSubjectService for class-aware and department-aware filtering
+      let filtered: CanonicalSubject[]
+      
+      // Check if this is a Senior Secondary class
+      if (CanonicalSubjectService.isSeniorSecondary(selectedClass.level)) {
+        // For SS classes, use department filtering
+        filtered = await CanonicalSubjectService.getSubjectsForDepartment(
+          schoolId,
+          selectedClass.level,
+          selectedDepartment
         )
-        setSubjects(filtered)
+      } else {
+        // For Primary and JSS, just filter by level
+        filtered = await CanonicalSubjectService.getSubjectsForLevel(
+          schoolId,
+          selectedClass.level
+        )
       }
+      
+      setSubjects(filtered)
       setSelectedSubjects([])
     } catch (err) {
       console.error('Error loading subjects:', err)
       setError('Failed to load subjects')
+      setSubjects([])
     } finally {
       setDataLoading(false)
     }
@@ -194,13 +213,23 @@ export function StudentRegistrationModal({
       setError('Please complete academic placement (section, class, and arm)')
       return
     }
-    // Streams are optional except for SS classes
+    
+    // Get selected class to check if it's SS level
     const selectedClass = classes.find(c => c.id === selectedClassId)
     const classLevel = selectedClass?.level
-    if (classLevel !== undefined && classLevel >= 12 && streams.length > 0 && !selectedStreamId) {
-      setError('Please select a stream for Senior Secondary classes')
-      return
+    
+    // For SS classes, stream and department are required
+    if (classLevel !== undefined && CanonicalSubjectService.isSeniorSecondary(classLevel)) {
+      if (streams.length > 0 && !selectedStreamId) {
+        setError('Please select a stream for Senior Secondary classes')
+        return
+      }
+      if (!selectedDepartment) {
+        setError('Please select a department (stream) for Senior Secondary classes')
+        return
+      }
     }
+    
     setError(null)
     setCurrentStep(4)
   }
@@ -327,6 +356,7 @@ export function StudentRegistrationModal({
       setSelectedClassId(null)
       setSelectedArmId(null)
       setSelectedStreamId(null)
+      setSelectedDepartment(null)
       setSelectedSubjects([])
 
       if (onSuccess && studentId) {
@@ -604,7 +634,7 @@ export function StudentRegistrationModal({
               {selectedArmId && streams.length > 0 && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-900 mb-3">
-                    Select Stream {streams.length > 0 ? '*' : '(Optional)'}
+                    Select Stream *
                   </label>
                   <select
                     value={selectedStreamId || ''}
@@ -618,6 +648,33 @@ export function StudentRegistrationModal({
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* Department Selection (for SS classes) */}
+              {selectedArmId && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-3">
+                    Select Department/Stream *
+                  </label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {['SCIENCE', 'COMMERCIAL', 'HUMANITIES'].map((dept) => (
+                      <button
+                        key={dept}
+                        type="button"
+                        onClick={() => setSelectedDepartment(selectedDepartment === dept ? null : dept)}
+                        className={`px-4 py-3 border-2 rounded-lg font-semibold transition text-sm ${
+                          selectedDepartment === dept
+                            ? 'border-green-600 bg-green-50 text-green-900'
+                            : 'border-gray-300 hover:border-green-400 text-gray-900'
+                        }`}
+                      >
+                        {dept === 'SCIENCE' && '🔬 Science'}
+                        {dept === 'COMMERCIAL' && '💼 Commercial'}
+                        {dept === 'HUMANITIES' && '📚 Humanities'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
