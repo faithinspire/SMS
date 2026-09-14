@@ -41,9 +41,14 @@ export default function CBTManagementPage() {
   const [cbts, setCBTs] = useState<CBTExam[]>([])
   const [loadingCBTs, setLoadingCBTs] = useState(false)
 
-  // ✅ Load real terms from database with fallback
+  // ✅ Display-only term options with their real UUIDs once loaded
+  const [termMapping, setTermMapping] = useState<Record<string, string>>({
+    'term-1': 'term-1', // Will be updated with real UUID
+    'term-2': 'term-2', // Will be updated with real UUID
+    'term-3': 'term-3', // Will be updated with real UUID
+  })
+  
   const [termsOptions, setTermsOptions] = useState<Array<{ id: string; name: string }>>([
-    // Fallback: will be replaced with real data from DB
     { id: 'term-1', name: 'First Term' },
     { id: 'term-2', name: 'Second Term' },
     { id: 'term-3', name: 'Third Term' },
@@ -169,7 +174,7 @@ export default function CBTManagementPage() {
         // Load CBTs - pass userId to avoid async state timing issue
         await loadCBTs(currentUser.school_id, currentUser.id)
         
-        // ✅ Load real terms from database
+        // ✅ Load real terms from database and map display names to UUIDs
         try {
           console.log(`🔍 Loading terms for school: ${currentUser.school_id}`)
           const { data: termsFromDB, error: termsError } = await supabase
@@ -180,24 +185,38 @@ export default function CBTManagementPage() {
 
           if (termsError) {
             console.error('[CBT] Error loading terms:', termsError)
-            console.log('[CBT] Using fallback hardcoded terms')
+            console.log('[CBT] Using fallback term mappings')
           } else if (termsFromDB && termsFromDB.length > 0) {
             console.log(`✅ Loaded ${termsFromDB.length} real terms from database:`, termsFromDB)
-            const realTerms = termsFromDB.map(t => ({ id: t.id, name: t.name }))
-            setTermsOptions(realTerms)
-            setTerms(realTerms)
-            // Update default form term_id to first real term UUID
+            
+            // Create mapping: display label → real UUID
+            const mapping: Record<string, string> = {}
+            const termDisplays: Array<{ id: string; name: string }> = []
+            
+            termsFromDB.forEach((term, index) => {
+              const displayId = `term-${index + 1}` // term-1, term-2, term-3
+              mapping[displayId] = term.id // Display ID → Real UUID
+              termDisplays.push({ id: displayId, name: term.name })
+            })
+            
+            setTermMapping(mapping)
+            setTermsOptions(termDisplays)
+            setTerms(termDisplays)
+            
+            // Update default form to use first term display ID (will be converted to UUID on submit)
             setFormData(prev => ({
               ...prev,
-              term_id: realTerms[0].id
+              term_id: 'term-1'
             }))
+            
+            console.log('[CBT] Term mapping created:', mapping)
           } else {
             console.warn('⚠️ No terms found in database for school:', currentUser.school_id)
-            console.log('[CBT] Using fallback hardcoded terms')
+            console.log('[CBT] Using fallback term mappings')
           }
         } catch (err) {
           console.error('[CBT] Exception loading terms:', err)
-          console.log('[CBT] Using fallback hardcoded terms')
+          console.log('[CBT] Using fallback term mappings')
         }
       } catch (err) {
         console.error('[CBT] Error initializing:', err)
@@ -335,6 +354,10 @@ export default function CBTManagementPage() {
       })
 
       // Create CBT exam using API endpoint
+      // ✅ Convert display term ID (term-1) to real UUID using mapping
+      const realTermId = termMapping[formData.term_id] || formData.term_id
+      console.log(`[CBT] Converting term_id: ${formData.term_id} → ${realTermId}`)
+      
       const createResponse = await fetch('/api/teacher/cbt/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -343,7 +366,7 @@ export default function CBTManagementPage() {
           subject_id: formData.subject_id,
           class_arm_combo_id: formData.class_arm_combo_id,
           teacher_id: user.id,
-          term_id: formData.term_id,
+          term_id: realTermId, // ✅ Use converted real UUID
           assessment_type: formData.assessment_type, // ✅ Include assessment type
           title: formData.title,
           description: formData.title,
