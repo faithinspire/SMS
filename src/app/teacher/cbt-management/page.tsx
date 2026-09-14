@@ -41,14 +41,14 @@ export default function CBTManagementPage() {
   const [cbts, setCBTs] = useState<CBTExam[]>([])
   const [loadingCBTs, setLoadingCBTs] = useState(false)
 
-  // ✅ Display-only term options with their real UUIDs once loaded
+  // ✅ Simple approach: show friendly term names, map to real UUIDs on submit
   const [termMapping, setTermMapping] = useState<Record<string, string>>({
-    'term-1': 'term-1', // Will be updated with real UUID
-    'term-2': 'term-2', // Will be updated with real UUID
-    'term-3': 'term-3', // Will be updated with real UUID
+    'term-1': 'term-1', // Will be updated with real UUID from DB
+    'term-2': 'term-2', // Will be updated with real UUID from DB  
+    'term-3': 'term-3', // Will be updated with real UUID from DB
   })
   
-  const [termsOptions, setTermsOptions] = useState<Array<{ id: string; name: string }>>([
+  const [termsOptions] = useState<Array<{ id: string; name: string }>>([
     { id: 'term-1', name: 'First Term' },
     { id: 'term-2', name: 'Second Term' },
     { id: 'term-3', name: 'Third Term' },
@@ -174,49 +174,34 @@ export default function CBTManagementPage() {
         // Load CBTs - pass userId to avoid async state timing issue
         await loadCBTs(currentUser.school_id, currentUser.id)
         
-        // ✅ Load real terms from database and map display names to UUIDs
+        // ✅ Load real terms from database and update mapping
         try {
-          console.log(`🔍 Loading terms for school: ${currentUser.school_id}`)
+          console.log(`🔍 Loading real term UUIDs for school: ${currentUser.school_id}`)
           const { data: termsFromDB, error: termsError } = await supabase
             .from('terms')
             .select('id, name')
             .eq('school_id', currentUser.school_id)
             .order('created_at', { ascending: false })
+            .limit(3)
 
-          if (termsError) {
-            console.error('[CBT] Error loading terms:', termsError)
-            console.log('[CBT] Using fallback term mappings')
-          } else if (termsFromDB && termsFromDB.length > 0) {
-            console.log(`✅ Loaded ${termsFromDB.length} real terms from database:`, termsFromDB)
+          if (!termsError && termsFromDB && termsFromDB.length > 0) {
+            console.log(`✅ Loaded ${termsFromDB.length} real term UUIDs:`, termsFromDB)
             
-            // Create mapping: display label → real UUID
-            const mapping: Record<string, string> = {}
-            const termDisplays: Array<{ id: string; name: string }> = []
-            
+            // Update mapping: display name → real UUID
+            const newMapping: Record<string, string> = {}
             termsFromDB.forEach((term, index) => {
-              const displayId = `term-${index + 1}` // term-1, term-2, term-3
-              mapping[displayId] = term.id // Display ID → Real UUID
-              termDisplays.push({ id: displayId, name: term.name })
+              const displayId = `term-${index + 1}`
+              newMapping[displayId] = term.id // Map to real UUID
+              console.log(`  term-${index + 1} → ${term.id}`)
             })
             
-            setTermMapping(mapping)
-            setTermsOptions(termDisplays)
-            setTerms(termDisplays)
-            
-            // Update default form to use first term display ID (will be converted to UUID on submit)
-            setFormData(prev => ({
-              ...prev,
-              term_id: 'term-1'
-            }))
-            
-            console.log('[CBT] Term mapping created:', mapping)
+            setTermMapping(newMapping)
           } else {
-            console.warn('⚠️ No terms found in database for school:', currentUser.school_id)
-            console.log('[CBT] Using fallback term mappings')
+            console.log('[CBT] Using fallback term mapping (terms not found in DB)')
           }
         } catch (err) {
           console.error('[CBT] Exception loading terms:', err)
-          console.log('[CBT] Using fallback term mappings')
+          console.log('[CBT] Using fallback term mapping')
         }
       } catch (err) {
         console.error('[CBT] Error initializing:', err)
