@@ -118,7 +118,7 @@ export default function CBTPage() {
           }
 
           if (termsData && termsData.length > 0) {
-            console.log(`✅ Loaded ${termsData.length} terms from 'terms' table`)
+            console.log(`✅ Loaded ${termsData.length} terms from 'terms' table:`, termsData)
             setTerms(termsData as Term[])
           } else {
             console.warn('⚠️ No terms found in database for school:', currentUser.school_id)
@@ -153,6 +153,16 @@ export default function CBTPage() {
     setError('')
 
     try {
+      // ✅ DEBUG: Log what we're sending
+      console.log('📝 Submitting CBT with:', {
+        school_id: school?.id || user?.school_id,
+        subject_id: formData.subject_id,
+        class_arm_combo_id: formData.class_arm_combo_id,
+        created_by: user?.id,
+        term_id: formData.term_id,
+        term_id_type: typeof formData.term_id,
+      })
+
       // Direct insert without API - bypass all validation layers
       const { data: exam, error: examError } = await supabase
         .from('cbt_exams')
@@ -179,6 +189,7 @@ export default function CBTPage() {
         .single()
 
       if (examError) {
+        console.error('❌ Supabase error:', examError)
         throw examError
       }
 
