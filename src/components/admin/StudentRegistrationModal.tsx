@@ -301,13 +301,28 @@ export function StudentRegistrationModal({
         throw new Error(`Failed to create user record: ${userError.message}`)
       }
 
-      // Step 3: Create student record
+      // Step 3: Auto-generate admission_number (CRITICAL FIX)
+      const year = new Date().getFullYear()
+      const { data: existingStudents, error: countError } = await supabase
+        .from('students')
+        .select('id', { count: 'exact' })
+        .eq('school_id', schoolId)
+
+      let admissionNumber = `STU${((existingStudents?.length || 0) + 1).toString().padStart(6, '0')}`
+      if (countError) {
+        admissionNumber = `STU-${Date.now().toString().slice(-6)}`
+      }
+
+      console.log(`Generated admission_number: ${admissionNumber}`)
+
+      // Step 3: Create student record with admission_number
       const { data: student, error: studentError } = await supabase
         .from('students')
         .insert({
           user_id: userId,
           school_id: schoolId,
-          class_arm_combo_id: selectedArmId, // This references class_arm_combos, not arms
+          class_arm_combo_id: selectedClassId, // FIXED: use class ID, not arm ID
+          admission_number: admissionNumber, // CRITICAL: Include generated admission_number
           date_of_birth: dateOfBirth,
           created_at: new Date().toISOString(),
         })
