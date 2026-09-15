@@ -2,49 +2,13 @@
 import { supabase } from '@/lib/supabase-client'
 export const dynamic = 'force-dynamic'
 
-
 /**
  * POST /api/subject-scores
  * 
  * Save subject teacher's manual score entry to CANONICAL score_sheets table
  * 
  * CRITICAL: This endpoint is the SINGLE entry point for all MANUAL score entry
- * 
- * IMPLEMENTS COMPREHENSIVE SERVER-SIDE VALIDATION:
- * - Teacher assignment verification
- * - Student enrollment verification
- * - Data integrity checks
- * - Academic session/term validation
- * 
- * All data written here flows to:
- * - Class Teacher Result aggregation
- * - Student Result page
- * - Report cards
- * 
- * BODY:
- * - school_id: UUID (required)
- * - student_id: UUID (required)
- * - subject_id: UUID (required)
- * - term_id: UUID (required - will auto-detect if not provided)
- * - test1: number 0-10 (optional)
- * - test2: number 0-10 (optional)
- * - test3: number 0-10 (optional)
- * - test4: number 0-10 (optional)
- * - exam: number 0-60 (optional)
- * - source: 'MANUAL' | 'CBT' (optional, defaults to MANUAL)
- * 
- * RETURNS:
- * - success: boolean
- * - score_sheet: the created/updated score_sheets record
- * 
- * REJECTS IF:
- * 1. school_id is empty or invalid
- * 2. student doesn't exist in this school
- * 3. student not in the class being scored
- * 4. student not enrolled in this subject
- * 5. teacher not assigned to this subject
- * 6. term/session invalid
- * 7. Any score out of valid range
+ * All data written here flows to: Class Teacher Results, Student Results Page, Report Cards
  */
 export async function POST(request: NextRequest) {
   try {
@@ -133,29 +97,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[API] âœ“ Student verified:', student_id)
+    console.log('[API] OK Student verified:', student_id)
 
     // ========================================================================
-    // STEP 4: VERIFY STUDENT IS ENROLLED IN THIS SUBJECT
+    // STEP 4: VERIFY STUDENT IS ENROLLED (SOFT CHECK - WARNING ONLY)
     // ========================================================================
+    // NOTE: Soft check - warn but don't block. Teachers may enter scores before
+    // enrollment is fully synced from registration system.
 
-    const { data: enrollment, error: enrollmentError } = await supabase
+    const { data: enrollment } = await supabase
       .from('student_subjects')
       .select('id')
       .eq('student_id', student_id)
       .eq('subject_id', subject_id)
       .eq('school_id', school_id)
-      .single()
+      .maybeSingle()
 
-    if (enrollmentError || !enrollment) {
-      console.error('[API] Student enrollment validation failed:', enrollmentError)
-      return NextResponse.json(
-        { error: `Student is not enrolled in subject ${subject_id}` },
-        { status: 403 }
-      )
+    if (!enrollment) {
+      console.warn('[API] WARNING: Student may not be enrolled in subject (continuing):', subject_id)
+    } else {
+      console.log('[API] OK Student enrollment verified:', subject_id)
     }
-
-    console.log('[API] âœ“ Student enrollment verified:', subject_id)
 
     // ========================================================================
     // STEP 5: VERIFY TERM/SESSION
@@ -164,7 +126,6 @@ export async function POST(request: NextRequest) {
     let currentTermId = term_id
 
     if (!currentTermId) {
-      // Try to find active term
       const { data: activeTerm } = await supabase
         .from('academic_terms')
         .select('id')
@@ -175,7 +136,6 @@ export async function POST(request: NextRequest) {
       if (activeTerm?.id) {
         currentTermId = activeTerm.id
       } else {
-        // Fall back to first available term
         const { data: allTerms } = await supabase
           .from('academic_terms')
           .select('id')
@@ -193,7 +153,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Verify term exists
     const { data: termData, error: termError } = await supabase
       .from('academic_terms')
       .select('id, session_id')
@@ -206,10 +165,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid term' }, { status: 400 })
     }
 
-    console.log('[API] âœ“ Term verified:', currentTermId)
+    console.log('[API] OK Term verified:', currentTermId)
 
     // ========================================================================
-    // STEP 6: GET ACADEMIC SESSION (required for multi-year support)
+    // STEP 6: GET ACADEMIC SESSION (for multi-year support)
     // ========================================================================
 
     let academicSessionId = termData.session_id
@@ -225,10 +184,10 @@ export async function POST(request: NextRequest) {
       sessionYear = session?.session_year || null
     }
 
-    console.log('[API] âœ“ Academic session resolved:', academicSessionId, sessionYear)
+    console.log('[API] OK Academic session resolved:', academicSessionId, sessionYear)
 
     // ========================================================================
-    // STEP 7: CHECK FOR EXISTING SCORE (prevent duplicates via UNIQUE constraint)
+    // STEP 7: CHECK FOR EXISTING SCORE
     // ========================================================================
 
     const { data: existingScore, error: checkError } = await supabase
@@ -241,12 +200,11 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (checkError && checkError.code !== 'PGRST116') {
-      // PGRST116 = no rows returned (which is OK)
       console.error('[API] Error checking existing score:', checkError)
       throw checkError
     }
 
-    console.log('[API] âœ“ Existing score check:', existingScore?.id ? 'FOUND' : 'NEW')
+    console.log('[API] OK Existing score check:', existingScore?.id ? 'FOUND' : 'NEW')
 
     // ========================================================================
     // STEP 8: PREPARE SCORE DATA FOR UPSERT
@@ -257,9 +215,9 @@ export async function POST(request: NextRequest) {
       student_id,
       subject_id,
       term_id: currentTermId,
-      class_arm_combo_id: student.class_arm_combo_id, // Use student's actual class
-      academic_session_id: academicSessionId, // âœ… Track for multi-year support
-      session_year: sessionYear, // âœ… Backup denormalization
+      class_arm_combo_id: student.class_arm_combo_id,
+      academic_session_id: academicSessionId,
+      session_year: sessionYear,
       test1: test1 ?? null,
       test2: test2 ?? null,
       test3: test3 ?? null,
@@ -304,7 +262,7 @@ export async function POST(request: NextRequest) {
         throw result.error
       }
 
-      console.log('[API] âœ“ Score updated successfully')
+      console.log('[API] OK Score updated successfully')
     } else {
       console.log('[API] Mode: INSERT new score')
 
@@ -322,14 +280,14 @@ export async function POST(request: NextRequest) {
         throw result.error
       }
 
-      console.log('[API] âœ“ Score created successfully')
+      console.log('[API] OK Score created successfully')
     }
 
     // ========================================================================
-    // STEP 10: RESPONSE SUCCESS
+    // STEP 10: SUCCESS RESPONSE
     // ========================================================================
 
-    console.log('[API] âœ“ Request completed successfully')
+    console.log('[API] OK Request completed successfully')
 
     return NextResponse.json({
       success: true,
@@ -347,4 +305,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
