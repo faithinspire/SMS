@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     // Fetch academic sessions ordered by start_year DESC (newest first)
     const { data, error } = await supabase
       .from('academic_sessions')
-      .select('id, session_name, start_year, end_year, is_current, created_at')
+      .select('id, session_year, start_year, end_year, is_active, created_at')
       .eq('school_id', schoolId)
       .order('start_year', { ascending: false })
 
@@ -64,19 +64,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate session_name string
+    // Generate session_year string
     const endYearValue = end_year || start_year + 1
-    const session_name = `${start_year}/${endYearValue}`
+    const session_year = `${start_year}/${endYearValue}`
 
     // Create academic session
     const { data: sessionData, error: sessionError } = await supabase
       .from('academic_sessions')
       .insert({
         school_id,
-        session_name,
+        session_year,
         start_year,
         end_year: endYearValue,
-        is_current: is_active || false,
+        is_active: is_active || false,
       })
       .select()
       .single()
@@ -91,17 +91,20 @@ export async function POST(request: NextRequest) {
 
     // Create default terms (First, Second, Third)
     const termsToCreate = [
-      { name: 'First Term', sequence: 1 },
-      { name: 'Second Term', sequence: 2 },
-      { name: 'Third Term', sequence: 3 },
+      { name: 'First Term', term_order: 1 },
+      { name: 'Second Term', term_order: 2 },
+      { name: 'Third Term', term_order: 3 },
     ].map((term) => ({
       session_id: sessionData.id,
       school_id,
-      ...term,
+      term_name: term.name,
+      term_order: term.term_order,
+      start_date: new Date().toISOString().split('T')[0],
+      end_date: new Date().toISOString().split('T')[0],
     }))
 
     const { error: termsError } = await supabase
-      .from('terms')
+      .from('academic_terms')
       .insert(termsToCreate)
 
     if (termsError) {
@@ -113,7 +116,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         session_id: sessionData.id,
-        session_name: sessionData.session_name,
+        session_year: sessionData.session_year,
         terms_auto_created: 3,
       },
       { status: 201 }

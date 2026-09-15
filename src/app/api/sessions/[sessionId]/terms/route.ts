@@ -21,12 +21,12 @@ export async function GET(
       )
     }
 
-    // Fetch terms for this session, ordered by sequence ASC
+    // Fetch terms for this session, ordered by term_order ASC
     const { data, error } = await supabase
-      .from('terms')
-      .select('id, name as term_name, sequence as term_order, start_date, end_date, is_current as is_active, created_at')
+      .from('academic_terms')
+      .select('id, term_name, term_order, start_date, end_date, is_active, created_at')
       .eq('session_id', sessionId)
-      .order('sequence', { ascending: true })
+      .order('term_order', { ascending: true })
 
     if (error) {
       console.error('[API] Error fetching terms:', error)
