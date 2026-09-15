@@ -105,9 +105,7 @@ export class RegistrationConfigService {
 
   /**
    * Get all class-arm combinations for a school and section
-   * Returns full objects with nested class and arm data
-   * FIXED: Removed nested field ordering - Supabase doesn't support .order('classes.level')
-   * Now uses two-step approach: get class IDs first, then filter combos by those IDs
+   * BULLETPROOF FIX: Bypass nested field ordering entirely
    */
   static async getClassArmCombos(
     schoolId: string,
@@ -116,33 +114,8 @@ export class RegistrationConfigService {
     try {
       console.log(`🔗 Loading class-arm combos for ${schoolId}, section ${section || 'ALL'}`)
 
-      // FIXED: Step 1 - Get class IDs for this section (if filtering)
-      let classIdsForSection: string[] | undefined
-
-      if (section) {
-        console.log(`📚 Getting class IDs for section: ${section}`)
-        const { data: classesData, error: classError } = await supabase
-          .from('classes')
-          .select('id')
-          .eq('school_id', schoolId)
-          .eq('type', section)
-
-        if (classError) {
-          console.error('❌ Error loading classes:', classError)
-          throw classError
-        }
-
-        classIdsForSection = (classesData || []).map(c => c.id)
-        console.log(`✅ Got ${classIdsForSection.length} class IDs for section ${section}`)
-        
-        if (classIdsForSection.length === 0) {
-          console.log(`ℹ️  No classes found for section ${section}`)
-          return []
-        }
-      }
-
-      // FIXED: Step 2 - Query combos without nested field ordering
-      let query = supabase
+      // Get ALL combos with their class data
+      const { data: allCombos, error: comboError } = await supabase
         .from('class_arm_combos')
         .select(`
           id,
@@ -153,26 +126,24 @@ export class RegistrationConfigService {
         `)
         .eq('school_id', schoolId)
 
-      // FIXED: Filter by class IDs instead of nested field
-      if (classIdsForSection && classIdsForSection.length > 0) {
-        query = query.in('class_id', classIdsForSection)
+      if (comboError) {
+        console.error('❌ Error loading class-arm combos:', comboError)
+        throw comboError
       }
 
-      // FIXED: DO NOT order by nested field - instead fetch and sort in memory
-      const { data, error } = await query
+      let filtered = (allCombos || []) as ClassArmCombo[]
 
-      if (error) {
-        console.error('❌ Error loading class-arm combos:', error)
-        console.error('❌ ERROR DETAIL:', error.message)
-        throw error
+      // Filter by section if needed (AFTER fetching, not in query)
+      if (section) {
+        filtered = filtered.filter(combo => combo.classes?.type === section)
       }
 
-      // FIXED: Sort by class level in application layer (in-memory)
-      const sorted = ((data || []) as ClassArmCombo[]).sort(
+      // Sort by class level (in-memory, guaranteed to work)
+      const sorted = filtered.sort(
         (a, b) => (a.classes?.level || 0) - (b.classes?.level || 0)
       )
 
-      console.log(`✅ Loaded ${sorted.length} class-arm combos (sorted by level)`)
+      console.log(`✅ Loaded ${sorted.length} class-arm combos`)
       return sorted
     } catch (err: any) {
       console.error('❌ Exception loading class-arm combos:', err)
