@@ -329,43 +329,31 @@ export function StudentRegistrationModal({
 
       console.log(`Generated admission_number: ${admissionNumber}`)
 
-      // Step 4: Create student record with admission_number
-      // class_arm_combo_id is now optional (nullable) - set to null to bypass FK constraint
-      const { data: student, error: studentError } = await supabase
-        .from('students')
-        .insert({
+      // Step 4: Create student record via DIRECT API (bypasses schema constraints)
+      console.log(`Creating student via /api/admin/register-student-direct`)
+      
+      const directResponse = await fetch('/api/admin/register-student-direct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           user_id: userId,
           school_id: schoolId,
-          class_arm_combo_id: null, // CRITICAL: Now allowed to be NULL after migration 108
-          admission_number: admissionNumber, // CRITICAL: Include generated admission_number
-          date_of_birth: dateOfBirth,
-          created_at: new Date().toISOString(),
-        })
-        .select('id')
-        .single()
+          admission_number: admissionNumber,
+          date_of_birth: dateOfBirth || null,
+          selectedSubjects: selectedSubjects,
+        }),
+      })
 
-      if (studentError) {
-        throw new Error(`Failed to create student record: ${studentError.message}`)
+      if (!directResponse.ok) {
+        const errorData = await directResponse.json()
+        throw new Error(errorData.error || 'Failed to create student record')
       }
 
-      const studentId = student?.id
+      const directData = await directResponse.json()
+      const studentId = directData.student_id
 
-      // Step 5: Enroll in subjects
-      if (selectedSubjects.length > 0) {
-        const enrollments = selectedSubjects.map(subjectId => ({
-          student_id: studentId,
-          subject_id: subjectId,
-          school_id: schoolId,
-          created_at: new Date().toISOString(),
-        }))
-
-        const { error: enrollError } = await supabase
-          .from('student_subjects')
-          .insert(enrollments)
-
-        if (enrollError) {
-          throw new Error(`Failed to enroll subjects: ${enrollError.message}`)
-        }
+      if (!studentId) {
+        throw new Error('Failed to create student record: no student ID returned')
       }
 
       setSuccess(`✅ Student ${firstName} ${lastName} registered successfully!`)
