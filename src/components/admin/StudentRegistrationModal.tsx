@@ -315,13 +315,29 @@ export function StudentRegistrationModal({
 
       console.log(`Generated admission_number: ${admissionNumber}`)
 
-      // Step 3: Create student record with admission_number
+      // CRITICAL: Find the actual class_arm_combo_id using selectedClassId + selectedArmId
+      // The class_arm_combos table is a junction linking classes + arms
+      const { data: classArmCombo, error: comboError } = await supabase
+        .from('class_arm_combos')
+        .select('id')
+        .eq('class_id', selectedClassId)
+        .eq('arm_id', selectedArmId)
+        .eq('school_id', schoolId)
+        .single()
+
+      if (comboError || !classArmCombo) {
+        throw new Error(`Class-Arm combination not found for selected class and arm. Please verify selection.`)
+      }
+
+      const classArmComboId = classArmCombo.id
+
+      // Step 3: Create student record with admission_number and correct class_arm_combo_id
       const { data: student, error: studentError } = await supabase
         .from('students')
         .insert({
           user_id: userId,
           school_id: schoolId,
-          class_arm_combo_id: selectedClassId, // FIXED: use class ID, not arm ID
+          class_arm_combo_id: classArmComboId, // FIXED: Use actual class_arm_combo_id from junction table
           admission_number: admissionNumber, // CRITICAL: Include generated admission_number
           date_of_birth: dateOfBirth,
           created_at: new Date().toISOString(),
