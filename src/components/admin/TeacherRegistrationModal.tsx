@@ -98,15 +98,20 @@ export function TeacherRegistrationModal({
     try {
       console.log(`📡 Loading teaching data for ${teacherLevel}...`)
 
-      // Load combos for this teacher level
-      const loadedCombos = await RegistrationConfigService.getClassArmCombos(
-        schoolId,
-        teacherLevel
+      // FIXED: Use API endpoint instead of broken service method
+      const response = await fetch(
+        `/api/teaching/class-combos?schoolId=${encodeURIComponent(schoolId)}&section=${encodeURIComponent(teacherLevel)}`,
+        { method: 'GET' }
       )
 
-      console.log(`✅ Loaded ${loadedCombos.length} class-arm combos`)
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`)
+      }
 
-      // ✅ NEW: Load subjects from canonical service instead of hardcoded
+      const loadedCombos = await response.json()
+      console.log(`✅ Loaded ${loadedCombos.length} class-arm combos via API`)
+
+      // ✅ Load subjects from canonical service
       const loadedSubjects = await CanonicalSubjectService.getAllSubjectsForSchool(schoolId)
 
       console.log(`✅ Loaded ${loadedSubjects.length} total subjects`)
