@@ -29,9 +29,9 @@ export async function GET(request: NextRequest) {
     // Fetch all academic sessions for the school
     const { data: sessions, error } = await supabase
       .from('academic_sessions')
-      .select('id, session_year, name, is_current, created_at')
+      .select('id, session_year, start_year, end_year, is_active, created_at')
       .eq('school_id', schoolId)
-      .order('created_at', { ascending: false })
+      .order('start_year', { ascending: false })
 
     if (error) {
       console.error('Error fetching academic sessions:', error)
@@ -59,21 +59,24 @@ export async function GET(request: NextRequest) {
  * 
  * BODY:
  * - school_id: UUID (required)
- * - session_year: string e.g. "2026/2027" (required)
- * - name: string (optional, defaults to "{session_year} Academic Session")
- * - is_current: boolean (optional, defaults to false)
+ * - start_year: number e.g. 2026 (required)
+ * - end_year: number e.g. 2027 (optional, defaults to start_year + 1)
+ * - is_active: boolean (optional, defaults to false)
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { school_id, session_year, name, is_current } = body
+    const { school_id, start_year, end_year, is_active } = body
 
-    if (!school_id || !session_year) {
+    if (!school_id || start_year === undefined) {
       return NextResponse.json(
-        { error: 'Missing required fields: school_id, session_year' },
+        { error: 'Missing required fields: school_id, start_year' },
         { status: 400 }
       )
     }
+
+    const endYearValue = end_year || start_year + 1
+    const session_year = `${start_year}/${endYearValue}`
 
     // Check if session already exists
     const { data: existing } = await supabase
@@ -90,11 +93,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // If setting this as current, unset others
-    if (is_current) {
+    // If setting this as active, unset others
+    if (is_active) {
       await supabase
         .from('academic_sessions')
-        .update({ is_current: false })
+        .update({ is_active: false })
         .eq('school_id', school_id)
     }
 
@@ -104,8 +107,9 @@ export async function POST(request: NextRequest) {
       .insert({
         school_id,
         session_year,
-        name: name || `${session_year} Academic Session`,
-        is_current: is_current || false,
+        start_year,
+        end_year: endYearValue,
+        is_active: is_active || false,
       })
       .select()
       .single()

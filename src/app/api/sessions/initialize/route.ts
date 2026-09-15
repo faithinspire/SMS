@@ -66,9 +66,9 @@ export async function POST(request: NextRequest) {
 
     // Create default terms
     const termsToCreate = [
-      { term_name: 'First Term', term_order: 1, academic_session_id: sessionData.id },
-      { term_name: 'Second Term', term_order: 2, academic_session_id: sessionData.id },
-      { term_name: 'Third Term', term_order: 3, academic_session_id: sessionData.id },
+      { session_id: sessionData.id, school_id, term_name: 'First Term', term_order: 1, start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0] },
+      { session_id: sessionData.id, school_id, term_name: 'Second Term', term_order: 2, start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0] },
+      { session_id: sessionData.id, school_id, term_name: 'Third Term', term_order: 3, start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0] },
     ]
 
     const { data: termsData, error: termsError } = await supabase
