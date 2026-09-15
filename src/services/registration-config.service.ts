@@ -130,15 +130,22 @@ export class RegistrationConfigService {
         query = query.eq('classes.type', section)
       }
 
-      const { data, error } = await query.order('classes.level', { ascending: true })
+      // Don't order by nested field - Supabase doesn't support that syntax
+      // Instead, get data and sort in memory
+      const { data, error } = await query
 
       if (error) {
         console.error('❌ Error loading class-arm combos:', error)
         throw error
       }
 
-      console.log(`✅ Loaded ${data?.length || 0} class-arm combos`)
-      return (data || []) as ClassArmCombo[]
+      // Sort by class level in memory
+      const sorted = ((data || []) as ClassArmCombo[]).sort(
+        (a, b) => (a.classes?.level || 0) - (b.classes?.level || 0)
+      )
+
+      console.log(`✅ Loaded ${sorted.length} class-arm combos`)
+      return sorted
     } catch (err: any) {
       console.error('❌ Exception loading class-arm combos:', err)
       throw err
