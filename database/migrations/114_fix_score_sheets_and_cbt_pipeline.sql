@@ -213,14 +213,15 @@ ON CONFLICT (school_id, student_id, subject_id, term_id) DO UPDATE SET
 
 -- Ensure all score_sheets have academic_session_id
 UPDATE score_sheets s
-SET academic_session_id = at.session_id,
-    session_year = (SELECT session_year FROM academic_sessions WHERE id = at.session_id)
+SET academic_session_id = (
+  SELECT session_id FROM academic_terms WHERE id = s.term_id LIMIT 1
+),
+    session_year = (
+  SELECT session_year FROM academic_sessions 
+  WHERE id = (SELECT session_id FROM academic_terms WHERE id = s.term_id LIMIT 1)
+)
 WHERE s.academic_session_id IS NULL
-AND s.term_id IN (SELECT id FROM academic_terms)
-AND EXISTS (
-  SELECT 1 FROM academic_terms at
-  WHERE at.id = s.term_id
-);
+AND s.term_id IN (SELECT id FROM academic_terms WHERE session_id IS NOT NULL);
 
 -- ============================================================================
 -- PHASE 6: CREATE PERFORMANCE INDEXES
