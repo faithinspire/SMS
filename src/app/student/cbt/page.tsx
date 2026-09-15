@@ -135,11 +135,13 @@ export default function StudentCBTPortal() {
       }
 
       // Get subject and class names, PLUS teacher assignments
-      const subjectIds2 = [...new Set(cbtData.map(c => c.subject_id))]
-      const classIds = [...new Set(cbtData.map(c => c.class_arm_combo_id).filter(id => id))]
+      const subjectIds2 = [...new Set(cbtData.map(c => c.subject_id).filter(id => id))]
+      const classIds = [...new Set(cbtData.map(c => c.class_arm_combo_id).filter(id => id && id !== 'null'))]
 
       const [{ data: subjects }, { data: combos }, { data: teachers }, studentResult] = await Promise.all([
-        supabase.from('subjects').select('id, name, code').in('id', subjectIds2),
+        subjectIds2.length > 0
+          ? supabase.from('subjects').select('id, name, code').in('id', subjectIds2)
+          : Promise.resolve({ data: [] }),
         classIds.length > 0 
           ? supabase.from('class_arm_combos').select('id, classes(name), arms(name)').in('id', classIds)
           : Promise.resolve({ data: [] }),
