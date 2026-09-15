@@ -45,63 +45,30 @@ export async function POST(request: NextRequest) {
 
     console.log(`📝 DIRECT: Creating student for user_id: ${user_id}`)
 
-    // HARD FIX: Use raw SQL to bypass NOT NULL constraint temporarily
-    // This executes as admin and directly inserts with NULL class_arm_combo_id
-    const { data: studentData, error: sqlError } = await supabaseAdmin.rpc('create_student_bypass', {
-      p_user_id: user_id,
-      p_school_id: school_id,
-      p_admission_number: admission_number,
-      p_date_of_birth: date_of_birth,
-    })
+    // Direct insert with explicit NULL for class_arm_combo_id
+    // This works once the column is made nullable (see APPLY_THIS_IN_SUPABASE_NOW.sql)
+    const { data: student, error: insertError } = await supabaseAdmin
+      .from('students')
+      .insert({
+        user_id,
+        school_id,
+        admission_number,
+        date_of_birth: date_of_birth || null,
+        class_arm_combo_id: null, // Column must be nullable (see forensic fix SQL)
+        created_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
 
-    if (sqlError) {
-      console.error('❌ RPC create_student_bypass failed:', sqlError)
-      
-      // Fallback: Try direct insert with explicit NULL
-      const { data: student, error: insertError } = await supabaseAdmin
-        .from('students')
-        .insert({
-          user_id,
-          school_id,
-          admission_number,
-          date_of_birth: date_of_birth || null,
-          class_arm_combo_id: null,
-          created_at: new Date().toISOString(),
-        })
-        .select('id')
-        .single()
-
-      if (insertError) {
-        console.error('❌ Direct insert failed:', insertError.message)
-        throw new Error(`Failed to create student: ${insertError.message}`)
-      }
-
-      const studentId = student?.id
-
-      // Enroll in subjects if provided
-      if (selectedSubjects && selectedSubjects.length > 0) {
-        const enrollments = selectedSubjects.map((subjectId: string) => ({
-          student_id: studentId,
-          subject_id: subjectId,
-          school_id,
-          created_at: new Date().toISOString(),
-        }))
-
-        const { error: enrollError } = await supabaseAdmin
-          .from('student_subjects')
-          .insert(enrollments)
-
-        if (enrollError) {
-          console.error('⚠️ Subject enrollment warning:', enrollError.message)
-          // Don't fail completely, subjects can be added later
-        }
-      }
-
-      console.log(`✅ Student created (direct insert): ${studentId}`)
-      return NextResponse.json({ student_id: studentId }, { status: 200 })
+    if (insertError) {
+      console.error('❌ Student insert failed:', insertError.message)
+      console.error('⚠️ CRITICAL: Ensure migration has been applied - class_arm_combo_id must be nullable')
+      console.error('⚠️ Run: APPLY_THIS_IN_SUPABASE_NOW.sql in Supabase SQL editor')
+      throw new Error(`Failed to create student: ${insertError.message}`)
     }
 
-    const studentId = studentData?.[0]?.id
+    const studentId = student?.id
+    console.log(`✅ Student created: ${studentId}`)
 
     // Enroll in subjects if provided
     if (selectedSubjects && selectedSubjects.length > 0) {
@@ -118,11 +85,10 @@ export async function POST(request: NextRequest) {
 
       if (enrollError) {
         console.error('⚠️ Subject enrollment warning:', enrollError.message)
-        // Don't fail completely
+        // Don't fail completely, subjects can be added later
       }
     }
 
-    console.log(`✅ Student created (RPC): ${studentId}`)
     return NextResponse.json({ student_id: studentId }, { status: 200 })
   } catch (err: any) {
     console.error('❌ Exception in register-student-direct:', err)
