@@ -4,12 +4,15 @@
 
 BEGIN;
 
--- Drop the existing foreign key constraint
+-- CRITICAL: Drop the existing foreign key constraint FIRST
 ALTER TABLE students DROP CONSTRAINT IF EXISTS students_class_arm_combo_id_fkey;
 
--- Recreate the foreign key as optional (nullable)
--- PostgreSQL does not support MATCH FULL or DEFERRABLE in all versions
--- Simple approach: just recreate the constraint to ensure it exists
+-- CRITICAL: Make the class_arm_combo_id column NULLABLE
+-- This is the essential fix - the column must allow NULL values at the column level
+ALTER TABLE students ALTER COLUMN class_arm_combo_id DROP NOT NULL;
+
+-- Recreate the foreign key constraint as optional
+-- The column is now nullable, so NULL values will be allowed
 ALTER TABLE students
   ADD CONSTRAINT students_class_arm_combo_id_fkey
   FOREIGN KEY (class_arm_combo_id) 

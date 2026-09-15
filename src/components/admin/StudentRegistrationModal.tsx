@@ -261,7 +261,7 @@ export function StudentRegistrationModal({
     try {
       const trimmedEmail = email.trim().toLowerCase()
 
-      // Step 1: Create auth user
+      // Step 1: Create auth user (or get existing user)
       const authResponse = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -284,21 +284,35 @@ export function StudentRegistrationModal({
       const userId = authData.user?.id
       if (!userId) throw new Error('Failed to create auth user')
 
-      // Step 2: Create user record
-      const { error: userError } = await supabase
-        .from('users')
-        .insert({
-          id: userId,
-          school_id: schoolId,
-          email: trimmedEmail,
-          full_name: `${firstName} ${lastName}`,
-          role: 'STUDENT',
-          status: 'ACTIVE',
-          created_at: new Date().toISOString(),
-        })
+      console.log(`Auth user ID: ${userId}, Message: ${authData.user?.message}`)
 
-      if (userError && userError.code !== '23505') {
-        throw new Error(`Failed to create user record: ${userError.message}`)
+      // Step 2: Create or update user record
+      // If user already exists, that's OK - we'll insert if not exists
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', userId)
+        .single()
+
+      if (!existingUser) {
+        // User doesn't exist in database yet, create it
+        const { error: userError } = await supabase
+          .from('users')
+          .insert({
+            id: userId,
+            school_id: schoolId,
+            email: trimmedEmail,
+            full_name: `${firstName} ${lastName}`,
+            role: 'STUDENT',
+            status: 'ACTIVE',
+            created_at: new Date().toISOString(),
+          })
+
+        if (userError && userError.code !== '23505') {
+          throw new Error(`Failed to create user record: ${userError.message}`)
+        }
+      } else {
+        console.log(`User record already exists for ID: ${userId}`)
       }
 
       // Step 3: Auto-generate admission_number (CRITICAL FIX)
@@ -315,14 +329,14 @@ export function StudentRegistrationModal({
 
       console.log(`Generated admission_number: ${admissionNumber}`)
 
-      // Step 3: Create student record with admission_number
-      // For now, class_arm_combo_id is optional - we just need to get students registered
+      // Step 4: Create student record with admission_number
+      // class_arm_combo_id is now optional (nullable) - set to null to bypass FK constraint
       const { data: student, error: studentError } = await supabase
         .from('students')
         .insert({
           user_id: userId,
           school_id: schoolId,
-          class_arm_combo_id: null, // Allow NULL for now to bypass FK constraint
+          class_arm_combo_id: null, // CRITICAL: Now allowed to be NULL after migration 108
           admission_number: admissionNumber, // CRITICAL: Include generated admission_number
           date_of_birth: dateOfBirth,
           created_at: new Date().toISOString(),
@@ -336,7 +350,7 @@ export function StudentRegistrationModal({
 
       const studentId = student?.id
 
-      // Step 4: Enroll in subjects
+      // Step 5: Enroll in subjects
       if (selectedSubjects.length > 0) {
         const enrollments = selectedSubjects.map(subjectId => ({
           student_id: studentId,
