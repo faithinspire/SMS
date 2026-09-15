@@ -114,6 +114,29 @@ export class RegistrationConfigService {
     try {
       console.log(`🔗 Loading class-arm combos for ${schoolId}, section ${section || 'ALL'}`)
 
+      // First, get class IDs for this section if filtering by section
+      let classIdsForSection: string[] | undefined
+
+      if (section) {
+        const { data: classesData, error: classError } = await supabase
+          .from('classes')
+          .select('id')
+          .eq('school_id', schoolId)
+          .eq('type', section)
+
+        if (classError) {
+          console.error('❌ Error loading classes:', classError)
+          throw classError
+        }
+
+        classIdsForSection = (classesData || []).map(c => c.id)
+        
+        if (classIdsForSection.length === 0) {
+          console.log(`ℹ️  No classes found for section ${section}`)
+          return []
+        }
+      }
+
       let query = supabase
         .from('class_arm_combos')
         .select(`
@@ -125,9 +148,9 @@ export class RegistrationConfigService {
         `)
         .eq('school_id', schoolId)
 
-      // Filter by section if provided
-      if (section) {
-        query = query.eq('classes.type', section)
+      // Filter by class IDs if we have them (for section filtering)
+      if (classIdsForSection && classIdsForSection.length > 0) {
+        query = query.in('class_id', classIdsForSection)
       }
 
       // Don't order by nested field - Supabase doesn't support that syntax

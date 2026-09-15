@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
+import { AcademicSessionService } from '@/services/academic-session.service'
+import { ResultAggregationService } from '@/services/result-aggregation.service'
 import { supabase } from '@/lib/supabase-client'
 import toast from 'react-hot-toast'
 
@@ -66,8 +68,23 @@ export default function StudentViewResultsPage() {
     loadData()
   }, [])
 
+  // Load sessions when user is initialized
   useEffect(() => {
-    if (student) {
+    if (user?.school_id) {
+      loadAvailableSessions()
+    }
+  }, [user?.school_id])
+
+  // Load terms when session changes
+  useEffect(() => {
+    if (selectedSession) {
+      loadAvailableTerms()
+    }
+  }, [selectedSession])
+
+  // Load results when term AND session both change
+  useEffect(() => {
+    if (student && selectedTerm && selectedSession) {
       loadResultsByTermSession()
     }
   }, [selectedTerm, selectedSession])
@@ -143,13 +160,67 @@ export default function StudentViewResultsPage() {
     }
   }
 
+  /**
+   * Load available academic sessions for student's school
+   */
+  const loadAvailableSessions = async () => {
+    try {
+      if (!user?.school_id) return
+
+      console.log('[StudentViewResults] Loading sessions...')
+      const sessionsList = await AcademicSessionService.getAcademicSessions(user.school_id)
+      
+      console.log('[StudentViewResults] Loaded sessions:', sessionsList.length)
+      setAvailableSessions(sessionsList)
+      
+      // Auto-select first session if available
+      if (sessionsList.length > 0) {
+        console.log('[StudentViewResults] Auto-selecting session:', sessionsList[0].session_year)
+        setSelectedSession(sessionsList[0].id)
+      }
+    } catch (error) {
+      console.error('[StudentViewResults] Error loading sessions:', error)
+      toast.error('Failed to load academic sessions')
+    }
+  }
+
+  /**
+   * Load available terms for selected session
+   */
+  const loadAvailableTerms = async () => {
+    try {
+      if (!selectedSession) {
+        setAvailableTerms([])
+        return
+      }
+
+      console.log('[StudentViewResults] Loading terms for session:', selectedSession)
+      const termsList = await AcademicSessionService.getTerms(selectedSession)
+      
+      console.log('[StudentViewResults] Loaded terms:', termsList.length)
+      setAvailableTerms(termsList)
+      
+      // Auto-select first term if available
+      if (termsList.length > 0) {
+        console.log('[StudentViewResults] Auto-selecting term:', termsList[0].term_name)
+        setSelectedTerm(termsList[0].term_name)
+      }
+    } catch (error) {
+      console.error('[StudentViewResults] Error loading terms:', error)
+      toast.error('Failed to load academic terms')
+    }
+  }
+
+  /**
+   * Load results for selected term and session, including CBT scores
+   */
   const loadResultsByTermSession = async () => {
     try {
-      if (!student || !user) return
+      if (!student || !user || !selectedTerm || !selectedSession) return
 
       setLoading(true)
 
-      // Load student's results filtered by term and session
+      // Load student's results filtered by term and session (INCLUDES CBT SCORES)
       const { data: resultsData } = await supabase
         .from('result_entries')
         .select(`
@@ -162,6 +233,18 @@ export default function StudentViewResultsPage() {
         .eq('term', selectedTerm)
         .eq('academic_session', selectedSession)
 
+      // Also fetch CBT scores for this student in this session
+      const { data: cbtScoresData } = await supabase
+        .from('cbt_scores')
+        .select('subject_id, score')
+        .eq('student_id', student.id)
+        .eq('academic_session_id', selectedSession)
+
+      const cbtScoresBySubject = (cbtScoresData || []).reduce((acc: any, cbt: any) => {
+        acc[cbt.subject_id] = cbt.score
+        return acc
+      }, {})
+
       const resultsArray: SubjectResult[] = (resultsData || []).map((r: any) => ({
         id: r.id,
         subject_id: r.subject_id,
@@ -172,8 +255,8 @@ export default function StudentViewResultsPage() {
         test3_score: r.test3_score,
         test4_score: r.test4_score,
         test_total: r.test_total || 0,
-        exam_score: r.exam_score,
-        total_score: r.total_score || 0,
+        exam_score: r.exam_score || cbtScoresBySubject[r.subject_id] || 0, // Include CBT score here
+        total_score: (r.total_score || 0) + (cbtScoresBySubject[r.subject_id] || 0),
         grade: r.grade || 'N/A',
         remark: r.remark || '',
         teacher_name: r.teachers?.users?.full_name || 'Unknown Teacher',
@@ -258,28 +341,33 @@ export default function StudentViewResultsPage() {
           <h3 className={`text-lg font-bold ${textClass} mb-4`}>📅 Select Term & Session</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={`block text-sm font-semibold ${textClass} mb-2`}>Term</label>
-              <select
-                value={selectedTerm}
-                onChange={(e) => setSelectedTerm(e.target.value)}
-                className={`w-full px-4 py-2 rounded-lg border ${inputClass} focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-              >
-                <option value="First Term">First Term</option>
-                <option value="Second Term">Second Term</option>
-                <option value="Third Term">Third Term</option>
-              </select>
-            </div>
-
-            <div>
               <label className={`block text-sm font-semibold ${textClass} mb-2`}>Academic Session</label>
               <select
                 value={selectedSession}
                 onChange={(e) => setSelectedSession(e.target.value)}
-                className={`w-full px-4 py-2 rounded-lg border ${inputClass} focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300'} focus:outline-none focus:ring-2 focus:ring-emerald-500`}
               >
+                <option value="">-- Select Session --</option>
                 {availableSessions.map((session) => (
-                  <option key={session} value={session}>
-                    {session}
+                  <option key={session.id} value={session.id}>
+                    {session.session_year}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className={`block text-sm font-semibold ${textClass} mb-2`}>Term</label>
+              <select
+                value={selectedTerm}
+                onChange={(e) => setSelectedTerm(e.target.value)}
+                className={`w-full px-4 py-2 rounded-lg border ${darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300'} focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                disabled={!selectedSession}
+              >
+                <option value="">-- Select Term --</option>
+                {availableTerms.map((term) => (
+                  <option key={term.id} value={term.term_name}>
+                    {term.term_name}
                   </option>
                 ))}
               </select>
