@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     // Fetch academic sessions ordered by start_year DESC (newest first)
     const { data, error } = await supabase
       .from('academic_sessions')
-      .select('id, session_year, start_year, end_year, is_active, created_at')
+      .select('id, session_name, start_year, end_year, is_current, created_at')
       .eq('school_id', schoolId)
       .order('start_year', { ascending: false })
 
@@ -64,19 +64,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate session_year string
+    // Generate session_name string
     const endYearValue = end_year || start_year + 1
-    const session_year = `${start_year}/${endYearValue}`
+    const session_name = `${start_year}/${endYearValue}`
 
     // Create academic session
     const { data: sessionData, error: sessionError } = await supabase
       .from('academic_sessions')
       .insert({
         school_id,
-        session_year,
+        session_name,
         start_year,
         end_year: endYearValue,
-        is_active: is_active || false,
+        is_current: is_active || false,
       })
       .select()
       .single()
@@ -91,16 +91,17 @@ export async function POST(request: NextRequest) {
 
     // Create default terms (First, Second, Third)
     const termsToCreate = [
-      { term_name: 'First Term', term_order: 1 },
-      { term_name: 'Second Term', term_order: 2 },
-      { term_name: 'Third Term', term_order: 3 },
+      { name: 'First Term', sequence: 1 },
+      { name: 'Second Term', sequence: 2 },
+      { name: 'Third Term', sequence: 3 },
     ].map((term) => ({
-      academic_session_id: sessionData.id,
+      session_id: sessionData.id,
+      school_id,
       ...term,
     }))
 
     const { error: termsError } = await supabase
-      .from('academic_terms')
+      .from('terms')
       .insert(termsToCreate)
 
     if (termsError) {
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         session_id: sessionData.id,
-        session_year: sessionData.session_year,
+        session_name: sessionData.session_name,
         terms_auto_created: 3,
       },
       { status: 201 }
