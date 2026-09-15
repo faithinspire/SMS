@@ -11,6 +11,8 @@ interface CBTExam {
   title: string
   subject_id: string
   subject_name?: string
+  teacher_name?: string
+  teacher_email?: string
   class_arm_combo_id: string
   class_name?: string
   duration_minutes: number
@@ -112,7 +114,7 @@ export default function StudentCBTPortal() {
         return
       }
 
-      // Get CBTs for subjects the student is enrolled in (minimal join)
+      // Get CBTs for subjects the student is enrolled in
       const { data: cbtData, error } = await supabase
         .from('cbt_exams')
         .select(`
@@ -132,15 +134,21 @@ export default function StudentCBTPortal() {
         return
       }
 
-      // Get subject and class names in parallel with minimal data
+      // Get subject and class names, PLUS teacher assignments
       const subjectIds2 = [...new Set(cbtData.map(c => c.subject_id))]
       const classIds = [...new Set(cbtData.map(c => c.class_arm_combo_id).filter(id => id))]
 
-      const [{ data: subjects }, { data: combos }, studentResult] = await Promise.all([
+      const [{ data: subjects }, { data: combos }, { data: teachers }, studentResult] = await Promise.all([
         supabase.from('subjects').select('id, name, code').in('id', subjectIds2),
         classIds.length > 0 
           ? supabase.from('class_arm_combos').select('id, classes(name), arms(name)').in('id', classIds)
           : Promise.resolve({ data: [] }),
+        // CRITICAL FIX: Fetch subject teachers
+        supabase
+          .from('subject_teacher_assignments')
+          .select('subject_id, users!inner(id, full_name, email)')
+          .eq('school_id', schoolId)
+          .in('subject_id', subjectIds2),
         supabase.from('students').select('id').eq('user_id', user?.id || '').maybeSingle(),
       ])
 
@@ -155,9 +163,19 @@ export default function StudentCBTPortal() {
         submissions = subs || []
       }
 
-      // Format CBTs with status
+      // Format CBTs with status AND teacher information
       const subjectMap = Object.fromEntries(subjects?.map(s => [s.id, s.name]) || [])
       const comboMap = Object.fromEntries(combos?.map(c => [c.id, c]) || [])
+      
+      // CRITICAL FIX: Build teacher map from assignments
+      const teacherMap = new Map<string, any>()
+      if (teachers && teachers.length > 0) {
+        teachers.forEach((assignment: any) => {
+          if (assignment.users) {
+            teacherMap.set(assignment.subject_id, assignment.users)
+          }
+        })
+      }
 
       const formattedCBTs = (cbtData || []).map((cbt: any) => {
         const now = new Date()
@@ -181,10 +199,16 @@ export default function StudentCBTPortal() {
           }
         }
 
+        // CRITICAL FIX: Get teacher name for this subject
+        const teacher = teacherMap.get(cbt.subject_id)
+        const teacherName = teacher?.full_name || 'Not assigned'
+
         return {
           ...cbt,
           subject_name: subjectMap[cbt.subject_id],
           class_name: className,
+          teacher_name: teacherName,
+          teacher_email: teacher?.email,
           status,
           submission,
         }
@@ -334,6 +358,7 @@ export default function StudentCBTPortal() {
                           </div>
                           <p className="text-gray-600">{cbt.subject_name}</p>
                           <p className="text-sm text-gray-500">{cbt.class_name}</p>
+                          <p className="text-sm text-blue-600 font-semibold mt-1">👨‍🏫 Teacher: {cbt.teacher_name}</p>
                         </div>
                       </div>
 

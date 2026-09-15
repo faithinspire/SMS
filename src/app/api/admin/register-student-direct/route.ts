@@ -70,8 +70,10 @@ export async function POST(request: NextRequest) {
     const studentId = student?.id
     console.log(`✅ Student created: ${studentId}`)
 
-    // Enroll in subjects if provided
+    // Enroll in subjects if provided (CRITICAL FIX)
     if (selectedSubjects && selectedSubjects.length > 0) {
+      console.log(`📚 Enrolling student in ${selectedSubjects.length} subjects...`)
+      
       const enrollments = selectedSubjects.map((subjectId: string) => ({
         student_id: studentId,
         subject_id: subjectId,
@@ -79,17 +81,27 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString(),
       }))
 
-      const { error: enrollError } = await supabaseAdmin
+      const { data: enrollData, error: enrollError } = await supabaseAdmin
         .from('student_subjects')
         .insert(enrollments)
+        .select('id')
 
       if (enrollError) {
-        console.error('⚠️ Subject enrollment warning:', enrollError.message)
-        // Don't fail completely, subjects can be added later
+        console.error('❌ Subject enrollment FAILED:', enrollError.message)
+        console.error('❌ Subjects to enroll:', selectedSubjects)
+        console.error('❌ Enrollment payload:', enrollments)
+        throw new Error(`Failed to enroll subjects: ${enrollError.message}`)
       }
+
+      console.log(`✅ Enrolled in ${enrollData?.length || selectedSubjects.length} subjects`)
+    } else {
+      console.warn('⚠️ No subjects provided during registration')
     }
 
-    return NextResponse.json({ student_id: studentId }, { status: 200 })
+    return NextResponse.json({ 
+      student_id: studentId,
+      subjects_enrolled: selectedSubjects?.length || 0,
+    }, { status: 200 })
   } catch (err: any) {
     console.error('❌ Exception in register-student-direct:', err)
     return NextResponse.json(
