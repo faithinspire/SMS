@@ -1,11 +1,10 @@
 /**
  * POST /api/auth/register
- * Backend auth registration route to avoid rate limiting
+ * Backend auth registration route - uses service role key to bypass RLS
  * Creates user in Supabase Auth
  */
 
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -36,11 +35,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create Supabase client on server
-    const supabase = createServerComponentClient({ cookies })
+    // Get credentials - SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_ROLE_KEY
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    // Try to create auth user (if already exists, auth will return error)
-    const { data, error } = await supabase.auth.admin.createUser({
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      console.error('❌ Missing Supabase credentials:', {
+        url: !!supabaseUrl,
+        key: !!supabaseServiceRoleKey,
+      })
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      )
+    }
+
+    // Create service role client (admin access, bypasses RLS)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+
+    console.log(`📝 Attempting to create user: ${email}`)
+
+    // Try to create auth user
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
@@ -52,36 +73,39 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // If user already exists (error code 422), that's OK
-    if (error && error.message?.includes('already exists')) {
-      console.log('ℹ️  User already exists, proceeding...')
+    // If user already exists, that's OK
+    if (error && (error.message?.includes('already exists') || error.message?.includes('User already registered'))) {
+      console.log(`ℹ️  User already exists: ${email}`)
       
-      // Get the existing user
-      const { data: { user: existingUser } } = await supabase.auth.getUser()
+      // Try to get the existing user
+      const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers()
       
-      if (existingUser) {
-        return NextResponse.json(
-          {
-            user: {
-              id: existingUser.id,
-              email: existingUser.email,
-              message: 'User already exists'
-            }
-          },
-          { status: 200 }
-        )
+      if (!listError && users) {
+        const existingUser = users.find((u: any) => u.email === email)
+        if (existingUser) {
+          return NextResponse.json(
+            {
+              user: {
+                id: existingUser.id,
+                email: existingUser.email,
+                message: 'User already exists'
+              }
+            },
+            { status: 200 }
+          )
+        }
       }
     }
 
     if (error) {
-      console.error('❌ Auth registration error:', error)
+      console.error('❌ Auth registration error:', error.message)
       return NextResponse.json(
-        { error: error.message || 'Failed to create auth user' },
+        { error: `Registration failed: ${error.message}` },
         { status: 400 }
       )
     }
 
-    console.log('✅ Auth user created:', data.user?.id)
+    console.log(`✅ Auth user created: ${data.user?.id}`)
 
     return NextResponse.json(
       {
