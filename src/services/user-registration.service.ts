@@ -362,9 +362,11 @@ export class UserRegistrationService {
             .insert(subjectRegistrations)
 
           if (subjectRegError) {
-            console.warn('⚠️ Subject registration warning:', subjectRegError)
+            console.error('❌ CRITICAL: Subject registration failed:', subjectRegError)
+            console.error('❌ Subject registrations:', subjectRegistrations)
+            throw new Error(`Failed to enroll subjects: ${subjectRegError.message}`)
           } else {
-            console.log('✅ Student registered for subjects')
+            console.log(`✅ Successfully enrolled student in ${subjectRegistrations.length} subjects`)
           }
         }
       }

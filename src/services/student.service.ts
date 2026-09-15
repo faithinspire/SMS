@@ -140,7 +140,7 @@ export class StudentService {
         console.log('✅ Student assigned to class teacher:', classComboForTeacher.class_teacher_id)
       }
 
-      // Link student to subjects
+      // Link student to subjects (CRITICAL - MUST SUCCEED)
       if (subjectIds && subjectIds.length > 0) {
         const studentSubjectRecords = subjectIds.map(subjectId => ({
           student_id: student.id,
@@ -149,15 +149,22 @@ export class StudentService {
           created_at: new Date().toISOString(),
         }))
 
-        const { error: subjectError } = await supabase
+        console.log(`📚 Enrolling student in ${subjectIds.length} subjects:`, subjectIds)
+
+        const { data: enrolledSubjects, error: subjectError } = await supabase
           .from('student_subjects')
           .insert(studentSubjectRecords)
+          .select('id, student_id, subject_id')
 
         if (subjectError) {
-          console.warn('⚠️ Could not link subjects:', subjectError)
-        } else {
-          console.log('✅ Linked student to subjects')
+          console.error('❌ CRITICAL: Subject enrollment failed:', subjectError)
+          console.error('❌ Subject records:', studentSubjectRecords)
+          throw new Error(`Failed to enroll subjects: ${subjectError.message}`)
         }
+
+        console.log(`✅ Successfully enrolled in ${enrolledSubjects?.length || subjectIds.length} subjects`)
+      } else {
+        console.warn('⚠️ No subjects provided for enrollment')
       }
 
       // Create guardian record
