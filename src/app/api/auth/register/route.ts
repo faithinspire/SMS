@@ -39,24 +39,7 @@ export async function POST(request: NextRequest) {
     // Create Supabase client on server
     const supabase = createServerComponentClient({ cookies })
 
-    // Check if user already exists
-    const { data: existingUser } = await supabase.auth.admin.getUserByEmail(email)
-    
-    if (existingUser) {
-      // User already exists - this is OK, return existing user
-      return NextResponse.json(
-        {
-          user: {
-            id: existingUser.id,
-            email: existingUser.email,
-            message: 'User already exists'
-          }
-        },
-        { status: 200 }
-      )
-    }
-
-    // Create new auth user
+    // Try to create auth user (if already exists, auth will return error)
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -68,6 +51,27 @@ export async function POST(request: NextRequest) {
         user_type,
       },
     })
+
+    // If user already exists (error code 422), that's OK
+    if (error && error.message?.includes('already exists')) {
+      console.log('ℹ️  User already exists, proceeding...')
+      
+      // Get the existing user
+      const { data: { user: existingUser } } = await supabase.auth.getUser()
+      
+      if (existingUser) {
+        return NextResponse.json(
+          {
+            user: {
+              id: existingUser.id,
+              email: existingUser.email,
+              message: 'User already exists'
+            }
+          },
+          { status: 200 }
+        )
+      }
+    }
 
     if (error) {
       console.error('❌ Auth registration error:', error)
