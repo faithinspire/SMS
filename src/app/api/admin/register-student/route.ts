@@ -67,6 +67,22 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // GENERATE ADMISSION NUMBER (required field)
+    // Format: SCHOOL_CLASS_SEQUENCE (e.g., "SMS-JSS1-001")
+    const { data: existingStudents, error: countError } = await supabase
+      .from('students')
+      .select('admission_number', { count: 'exact' })
+      .eq('school_id', school_id)
+      .eq('class_arm_combo_id', class_arm_combo_id)
+    
+    let admissionNumber = 'STU-' + Date.now().toString().slice(-6)
+    if (!countError && existingStudents) {
+      const count = (existingStudents.length || 0) + 1
+      admissionNumber = `STU${count.toString().padStart(6, '0')}`
+    }
+
+    console.log(`📝 Generated admission number: ${admissionNumber}`)
+
     // Create student record
     // The class_arm_combo_id links student to their class and arm
     const { data: student, error: studentError } = await supabase
@@ -75,6 +91,7 @@ export async function PUT(request: NextRequest) {
         user_id,
         school_id,
         class_arm_combo_id,
+        admission_number: admissionNumber,
         created_at: new Date().toISOString(),
       })
       .select('id')
@@ -123,13 +140,14 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    console.log('✅ Student registered:', student_id)
+    console.log('✅ Student registered:', student_id, 'Admission:', admissionNumber)
 
     return NextResponse.json(
       {
         success: true,
         message: 'Student registered successfully',
         student_id,
+        admission_number: admissionNumber,
         subjects_enrolled: subjects?.length || 0,
       },
       { status: 200 }
