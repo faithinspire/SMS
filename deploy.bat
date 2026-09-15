@@ -1,34 +1,47 @@
 @echo off
-REM Deployment script for FTECH SMS
+cd /d c:\Users\OLU\Desktop\SMS
 
 echo ========================================
-echo FTECH SMS - Production Deployment
+echo Force Deploying to Vercel
 echo ========================================
-echo.
-
-cd /d "c:\Users\OLU\Desktop\SMS"
-
-echo [1/4] Checking git status...
-git status
 
 echo.
-echo [2/4] Adding all changes...
+echo Step 1: Stage all changes
 git add -A
+if errorlevel 1 (
+    echo ERROR: git add failed
+    pause
+    exit /b 1
+)
 
 echo.
-echo [3/4] Committing changes...
-git commit -m "Production fixes: school persistence, staff payments, admission letters, school fees - FINAL DEPLOYMENT"
+echo Step 2: Commit changes
+git commit -m "fix: teacher registration nested field queries and student results auto-loading"
+if errorlevel 1 (
+    echo ERROR: git commit failed
+    echo Trying with --allow-empty flag
+    git commit -m "fix: teacher registration nested field queries" --allow-empty
+)
 
 echo.
-echo [4/4] Pushing to GitHub...
-git push origin main
+echo Step 3: Force push to GitHub
+git push -f origin main
+if errorlevel 1 (
+    echo ERROR: git push failed
+    echo Trying normal push
+    git push origin main
+)
 
 echo.
 echo ========================================
-echo Deployment Complete!
+echo Deploy Initiated!
 echo ========================================
 echo.
-echo Vercel will automatically deploy the latest changes.
-echo Monitor deployment at: https://vercel.com/faithinspire
+echo What to do next:
+echo 1. Wait 5-10 minutes for Vercel to build
+echo 2. Check https://vercel.com/dashboard
+echo 3. Hard refresh browser: Ctrl+Shift+R
+echo 4. Test teacher registration Step 4
+echo 5. Test student results page
 echo.
 pause
