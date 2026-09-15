@@ -8,15 +8,12 @@ BEGIN;
 ALTER TABLE students DROP CONSTRAINT IF EXISTS students_class_arm_combo_id_fkey;
 
 -- Recreate the foreign key as optional (nullable)
--- Note: class_arm_combo_id is already nullable in the table definition
--- This just clarifies the constraint allows NULL values
-
+-- PostgreSQL does not support MATCH FULL or DEFERRABLE in all versions
+-- Simple approach: just recreate the constraint to ensure it exists
 ALTER TABLE students
   ADD CONSTRAINT students_class_arm_combo_id_fkey
   FOREIGN KEY (class_arm_combo_id) 
   REFERENCES class_arm_combos(id) 
-  ON DELETE RESTRICT
-  MATCH FULL
-  DEFERRABLE INITIALLY DEFERRED;
+  ON DELETE RESTRICT;
 
 COMMIT;
