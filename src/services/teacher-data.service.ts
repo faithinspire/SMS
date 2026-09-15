@@ -462,18 +462,28 @@ export class TeacherDataService {
         userMap.set(u.id, u.full_name)
       })
 
-      // Step 4: Get class info for each student
-      const classComboIds = (studentData as any[]).map(
-        (s) => s.class_arm_combo_id
-      )
-      const { data: classComboData, error: classComboError } = await supabase
-        .from('class_arm_combos')
-        .select(`
-          id,
-          classes (name, level),
-          arms (name)
-        `)
-        .in('id', classComboIds)
+      // Step 4: Get class info for each student (filter out nulls)
+      const classComboIds = (studentData as any[])
+        .map((s) => s.class_arm_combo_id)
+        .filter((id) => id && id !== 'null') // CRITICAL: Filter out nulls
+
+      // Only query if we have valid IDs
+      let classComboData: any[] = []
+      let classComboError: any = null
+
+      if (classComboIds.length > 0) {
+        const result = await supabase
+          .from('class_arm_combos')
+          .select(`
+            id,
+            classes (name, level),
+            arms (name)
+          `)
+          .in('id', classComboIds)
+
+        classComboData = result.data || []
+        classComboError = result.error
+      }
 
       if (classComboError) {
         throw new Error(`Class combos query failed: ${classComboError.message}`)
