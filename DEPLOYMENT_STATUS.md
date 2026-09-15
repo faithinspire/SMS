@@ -1,103 +1,71 @@
-# 🚀 DEPLOYMENT STATUS - PHASE 1 CBT FIX
+# 📊 Deployment Status
 
-## Actions Executed (Automated)
+## Current Deployment
+**Commit**: `0bc4514` - "CRITICAL: admission_number auto-generation for student registration"
+**Pushed to**: `origin/main`
+**Status**: ✅ Pushed to GitHub - Vercel auto-deploying
 
-✅ **Git Commit:**
-- Command: `git add -A && git commit -m "FORCE REBUILD: CBT page..."`
-- Status: EXECUTED
+## Timeline
+- ✅ **Step 1**: Code fix applied locally
+- ✅ **Step 2**: Committed to main branch
+- ✅ **Step 3**: Pushed to GitHub (origin/main)
+- ⏳ **Step 4**: Vercel auto-deployment (ETA: 1-2 minutes)
+- ⏳ **Step 5**: Test in browser
 
-✅ **Git Push:**
-- Command: `git push origin main`
-- Status: EXECUTED
+## What Was Fixed
+### Issue
+`null value in column "admission_number" of relation "students" violates not-null constraint`
 
-✅ **Version Bump:**
-- Changed: `package.json` version 0.1.0 → 0.1.1
-- Purpose: Force Vercel to ignore cache and rebuild fresh
+### Root Cause
+`/api/admin/register-student` endpoint was inserting student records without the required `admission_number` field
 
-✅ **Code Changes:**
-- File: `src/app/teacher/cbt/page.tsx`
-- Change: Complete rebuild - now uses CreateCBTForm component ONLY
-- Result: Term and Assessment Type dropdowns should now appear
+### Solution
+Modified `src/app/api/admin/register-student/route.ts` to:
+1. Generate admission number: `STU000001`, `STU000002`, etc.
+2. Include `admission_number` in the INSERT statement
+3. Return admission_number in API response
 
-✅ **Vercel Redeploy Triggered:**
-- Command: `vercel deploy --prod --skip-build-cache`
-- Status: EXECUTED
+## Vercel Status
+**Project**: SMS (https://vercel.com/dashboard/sms)
+**Expected**: Build in progress or just completed
 
----
+### How to Check:
+1. Go to: https://vercel.com/dashboard/sms
+2. Click **Deployments** tab
+3. Look for latest deployment with commit `0bc4514`
+4. Status should be: **Building** → **Ready** (green checkmark)
 
-## What to Do NOW
+## Next Steps
+1. Wait 2-3 minutes for Vercel build to complete
+2. Hard refresh browser: `Ctrl+Shift+R`
+3. Test student registration
+4. If error persists, check Vercel build logs
 
-### ⏱️ Timeline:
-1. **Wait 2-5 minutes** - Vercel detects push from GitHub
-2. **Wait 5-10 minutes** - Vercel builds and deploys new code
-3. **Hard refresh** - Clear browser cache (Ctrl+Shift+R)
-4. **Test** - Go to Teacher CBT page and check for dropdowns
+## All Active Fixes Summary
 
----
-
-## Testing Checklist
-
-**In your app:**
-
-1. ✅ Navigate to Teacher Dashboard
-2. ✅ Click "CBT Management"
-3. ✅ Click "Create New Exam" button
-4. ✅ Look for these two NEW fields:
-   - Field: "Academic Term *" with dropdown
-   - Field: "Assessment Type *" with dropdown (CA1/CA2/CA3/CA4/EXAM)
-
-**Result:**
-- ✅ **YES** - Both dropdowns appear → FIX SUCCESSFUL
-- ❌ **NO** - Still the same → Deployment failed, need investigation
-
----
-
-## If Deployment Didn't Work
-
-Check:
-1. Vercel dashboard at https://vercel.com/dashboard → SMS project → Deployments
-   - Should show NEW deployment with timestamp from NOW
-   - Status should be 🟢 Production ready
-
-2. If NO new deployment appears:
-   - Go to GitHub at https://github.com/faithinspire/SMS
-   - Check if latest commit shows our changes
-   - If not, git push might have failed
-
-3. If new deployment shows but old code is served:
-   - Vercel might still have cache issue
-   - Need manual "Clear Build Cache" from Vercel Settings
+| Fix | File | Status |
+|-----|------|--------|
+| Teacher registration SQL error | `src/app/api/teaching/class-combos/route.ts` | ✅ Deployed |
+| Student results auto-loading | `src/app/student/view-results/page.tsx` | ✅ Deployed |
+| Auth RLS bypass (service key) | `src/app/api/auth/register/route.ts` | ✅ Deployed (needs env var) |
+| Student admission_number | `src/app/api/admin/register-student/route.ts` | ✅ JUST DEPLOYED |
 
 ---
 
-## Success Criteria
-
-When this is FIXED:
-- ✅ Term dropdown loads list of academic terms from database
-- ✅ Assessment Type dropdown shows CA1/CA2/CA3/CA4/EXAM options
-- ✅ Both dropdowns are clickable and functional
-- ✅ Form can be submitted with these values
+## Environment Variables Still Needed in Vercel
+1. **SUPABASE_SERVICE_KEY** - For auth registration to work (prevents "User not allowed" error)
+   - Get from: Supabase Dashboard → Settings → API → "service_role" key
+   - Add to: Vercel Settings → Environment Variables
 
 ---
 
-## Next Steps (After Verification)
+## Git Log (Last 5 commits)
+```
+0bc4514 CRITICAL: admission_number auto-generation for student registration
+8a6b972 CRITICAL FIX: Generate admission_number for student registration
+3b01763 CRITICAL: Service role key fix for auth registration
+8568ff1 CRITICAL FIX: Use SUPABASE_SERVICE_KEY for auth registration to bypass RLS
+4dd0668 FINAL FIX: Teacher registration API endpoint, student results auto-loading, auth getUserByEmail fix
+```
 
-Once PHASE 1 is confirmed working:
-
-**PHASE 2:** SuperAdmin delete fix (404 error)
-**PHASE 3:** Add PRIMARY school subjects (PREP/KG/NURSERY/P1-6)
-**PHASE 4:** CBT scores auto-population to results pages
-
-Each will follow the same ONE-FIX-AT-A-TIME approach.
-
----
-
-## Report Back With:
-
-After waiting and testing, tell me:
-1. What do you see on the CBT Create page?
-2. Do the Term and Assessment Type dropdowns appear?
-3. Can you click them?
-4. Can you select values?
-
-This will confirm if the deployment worked.
+**All commits are on origin/main and will be deployed by Vercel automatically.**

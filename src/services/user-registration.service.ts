@@ -20,7 +20,7 @@ export interface StudentRegistrationData {
   password: string
   full_name: string
   school_id: string
-  admission_number: string
+  admission_number?: string // Optional - auto-generated if not provided
   class_arm_combo_id: string
   subject_ids?: string[]
   photo_url?: string
@@ -202,10 +202,47 @@ export class UserRegistrationService {
       // Normalize email
       const normalizedEmail = data.email.trim().toLowerCase()
 
+      // ✅ AUTO-GENERATE admission_number if not provided
+      let admissionNumber = data.admission_number
+      if (!admissionNumber) {
+        console.log('📝 admission_number not provided, auto-generating...')
+        
+        // Get class info for admission number prefix
+        const { data: classCombo, error: classError } = await supabase
+          .from('class_arm_combos')
+          .select('classes(name)')
+          .eq('id', data.class_arm_combo_id)
+          .single()
+
+        if (classError || !classCombo) {
+          console.warn('⚠️ Could not fetch class info for admission number generation')
+        }
+
+        const year = new Date().getFullYear()
+        const classPrefix = (classCombo?.classes as any)?.name?.substring(0, 3).toUpperCase().replace(/\s+/g, '') || 'STU'
+        
+        // Get count of existing students in this school
+        const { data: existingStudents, error: countError } = await supabase
+          .from('students')
+          .select('id', { count: 'exact' })
+          .eq('school_id', data.school_id)
+
+        if (countError) {
+          console.warn('⚠️ Could not count existing students, using timestamp-based sequence')
+          const timestamp = Date.now().toString().slice(-6)
+          admissionNumber = `${classPrefix}-${timestamp}`
+        } else {
+          const sequence = ((existingStudents?.length || 0) + 1).toString().padStart(4, '0')
+          admissionNumber = `${year}-${classPrefix}-${sequence}`
+        }
+
+        console.log(`✅ Generated admission_number: ${admissionNumber}`)
+      }
+
       console.log('📝 Registering student:', {
         email: normalizedEmail,
         name: data.full_name,
-        admission: data.admission_number,
+        admission: admissionNumber,
       })
 
       // Use server-side API to register (bypasses client-side auth restrictions)
@@ -258,13 +295,13 @@ export class UserRegistrationService {
         console.log('✅ Database user created:', dbUser.id)
       }
 
-      // Create student record
+      // Create student record with guaranteed admission_number
       const { data: studentRecord, error: studentError } = await supabase
         .from('students')
         .insert({
           user_id: authUser.id,
           school_id: data.school_id,
-          admission_number: data.admission_number,
+          admission_number: admissionNumber,  // ✅ GUARANTEED TO BE SET
           class_arm_combo_id: data.class_arm_combo_id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -274,6 +311,7 @@ export class UserRegistrationService {
 
       if (studentError) {
         console.error('❌ Student record creation error:', studentError)
+        throw new Error(`Failed to create student record: ${studentError.message}`)
       } else {
         console.log('✅ Student record created:', studentRecord.id)
 
@@ -293,8 +331,7 @@ export class UserRegistrationService {
         if (data.subject_ids && data.subject_ids.length > 0) {
           console.log('📚 Registering for subjects:', data.subject_ids)
 
-          // BLOCKER 1 FIX: Populate subject_teacher_id for each subject
-          // Query: which teacher teaches each subject in this student's class?
+          // Populate subject_teacher_id for each subject
           const subjectRegistrations = await Promise.all(
             data.subject_ids.map(async (subjectId) => {
               // Find the teacher assigned to teach this subject in this class
@@ -314,7 +351,7 @@ export class UserRegistrationService {
                 student_id: studentRecord.id,
                 subject_id: subjectId,
                 school_id: data.school_id,
-                subject_teacher_id: teacherAssignment?.teacher_id || null, // ✅ NOW POPULATED
+                subject_teacher_id: teacherAssignment?.teacher_id || null,
                 created_at: new Date().toISOString(),
               }
             })
@@ -328,11 +365,6 @@ export class UserRegistrationService {
             console.warn('⚠️ Subject registration warning:', subjectRegError)
           } else {
             console.log('✅ Student registered for subjects')
-            console.log('✅ Subject teachers linked to each student subject via teacher_id')
-            console.log('📊 Subject-teacher assignments:', subjectRegistrations.map(sr => ({
-              subject_id: sr.subject_id,
-              teacher_id: sr.subject_teacher_id,
-            })))
           }
         }
       }
