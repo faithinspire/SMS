@@ -77,6 +77,7 @@ export default function StudentDetailPage() {
         .single()
 
       if (studentError || !student) {
+        console.error('[StudentDetail] Student not found:', studentError)
         toast.error('Student not found')
         return
       }
@@ -91,6 +92,7 @@ export default function StudentDetailPage() {
         .single()
 
       if (!session) {
+        console.error('[StudentDetail] No academic session found')
         toast.error('No academic session found')
         return
       }
@@ -104,24 +106,84 @@ export default function StudentDetailPage() {
         .single()
 
       if (!term) {
+        console.error('[StudentDetail] No term found')
         toast.error('No term found')
         return
       }
 
       setTermId(term.id)
+      console.log('[StudentDetail] Using term:', term.id)
 
-      // Load result
-      const studentResult = await ResultAggregationService.getStudentResult(schoolId, studId, term.id)
+      // ===== NEW: Call the new dedicated results API instead =====
+      console.log('[StudentDetail] Calling results API with:', {
+        studentId: studId,
+        schoolId,
+        termId: term.id,
+      })
 
-      console.log('[StudentDetail] Result loaded:', studentResult)
+      const apiUrl = `/api/results/student/${studId}?schoolId=${schoolId}&termId=${term.id}`
+      console.log('[StudentDetail] API URL:', apiUrl)
 
-      if (studentResult) {
-        console.log('[StudentDetail] Setting result with subjects:', studentResult.subjects?.length || 0)
-        setResult(studentResult)
-      } else {
-        console.warn('[StudentDetail] No result returned from service')
-        toast.warning('No scores found for this student yet. Ask teacher to enter scores.')
+      const apiResponse = await fetch(apiUrl)
+      const apiData = await apiResponse.json()
+
+      console.log('[StudentDetail] API Response:', apiData)
+
+      if (!apiResponse.ok) {
+        console.error('[StudentDetail] API Error:', apiData)
+        toast.error('Failed to fetch scores')
+        return
       }
+
+      if (!apiData.subjects || apiData.subjects.length === 0) {
+        console.warn('[StudentDetail] No scores found')
+        
+        // Create empty result structure so subjects still display
+        const emptyResult: StudentResult = {
+          student_id: studId,
+          student_name: student.user_id ? 'Loading...' : 'Unknown',
+          admission_number: student.admission_number,
+          session_year: '2025/2026',
+          term_name: 'First Term',
+          subjects: [],
+          overall_score: 0,
+          overall_grade: 'N/A',
+          status: 'INCOMPLETE',
+        }
+        setResult(emptyResult)
+        toast.info('No scores entered yet for this student')
+        return
+      }
+
+      // Get student name
+      let studentName = 'Unknown'
+      if (student.user_id) {
+        const { data: user } = await supabase
+          .from('users')
+          .select('full_name')
+          .eq('id', student.user_id)
+          .single()
+        
+        if (user) {
+          studentName = user.full_name
+        }
+      }
+
+      // Format the result
+      const formattedResult: StudentResult = {
+        student_id: studId,
+        student_name: studentName,
+        admission_number: student.admission_number,
+        session_year: '2025/2026',
+        term_name: 'First Term',
+        subjects: apiData.subjects || [],
+        overall_score: apiData.overall_score || 0,
+        overall_grade: apiData.overall_grade || 'N/A',
+        status: (apiData.overall_score || 0) > 0 ? 'PASS' : 'INCOMPLETE',
+      }
+
+      console.log('[StudentDetail] Formatted result:', formattedResult)
+      setResult(formattedResult)
 
       // Load comment
       await loadComment(schoolId, studId, term.id)
@@ -438,31 +500,39 @@ ${comment ? `\nTeacher Comment:\n${comment}` : ''}
                 </thead>
                 <tbody>
                   {result.subjects.map((subject, idx) => {
-                    const isIncomplete = subject.ca1 === null && subject.ca2 === null && subject.ca3 === null && subject.ca4 === null && subject.exam === null
+                    // Check if any score is present (test1, test2, test3, test4, or exam)
+                    const hasAnyScore = 
+                      (subject.test1 !== null && subject.test1 !== undefined) ||
+                      (subject.test2 !== null && subject.test2 !== undefined) ||
+                      (subject.test3 !== null && subject.test3 !== undefined) ||
+                      (subject.test4 !== null && subject.test4 !== undefined) ||
+                      (subject.exam !== null && subject.exam !== undefined)
+                    
+                    const isIncomplete = !hasAnyScore
                     
                     return (
-                      <tr key={idx} className={`border-b hover:bg-gray-50 ${isIncomplete ? 'bg-red-50' : ''}`}>
+                      <tr key={idx} className={`border-b hover:bg-gray-50 ${isIncomplete ? 'bg-yellow-50' : ''}`}>
                         <td className="px-4 py-3 font-semibold text-gray-800">{subject.subject_name}</td>
                         <td className="px-4 py-3 text-center text-gray-700">
-                          {subject.ca1 !== null && subject.ca1 !== undefined ? subject.ca1.toFixed(1) : '-'}
+                          {subject.test1 !== null && subject.test1 !== undefined ? subject.test1.toFixed(1) : '-'}
                         </td>
                         <td className="px-4 py-3 text-center text-gray-700">
-                          {subject.ca2 !== null && subject.ca2 !== undefined ? subject.ca2.toFixed(1) : '-'}
+                          {subject.test2 !== null && subject.test2 !== undefined ? subject.test2.toFixed(1) : '-'}
                         </td>
                         <td className="px-4 py-3 text-center text-gray-700">
-                          {subject.ca3 !== null && subject.ca3 !== undefined ? subject.ca3.toFixed(1) : '-'}
+                          {subject.test3 !== null && subject.test3 !== undefined ? subject.test3.toFixed(1) : '-'}
                         </td>
                         <td className="px-4 py-3 text-center text-gray-700">
-                          {subject.ca4 !== null && subject.ca4 !== undefined ? subject.ca4.toFixed(1) : '-'}
+                          {subject.test4 !== null && subject.test4 !== undefined ? subject.test4.toFixed(1) : '-'}
                         </td>
                         <td className="px-4 py-3 text-center text-gray-700">
                           {subject.exam !== null && subject.exam !== undefined ? subject.exam.toFixed(1) : '-'}
                         </td>
-                        <td className={`px-4 py-3 text-center font-bold ${isIncomplete ? 'text-red-600' : 'text-indigo-600'}`}>
-                          {subject.total > 0 ? subject.total.toFixed(1) : '-'}
+                        <td className={`px-4 py-3 text-center font-bold ${isIncomplete ? 'text-yellow-600' : 'text-indigo-600'}`}>
+                          {subject.total !== null && subject.total !== undefined && subject.total > 0 ? subject.total.toFixed(1) : '-'}
                         </td>
-                        <td className={`px-4 py-3 text-center font-bold ${isIncomplete ? 'text-red-600' : 'text-indigo-600'}`}>
-                          {isIncomplete ? '⏳ Pending' : subject.grade}
+                        <td className={`px-4 py-3 text-center font-bold ${isIncomplete ? 'text-yellow-600' : 'text-green-600'}`}>
+                          {isIncomplete ? '⏳ Pending' : (subject.grade || 'N/A')}
                         </td>
                       </tr>
                     )
