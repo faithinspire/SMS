@@ -156,7 +156,8 @@ export default function StudentDetailPage() {
           status: 'INCOMPLETE',
         }
         setResult(emptyResult)
-        toast.info('No scores entered yet for this student')
+        // Don't call toast.info - use console.warn instead
+        console.warn('[StudentDetail] Student not enrolled in any subjects for this term')
         return
       }
 

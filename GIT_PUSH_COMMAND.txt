@@ -1,0 +1,25 @@
+COPY AND PASTE THIS ENTIRE LINE INTO YOUR TERMINAL:
+
+cd c:\Users\OLU\Desktop\SMS && git add . && git commit -m "FIX: All dashboards display scores from scoresheet automatically - Fixed teacher results page field mapping (ca1-ca4 to test1-test4) - Updated principal dashboard to query score_sheets via new class-summary API - Updated headteacher dashboard to query score_sheets via new class-summary API - Created /api/results/class-summary/[classId] endpoint for class aggregation - All dashboards now show real-time scores automatically from scoresheet table" && git push origin main
+
+---
+
+OR RUN THESE COMMANDS ONE BY ONE:
+
+1. cd c:\Users\OLU\Desktop\SMS
+
+2. git add .
+
+3. git commit -m "FIX: All dashboards display scores from scoresheet automatically - Fixed teacher results page field mapping - Updated principal dashboard - Updated headteacher dashboard - Created class summary API - All real-time"
+
+4. git push origin main
+
+---
+
+AFTER PUSHING:
+1. Go to https://vercel.com/dashboard
+2. Select your SMS project
+3. Wait for deployment (should say "Ready" in ~5 minutes)
+4. Test in browser
+
+Done! All dashboards will now display scores automatically.

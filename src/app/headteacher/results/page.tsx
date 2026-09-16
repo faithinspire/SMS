@@ -74,55 +74,53 @@ export default function HeadteacherResultsPage() {
         // Get results for each class
         const classResults: ClassResult[] = []
 
+        // Get current term
+        const { data: sessionData } = await supabase
+          .from('academic_sessions')
+          .select('id')
+          .eq('school_id', currentUser.school_id)
+          .eq('is_active', true)
+          .limit(1)
+          .single()
+
+        const { data: termData } = await supabase
+          .from('academic_terms')
+          .select('id')
+          .eq('session_id', sessionData?.id)
+          .eq('is_active', true)
+          .limit(1)
+          .single()
+
+        const termId = termData?.id
+
         for (const classCombo of primaryClasses) {
           const className = classCombo.classes?.name || 'Class'
           const armName = classCombo.arms?.name || ''
           const fullName = armName ? `${className} ${armName}` : className
 
-          // Get students in this class
-          const { data: studentsData } = await supabase
-            .from('students')
-            .select('id, full_name, admission_number, class_arm_combo_id')
-            .eq('class_arm_combo_id', classCombo.id)
+          try {
+            // Call new class summary API instead of old result_entries
+            const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${currentUser.school_id}&termId=${termId}`
+            const response = await fetch(apiUrl)
+            const data = await response.json()
 
-          // Get results for these students
-          const studentResults: StudentResult[] = []
+            const studentResults: StudentResult[] = data.students || []
 
-          for (const student of studentsData || []) {
-            // Get average score from result_entries
-            const { data: resultsData } = await supabase
-              .from('result_entries')
-              .select('score')
-              .eq('student_id', student.id)
-
-            const scores = resultsData?.map(r => r.score).filter(s => s !== null) || []
-            const avgScore = scores.length > 0 
-              ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
-              : 0
-
-            // Determine performance rating
-            let rating = 'Fair'
-            if (avgScore >= 85) rating = 'Excellent'
-            else if (avgScore >= 75) rating = 'Very Good'
-            else if (avgScore >= 65) rating = 'Good'
-            else if (avgScore >= 50) rating = 'Fair'
-            else rating = 'Needs Improvement'
-
-            studentResults.push({
-              id: student.id,
-              full_name: student.full_name,
-              admission_number: student.admission_number,
-              overall_score: avgScore,
-              performance_rating: rating,
+            classResults.push({
+              id: classCombo.id,
+              class_name: className,
+              arm_name: armName,
+              students: studentResults,
+            })
+          } catch (err) {
+            console.error('Error loading class results:', err)
+            classResults.push({
+              id: classCombo.id,
+              class_name: className,
+              arm_name: armName,
+              students: [],
             })
           }
-
-          classResults.push({
-            id: classCombo.id,
-            class_name: className,
-            arm_name: armName,
-            students: studentResults,
-          })
         }
 
         setClasses(classResults)

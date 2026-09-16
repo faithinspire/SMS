@@ -182,8 +182,6 @@ CREATE INDEX IF NOT EXISTS idx_score_sheets_exam_not_null
   ON score_sheets(school_id, student_id, term_id) 
   WHERE exam IS NOT NULL;
 
-RAISE NOTICE 'Indexes created for optimal query performance';
-
 -- ============================================================================
 -- PHASE 6: FINAL VERIFICATION VIEW
 -- ============================================================================
@@ -254,19 +252,5 @@ CREATE TABLE IF NOT EXISTS results_query_log (
   test1_count INTEGER,
   exam_count INTEGER
 );
-
--- ============================================================================
--- FINAL SUMMARY
--- ============================================================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '========================================';
-  RAISE NOTICE 'Migration 118 Complete';
-  RAISE NOTICE 'All FKs verified, sessions/terms populated';
-  RAISE NOTICE 'Diagnostic views and indexes created';
-  RAISE NOTICE 'Query paths optimized for results page';
-  RAISE NOTICE '========================================';
-END $$;
 
 COMMIT;
