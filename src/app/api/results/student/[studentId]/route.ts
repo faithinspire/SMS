@@ -57,38 +57,9 @@ export async function GET(
     }
 
     // ========================================================================
-    // STEP 1: GET ALL STUDENT SUBJECTS (enrolled subjects)
+    // STEP 1: GET ALL SCORES FOR THIS STUDENT IN THIS TERM
+    // (Don't filter by student_subjects as it lacks term_id context)
     // ========================================================================
-
-    const { data: studentSubjects, error: subjectsError } = await supabase
-      .from('student_subjects')
-      .select('subject_id, subjects(id, name, code)')
-      .eq('student_id', studentId)
-
-    if (subjectsError) {
-      console.error('[API] Error fetching student subjects:', subjectsError)
-      return NextResponse.json(
-        { error: 'Failed to fetch student subjects', details: subjectsError.message },
-        { status: 500 }
-      )
-    }
-
-    console.log('[API] Found student subjects:', studentSubjects?.length || 0)
-
-    if (!studentSubjects || studentSubjects.length === 0) {
-      console.warn('[API] Student not enrolled in any subjects')
-      return NextResponse.json({
-        subjects: [],
-        overall_score: 0,
-        overall_grade: 'N/A',
-      })
-    }
-
-    // ========================================================================
-    // STEP 2: GET SCORES FOR THESE SUBJECTS IN THIS TERM
-    // ========================================================================
-
-    const subjectIds = studentSubjects.map((ss: any) => ss.subject_id)
 
     const { data: scores, error: scoresError } = await supabase
       .from('score_sheets')
@@ -116,7 +87,7 @@ export async function GET(
       .eq('school_id', schoolId)
       .eq('student_id', studentId)
       .eq('term_id', termId)
-      .in('subject_id', subjectIds)
+      .order('subject_id', { ascending: true })
 
     if (scoresError) {
       console.error('[API] Error fetching scores:', scoresError)
@@ -126,38 +97,39 @@ export async function GET(
       )
     }
 
-    console.log('[API] Fetched scores for subjects:', scores?.length || 0)
+    console.log('[API] Fetched scores for student in term:', scores?.length || 0)
 
-    // ========================================================================
-    // STEP 3: FORMAT RESPONSE - INCLUDE ALL SUBJECTS WITH OR WITHOUT SCORES
-    // ========================================================================
-
-    // Create a map of scores by subject_id
-    const scoresBySubject: Record<string, any> = {}
-    for (const score of scores || []) {
-      scoresBySubject[score.subject_id] = score
+    if (!scores || scores.length === 0) {
+      console.warn('[API] No scores found for this student in this term')
+      return NextResponse.json({
+        subjects: [],
+        overall_score: 0,
+        overall_grade: 'N/A',
+      })
     }
 
-    // Build response including ALL enrolled subjects
-    const subjects = studentSubjects.map((ss: any) => {
-      const score = scoresBySubject[ss.subject_id]
-      
+    // ========================================================================
+    // STEP 2: FORMAT RESPONSE - USE SCORES DIRECTLY
+    // ========================================================================
+
+    // Format scores into subject results
+    const subjects = (scores || []).map((score: any) => {
       return {
-        subject_id: ss.subject_id,
-        subject_name: ss.subjects?.name || 'Unknown Subject',
-        test1: score?.test1 || null,
-        test2: score?.test2 || null,
-        test3: score?.test3 || null,
-        test4: score?.test4 || null,
-        exam: score?.exam || null,
-        total: score?.total || 0,
-        grade: score?.grade || null,
+        subject_id: score.subject_id,
+        subject_name: score.subjects?.name || 'Unknown Subject',
+        test1: score.test1 || null,
+        test2: score.test2 || null,
+        test3: score.test3 || null,
+        test4: score.test4 || null,
+        exam: score.exam || null,
+        total: score.total || 0,
+        grade: score.grade || null,
         sources: {
-          test1_source: score?.test1_source || null,
-          test2_source: score?.test2_source || null,
-          test3_source: score?.test3_source || null,
-          test4_source: score?.test4_source || null,
-          exam_source: score?.exam_source || null,
+          test1_source: score.test1_source || null,
+          test2_source: score.test2_source || null,
+          test3_source: score.test3_source || null,
+          test4_source: score.test4_source || null,
+          exam_source: score.exam_source || null,
         },
       }
     })
