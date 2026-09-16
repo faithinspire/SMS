@@ -141,24 +141,9 @@ export default function StudentDetailPage() {
       }
 
       if (!apiData.subjects || apiData.subjects.length === 0) {
-        console.warn('[StudentDetail] No scores found')
-        
-        // Create empty result structure so subjects still display
-        const emptyResult: StudentResult = {
-          student_id: studId,
-          student_name: student.user_id ? 'Loading...' : 'Unknown',
-          admission_number: student.admission_number,
-          session_year: '2025/2026',
-          term_name: 'First Term',
-          subjects: [],
-          overall_score: 0,
-          overall_grade: 'N/A',
-          status: 'INCOMPLETE',
-        }
-        setResult(emptyResult)
-        // Don't call toast.info - use console.warn instead
-        console.warn('[StudentDetail] Student not enrolled in any subjects for this term')
-        return
+        console.warn('[StudentDetail] No subjects found for this student')
+        // This is OK - student may not be enrolled in any subjects yet
+        // But don't show empty result yet, continue to get student info
       }
 
       // Get student name
@@ -175,7 +160,7 @@ export default function StudentDetailPage() {
         }
       }
 
-      // Format the result
+      // Format the result - works with or without subjects
       const formattedResult: StudentResult = {
         student_id: studId,
         student_name: studentName,
@@ -185,10 +170,11 @@ export default function StudentDetailPage() {
         subjects: apiData.subjects || [],
         overall_score: apiData.overall_score || 0,
         overall_grade: apiData.overall_grade || 'N/A',
-        status: (apiData.overall_score || 0) > 0 ? 'PASS' : 'INCOMPLETE',
+        status: (apiData.overall_score || 0) > 0 ? 'PASS' : (apiData.subjects && apiData.subjects.length > 0 ? 'INCOMPLETE' : 'NO_ENROLLMENT'),
       }
 
       console.log('[StudentDetail] Formatted result:', formattedResult)
+      console.log('[StudentDetail] Subjects count:', formattedResult.subjects.length)
       setResult(formattedResult)
 
       // Load comment

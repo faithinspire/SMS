@@ -34,6 +34,14 @@ export default function PrincipalResultsPage() {
     loadData()
   }, [])
 
+  // Set first class as selected by default
+  useEffect(() => {
+    if (classes.length > 0 && !selectedClass) {
+      setSelectedClass(classes[0].id)
+      setSelectedClassData(classes[0])
+    }
+  }, [classes, selectedClass])
+
   const loadData = async () => {
     try {
       setLoading(true)
