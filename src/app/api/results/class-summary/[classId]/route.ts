@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 /**
  * GET /api/results/class-summary/[classId]

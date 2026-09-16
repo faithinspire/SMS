@@ -29,14 +29,20 @@ export default function PrincipalResultsPage() {
   const [classes, setClasses] = useState<ClassResult[]>([])
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
   const [selectedClassData, setSelectedClassData] = useState<ClassResult | null>(null)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
+  // Force refresh on mount
   useEffect(() => {
+    // Clear any cached data
+    localStorage.removeItem('principalResultsCache')
+    sessionStorage.removeItem('principalResultsCache')
     loadData()
   }, [])
 
-  // Set first class as selected by default
+  // Auto-select first class when classes load
   useEffect(() => {
     if (classes.length > 0 && !selectedClass) {
+      console.log('[Principal] Auto-selecting first class:', classes[0].class_name)
       setSelectedClass(classes[0].id)
       setSelectedClassData(classes[0])
     }
@@ -45,6 +51,8 @@ export default function PrincipalResultsPage() {
   const loadData = async () => {
     try {
       setLoading(true)
+      console.log('[Principal] Loading data... Trigger:', refreshTrigger)
+      
       const currentUser = await AuthService.getCurrentUser()
 
       if (!currentUser || !['PRINCIPAL', 'HEAD_TEACHER'].includes(currentUser.role)) {
@@ -55,17 +63,25 @@ export default function PrincipalResultsPage() {
       setUser(currentUser)
 
       if (currentUser.school_id) {
+        console.log('[Principal] School ID:', currentUser.school_id)
+        
         // Load school
-        const { data: schoolData } = await supabase
+        const { data: schoolData, error: schoolError } = await supabase
           .from('schools')
           .select('*')
           .eq('id', currentUser.school_id)
           .single()
 
+        if (schoolError) {
+          console.error('[Principal] School fetch error:', schoolError)
+          throw schoolError
+        }
+
         setSchool(schoolData)
+        console.log('[Principal] School loaded:', schoolData?.name)
 
         // Load all classes
-        const { data: classesData } = await supabase
+        const { data: classesData, error: classesError } = await supabase
           .from('class_arm_combos')
           .select(`
             id,
@@ -74,11 +90,18 @@ export default function PrincipalResultsPage() {
           `)
           .eq('school_id', currentUser.school_id)
 
-      // Get results for each class
+        if (classesError) {
+          console.error('[Principal] Classes fetch error:', classesError)
+          throw classesError
+        }
+
+        console.log('[Principal] Classes loaded:', classesData?.length || 0)
+
+        // Get results for each class
         const classResults: ClassResult[] = []
 
         // Get current term
-        const { data: sessionData } = await supabase
+        const { data: sessionData, error: sessionError } = await supabase
           .from('academic_sessions')
           .select('id')
           .eq('school_id', currentUser.school_id)
@@ -86,13 +109,21 @@ export default function PrincipalResultsPage() {
           .limit(1)
           .single()
 
-        const { data: termData } = await supabase
+        if (sessionError) {
+          console.warn('[Principal] Session fetch warning:', sessionError.message)
+        }
+
+        const { data: termData, error: termError } = await supabase
           .from('academic_terms')
           .select('id')
           .eq('session_id', sessionData?.id)
           .eq('is_active', true)
           .limit(1)
           .single()
+
+        if (termError) {
+          console.warn('[Principal] Term fetch warning:', termError.message)
+        }
 
         const termId = termData?.id
 
@@ -102,9 +133,17 @@ export default function PrincipalResultsPage() {
           const fullName = armName ? `${className} ${armName}` : className
 
           try {
-            // Call new class summary API instead of old result_entries
-            const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${currentUser.school_id}&termId=${termId}`
+            console.log('[Principal] Fetching results for class:', fullName)
+            
+            // Call new class summary API with cache-busting
+            const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${currentUser.school_id}&termId=${termId}&t=${Date.now()}`
             const response = await fetch(apiUrl)
+            
+            if (!response.ok) {
+              console.error('[Principal] API error:', response.status)
+              throw new Error(`API returned ${response.status}`)
+            }
+            
             const data = await response.json()
 
             const studentResults: StudentResult[] = data.students || []
@@ -115,8 +154,10 @@ export default function PrincipalResultsPage() {
               arm_name: armName,
               students: studentResults,
             })
+            
+            console.log('[Principal] Class results loaded:', fullName, 'students:', studentResults.length)
           } catch (err) {
-            console.error('Error loading class results:', err)
+            console.error('[Principal] Error loading class results:', err)
             classResults.push({
               id: classCombo.id,
               class_name: className,
@@ -127,9 +168,10 @@ export default function PrincipalResultsPage() {
         }
 
         setClasses(classResults)
+        console.log('[Principal] All classes loaded')
       }
     } catch (error) {
-      console.error('Load error:', error)
+      console.error('[Principal] Load error:', error)
     } finally {
       setLoading(false)
     }
