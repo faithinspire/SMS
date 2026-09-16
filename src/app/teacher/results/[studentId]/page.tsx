@@ -127,7 +127,12 @@ export default function StudentDetailPage() {
       const apiResponse = await fetch(apiUrl)
       const apiData = await apiResponse.json()
 
-      console.log('[StudentDetail] API Response:', apiData)
+      console.log('[StudentDetail] API Response Status:', apiResponse.status)
+      console.log('[StudentDetail] API Response Data:', JSON.stringify(apiData, null, 2))
+      console.log('[StudentDetail] Subjects count:', apiData.subjects?.length || 0)
+      if (apiData.subjects && apiData.subjects.length > 0) {
+        console.log('[StudentDetail] First subject:', apiData.subjects[0])
+      }
 
       if (!apiResponse.ok) {
         console.error('[StudentDetail] API Error:', apiData)
