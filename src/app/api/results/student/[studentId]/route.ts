@@ -98,9 +98,24 @@ export async function GET(
     }
 
     console.log('[API] Fetched scores for student in term:', scores?.length || 0)
+    console.log('[API] DEBUG - Query params:', { schoolId, studentId, termId })
+    console.log('[API] DEBUG - Scores returned:', JSON.stringify(scores || [], null, 2))
 
     if (!scores || scores.length === 0) {
       console.warn('[API] No scores found for this student in this term')
+      console.warn('[API] DIAGNOSTIC - Check if scores exist with ANY parameters:')
+      
+      // Debug query - get ANY scores for this student regardless of term
+      const { data: allStudentScores } = await supabase
+        .from('score_sheets')
+        .select('id, student_id, term_id, school_id')
+        .eq('student_id', studentId)
+      
+      console.warn('[API] DIAGNOSTIC - Any scores for this student:', allStudentScores?.length || 0)
+      if (allStudentScores && allStudentScores.length > 0) {
+        console.warn('[API] DIAGNOSTIC - Sample:', allStudentScores[0])
+      }
+      
       return NextResponse.json({
         subjects: [],
         overall_score: 0,
