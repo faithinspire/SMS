@@ -111,6 +111,18 @@ export default function PrincipalResultsPage() {
       setSchool(schoolData)
       console.log('[Principal] School loaded:', schoolData?.name)
 
+      // Ensure school has sessions, terms, and classes
+      console.log('[Principal] Ensuring school data...')
+      try {
+        await fetch(
+          `/api/results/ensure-school-data?schoolId=${currentUser.school_id}`,
+          { method: 'POST' }
+        )
+        console.log('[Principal] School data ensured')
+      } catch (err) {
+        console.warn('[Principal] Could not ensure school data:', err)
+      }
+
       // Load sessions and terms
       console.log('[Principal] Loading sessions and terms...')
       const response = await fetch(

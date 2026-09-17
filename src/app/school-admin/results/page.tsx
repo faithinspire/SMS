@@ -111,6 +111,18 @@ export default function SchoolAdminResultsPage() {
       setSchool(schoolData)
       console.log('[SchoolAdmin] School loaded:', schoolData?.name)
 
+      // Ensure school has sessions, terms, and classes
+      console.log('[SchoolAdmin] Ensuring school data...')
+      try {
+        await fetch(
+          `/api/results/ensure-school-data?schoolId=${currentUser.school_id}`,
+          { method: 'POST' }
+        )
+        console.log('[SchoolAdmin] School data ensured')
+      } catch (err) {
+        console.warn('[SchoolAdmin] Could not ensure school data:', err)
+      }
+
       // Load sessions and terms
       console.log('[SchoolAdmin] Loading sessions and terms...')
       const response = await fetch(

@@ -111,6 +111,18 @@ export default function HeadTeacherResultsPage() {
       setSchool(schoolData)
       console.log('[HeadTeacher] School loaded:', schoolData?.name)
 
+      // Ensure school has sessions, terms, and classes
+      console.log('[HeadTeacher] Ensuring school data...')
+      try {
+        await fetch(
+          `/api/results/ensure-school-data?schoolId=${currentUser.school_id}`,
+          { method: 'POST' }
+        )
+        console.log('[HeadTeacher] School data ensured')
+      } catch (err) {
+        console.warn('[HeadTeacher] Could not ensure school data:', err)
+      }
+
       // Load sessions and terms
       console.log('[HeadTeacher] Loading sessions and terms...')
       const response = await fetch(
