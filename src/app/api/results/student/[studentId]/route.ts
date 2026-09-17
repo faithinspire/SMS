@@ -9,6 +9,7 @@ export const revalidate = 0
  * 
  * ENHANCED: Fetch scores from score_sheets (includes manual + CBT)
  * Returns ALL subject scores for a student in a term
+ * Also includes school info (name, logo) and student class name
  * Includes detailed logging for debugging
  * 
  * Query params:
@@ -39,6 +40,53 @@ export async function GET(
         { status: 400 }
       )
     }
+
+    // ========================================================================
+    // STEP 0: Fetch school info and student class
+    // ========================================================================
+    console.log('[RESULTS API] Fetching school and student class info...')
+
+    const { data: school, error: schoolError } = await supabase
+      .from('schools')
+      .select('id, name, logo_url')
+      .eq('id', schoolId)
+      .single()
+
+    if (schoolError) {
+      console.warn('[RESULTS API] School fetch warning:', schoolError)
+    }
+
+    const { data: studentData, error: studentError } = await supabase
+      .from('students')
+      .select(`
+        id,
+        class_arm_combo_id,
+        class_arm_combos:class_arm_combo_id(
+          id,
+          classes:class_id(id, name),
+          arms:arm_id(id, name)
+        )
+      `)
+      .eq('id', studentId)
+      .eq('school_id', schoolId)
+      .single()
+
+    if (studentError) {
+      console.warn('[RESULTS API] Student fetch warning:', studentError)
+    }
+
+    let schoolName = school?.name || 'Unknown School'
+    let schoolLogo = school?.logo_url || null
+    let className = 'No Class'
+
+    if (studentData?.class_arm_combos) {
+      const classCombo = studentData.class_arm_combos as any
+      const classN = classCombo.classes?.name || ''
+      const armName = classCombo.arms?.name || ''
+      className = armName ? `${classN} ${armName}` : classN
+    }
+
+    console.log('[RESULTS API] School & Class:', { schoolName, className })
 
     // ========================================================================
     // STEP 1: Query score_sheets with ALL columns (manual + CBT)
@@ -139,6 +187,13 @@ export async function GET(
         subjects: subjectsWithoutScores,
         overall_score: 0,
         overall_grade: 'N/A',
+        school: {
+          name: schoolName,
+          logo: schoolLogo,
+        },
+        class: {
+          name: className,
+        },
         message: `Found ${enrollment.length} enrolled subjects but no scores entered`,
       })
     }
@@ -193,6 +248,8 @@ export async function GET(
       scoresWithValues: validScores.length,
       overallScore,
       overallGrade,
+      schoolName,
+      className,
       timestamp: new Date().toISOString(),
     })
 
@@ -201,6 +258,13 @@ export async function GET(
       subjects,
       overall_score: overallScore,
       overall_grade: overallGrade,
+      school: {
+        name: schoolName,
+        logo: schoolLogo,
+      },
+      class: {
+        name: className,
+      },
       stats: {
         totalSubjects: subjects.length,
         subjectsWithScores: validScores.length,

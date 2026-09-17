@@ -30,6 +30,8 @@ export default function PrincipalResultsPage() {
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
   const [selectedClassData, setSelectedClassData] = useState<ClassResult | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [terms, setTerms] = useState<any[]>([])
+  const [selectedTerm, setSelectedTerm] = useState<string | null>(null)
 
   // Force refresh on mount
   useEffect(() => {
@@ -38,6 +40,13 @@ export default function PrincipalResultsPage() {
     sessionStorage.removeItem('principalResultsCache')
     loadData()
   }, [])
+
+  // Reload classes when selected term changes
+  useEffect(() => {
+    if (selectedTerm) {
+      loadClassesForTerm(selectedTerm)
+    }
+  }, [selectedTerm])
 
   // Auto-select first class when classes load
   useEffect(() => {
@@ -80,100 +89,121 @@ export default function PrincipalResultsPage() {
         setSchool(schoolData)
         console.log('[Principal] School loaded:', schoolData?.name)
 
-        // Load all classes
-        const { data: classesData, error: classesError } = await supabase
-          .from('class_arm_combos')
-          .select(`
-            id,
-            classes(id, name),
-            arms(id, name)
-          `)
-          .eq('school_id', currentUser.school_id)
-
-        if (classesError) {
-          console.error('[Principal] Classes fetch error:', classesError)
-          throw classesError
-        }
-
-        console.log('[Principal] Classes loaded:', classesData?.length || 0)
-
-        // Get results for each class
-        const classResults: ClassResult[] = []
-
-        // Get current term
-        const { data: sessionData, error: sessionError } = await supabase
+        // Load available terms
+        const { data: sessionData } = await supabase
           .from('academic_sessions')
-          .select('id')
+          .select('id, session_year')
           .eq('school_id', currentUser.school_id)
-          .eq('is_active', true)
-          .limit(1)
-          .single()
+          .order('session_year', { ascending: false })
 
-        if (sessionError) {
-          console.warn('[Principal] Session fetch warning:', sessionError.message)
-        }
+        if (sessionData && sessionData.length > 0) {
+          const { data: termData } = await supabase
+            .from('academic_terms')
+            .select('id, term_name')
+            .in(
+              'session_id',
+              sessionData.map((s) => s.id)
+            )
+            .order('term_name', { ascending: true })
 
-        const { data: termData, error: termError } = await supabase
-          .from('academic_terms')
-          .select('id')
-          .eq('session_id', sessionData?.id)
-          .eq('is_active', true)
-          .limit(1)
-          .single()
+          console.log('[Principal] Available terms:', termData?.length || 0)
+          setTerms(termData || [])
 
-        if (termError) {
-          console.warn('[Principal] Term fetch warning:', termError.message)
-        }
+          // Auto-select active term or first term
+          const { data: activeTerm } = await supabase
+            .from('academic_terms')
+            .select('id')
+            .eq('session_id', sessionData[0].id)
+            .eq('is_active', true)
+            .limit(1)
+            .single()
 
-        const termId = termData?.id
-
-        for (const classCombo of classesData || []) {
-          const className = classCombo.classes?.name || 'Class'
-          const armName = classCombo.arms?.name || ''
-          const fullName = armName ? `${className} ${armName}` : className
-
-          try {
-            console.log('[Principal] Fetching results for class:', fullName)
-            
-            // Call new class summary API with cache-busting
-            const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${currentUser.school_id}&termId=${termId}&t=${Date.now()}`
-            const response = await fetch(apiUrl)
-            
-            if (!response.ok) {
-              console.error('[Principal] API error:', response.status)
-              throw new Error(`API returned ${response.status}`)
-            }
-            
-            const data = await response.json()
-
-            const studentResults: StudentResult[] = data.students || []
-
-            classResults.push({
-              id: classCombo.id,
-              class_name: className,
-              arm_name: armName,
-              students: studentResults,
-            })
-            
-            console.log('[Principal] Class results loaded:', fullName, 'students:', studentResults.length)
-          } catch (err) {
-            console.error('[Principal] Error loading class results:', err)
-            classResults.push({
-              id: classCombo.id,
-              class_name: className,
-              arm_name: armName,
-              students: [],
-            })
+          if (activeTerm) {
+            setSelectedTerm(activeTerm.id)
+          } else if (termData && termData.length > 0) {
+            setSelectedTerm(termData[0].id)
           }
         }
-
-        setClasses(classResults)
-        console.log('[Principal] All classes loaded')
       }
     } catch (error) {
       console.error('[Principal] Load error:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadClassesForTerm = async (termId: string) => {
+    try {
+      if (!user?.school_id) return
+
+      console.log('[Principal] Loading classes for term:', termId)
+
+      // Load all classes
+      const { data: classesData, error: classesError } = await supabase
+        .from('class_arm_combos')
+        .select(`
+          id,
+          classes(id, name),
+          arms(id, name)
+        `)
+        .eq('school_id', user.school_id)
+
+      if (classesError) {
+        console.error('[Principal] Classes fetch error:', classesError)
+        throw classesError
+      }
+
+      console.log('[Principal] Classes loaded:', classesData?.length || 0)
+
+      // Get results for each class
+      const classResults: ClassResult[] = []
+
+      for (const classCombo of classesData || []) {
+        const className = classCombo.classes?.name || 'Class'
+        const armName = classCombo.arms?.name || ''
+        const fullName = armName ? `${className} ${armName}` : className
+
+        try {
+          console.log('[Principal] Fetching results for class:', fullName)
+          
+          // Call class summary API with cache-busting
+          const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${user.school_id}&termId=${termId}&t=${Date.now()}`
+          const response = await fetch(apiUrl)
+          
+          if (!response.ok) {
+            console.error('[Principal] API error:', response.status)
+            throw new Error(`API returned ${response.status}`)
+          }
+          
+          const data = await response.json()
+
+          const studentResults: StudentResult[] = data.students || []
+
+          classResults.push({
+            id: classCombo.id,
+            class_name: className,
+            arm_name: armName,
+            students: studentResults,
+          })
+          
+          console.log('[Principal] Class results loaded:', fullName, 'students:', studentResults.length)
+        } catch (err) {
+          console.error('[Principal] Error loading class results:', err)
+          classResults.push({
+            id: classCombo.id,
+            class_name: className,
+            arm_name: armName,
+            students: [],
+          })
+        }
+      }
+
+      setClasses(classResults)
+      setSelectedClass(null)
+      setSelectedClassData(null)
+      console.log('[Principal] All classes loaded')
+    } catch (error) {
+      console.error('[Principal] Load classes error:', error)
     }
   }
 
@@ -217,6 +247,23 @@ export default function PrincipalResultsPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-8">📊 Student Results & Performance</h1>
+
+        {/* Term Filter */}
+        <div className="mb-6 bg-white rounded-lg shadow-lg p-4">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Filter by Term:</label>
+          <select
+            value={selectedTerm || ''}
+            onChange={(e) => setSelectedTerm(e.target.value)}
+            className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-amber-600 focus:outline-none"
+          >
+            <option value="">-- Select Term --</option>
+            {terms.map((term) => (
+              <option key={term.id} value={term.id}>
+                {term.term_name}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Classes List */}

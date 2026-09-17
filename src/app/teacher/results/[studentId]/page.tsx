@@ -14,6 +14,8 @@ interface StudentResult {
   student_name: string
   admission_number?: string
   class_name?: string
+  school_name?: string
+  school_logo?: string
   session_year: string
   term_name: string
   subjects: any[]
@@ -183,6 +185,9 @@ export default function StudentDetailPage() {
         student_id: studId,
         student_name: studentName,
         admission_number: student.admission_number,
+        class_name: apiData.class?.name || 'No Class',
+        school_name: apiData.school?.name || 'Unknown School',
+        school_logo: apiData.school?.logo || null,
         session_year: '2025/2026',
         term_name: activeTermName || 'Unknown Term',
         subjects: apiData.subjects || [],
@@ -254,8 +259,9 @@ export default function StudentDetailPage() {
     if (!result) return
 
     const text = `
+${result.school_name}
 ${result.student_name} - ${result.admission_number}
-${result.class_name}
+Class: ${result.class_name}
 ${result.session_year} - ${result.term_name}
 
 Overall Score: ${result.overall_score}
@@ -275,8 +281,9 @@ ${result.subjects
   const shareToEmail = async () => {
     if (!result) return
 
-    const subject = `Student Result - ${result.student_name}`
+    const subject = `${result.school_name} - Student Result - ${result.student_name}`
     const body = `
+School: ${result.school_name}
 Student: ${result.student_name}
 Admission: ${result.admission_number}
 Class: ${result.class_name}
@@ -333,10 +340,11 @@ ${comment ? `\nTeacher Comment:\n${comment}` : ''}
     printWindow.document.write(`
       <html>
         <head>
-          <title>${result.student_name} - Result</title>
+          <title>${result.school_name} - ${result.student_name} Result</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+            .school-header { text-align: center; font-size: 20px; font-weight: bold; margin-bottom: 10px; }
             .info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
             .info-item { padding: 5px; }
             .label { font-weight: bold; color: #666; }
@@ -348,6 +356,7 @@ ${comment ? `\nTeacher Comment:\n${comment}` : ''}
           </style>
         </head>
         <body>
+          <div class="school-header">${result.school_name}</div>
           ${element.innerHTML}
         </body>
       </html>
@@ -443,6 +452,18 @@ ${comment ? `\nTeacher Comment:\n${comment}` : ''}
 
         {/* Result Content (for printing/PDF) */}
         <div id="result-content" className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          {/* School Header */}
+          <div className="text-center border-b-2 pb-4 mb-4">
+            {result.school_logo && (
+              <img
+                src={result.school_logo}
+                alt="School Logo"
+                className="h-16 w-16 mx-auto mb-2 object-contain"
+              />
+            )}
+            <h1 className="text-2xl font-bold text-gray-800">{result.school_name}</h1>
+          </div>
+
           {/* Student Info */}
           <div className="border-b-2 pb-4 mb-4">
             <h2 className="text-2xl font-bold text-gray-800">{result.student_name}</h2>
