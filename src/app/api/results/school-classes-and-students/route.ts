@@ -42,12 +42,14 @@ export async function GET(request: NextRequest) {
     const schoolId = searchParams.get('schoolId')
     const termId = searchParams.get('termId')
 
-    console.log('[API] Fetching classes and students:', {
+    console.log('[ClassAPI] Starting fetch for classes and students:', {
       schoolId,
       termId,
+      timestamp: new Date().toISOString(),
     })
 
     if (!schoolId || !termId) {
+      console.error('[ClassAPI] Missing parameters:', { schoolId, termId })
       return NextResponse.json(
         { error: 'Missing required parameters: schoolId, termId' },
         { status: 400 }
@@ -57,30 +59,42 @@ export async function GET(request: NextRequest) {
     // ========================================================================
     // STEP 1: Fetch all class_arm_combos for this school
     // ========================================================================
-    console.log('[API] Fetching classes for school:', schoolId)
+    console.log('[ClassAPI] STEP 1: Fetching class_arm_combos for school:', schoolId)
 
     const { data: classArmCombos, error: classError } = await supabase
       .from('class_arm_combos')
       .select(`
         id,
+        school_id,
+        class_id,
+        arm_id,
         classes(id, name),
         arms(id, name)
       `)
       .eq('school_id', schoolId)
       .order('id', { ascending: true })
 
+    console.log('[ClassAPI] class_arm_combos query result:', {
+      success: !classError,
+      count: classArmCombos?.length || 0,
+      error: classError?.message,
+    })
+
     if (classError) {
-      console.error('[API] Error fetching classes:', classError)
+      console.error('[ClassAPI] Error fetching classes:', classError)
       return NextResponse.json(
         { error: 'Failed to fetch classes', details: classError.message },
         { status: 500 }
       )
     }
 
-    console.log('[API] Found classes:', classArmCombos?.length || 0)
+    console.log('[ClassAPI] STEP 1 Result:', {
+      classCount: classArmCombos?.length || 0,
+      hasData: (classArmCombos?.length || 0) > 0,
+    })
 
     if (!classArmCombos || classArmCombos.length === 0) {
-      console.warn('[API] No classes found for school')
+      console.warn('[ClassAPI] No classes found for school, returning empty list')
       return NextResponse.json({
         success: true,
         classes: [],
@@ -91,6 +105,7 @@ export async function GET(request: NextRequest) {
     // ========================================================================
     // STEP 2: For each class, fetch students and their scores
     // ========================================================================
+    console.log('[ClassAPI] STEP 2: Processing', classArmCombos.length, 'classes')
     const classResults: ClassWithStudents[] = []
 
     for (const classCombo of classArmCombos) {
@@ -98,9 +113,10 @@ export async function GET(request: NextRequest) {
       const className = classCombo.classes?.name || 'Class'
       const armName = classCombo.arms?.name || ''
 
-      console.log('[API] Processing class:', className, armName)
+      console.log(`[ClassAPI] Processing class: ${className} ${armName} (ID: ${classId})`)
 
       // Get all students in this class
+      console.log(`[ClassAPI] Fetching students for class_arm_combo_id: ${classId}`)
       const { data: students, error: studentsError } = await supabase
         .from('students')
         .select('id, full_name, admission_number')
@@ -109,7 +125,7 @@ export async function GET(request: NextRequest) {
         .order('admission_number', { ascending: true })
 
       if (studentsError) {
-        console.error('[API] Error fetching students for class:', studentsError)
+        console.error(`[ClassAPI] Error fetching students for ${className} ${armName}:`, studentsError)
         classResults.push({
           id: classId,
           class_name: className,
@@ -120,7 +136,7 @@ export async function GET(request: NextRequest) {
         continue
       }
 
-      console.log('[API] Found students in class:', students?.length || 0)
+      console.log(`[ClassAPI] Found ${students?.length || 0} students in ${className} ${armName}`)
 
       if (!students || students.length === 0) {
         classResults.push({
@@ -135,6 +151,7 @@ export async function GET(request: NextRequest) {
 
       // Get scores for all students in this class for this term
       const studentIds = students.map((s) => s.id)
+      console.log(`[ClassAPI] Fetching scores for ${studentIds.length} students in term: ${termId}`)
 
       const { data: scoreData, error: scoreError } = await supabase
         .from('score_sheets')
@@ -144,11 +161,11 @@ export async function GET(request: NextRequest) {
         .in('student_id', studentIds)
 
       if (scoreError) {
-        console.error('[API] Error fetching scores:', scoreError)
-        // Continue anyway - students just won't have scores
+        console.error(`[ClassAPI] Error fetching scores:`, scoreError)
+        // Don't fail - just continue with 0 scores
       }
 
-      console.log('[API] Found scores for term:', scoreData?.length || 0)
+      console.log(`[ClassAPI] Found ${scoreData?.length || 0} score records for this class`)
 
       // Aggregate scores by student
       const scoresByStudent: Record<string, any> = {}
@@ -211,10 +228,13 @@ export async function GET(request: NextRequest) {
         students: studentResults,
       })
 
-      console.log('[API] Class processed:', className, armName, 'with', studentResults.length, 'students')
+      console.log(`[ClassAPI] Class completed: ${className} ${armName}, ${studentResults.length} students`)
     }
 
-    console.log('[API] Returning class results:', classResults.length, 'classes')
+    console.log('[ClassAPI] All classes processed. Returning results.', {
+      totalClasses: classResults.length,
+      totalStudents: classResults.reduce((sum, c) => sum + c.student_count, 0),
+    })
 
     return NextResponse.json({
       success: true,
@@ -222,12 +242,13 @@ export async function GET(request: NextRequest) {
       message: `Found ${classResults.length} classes with ${classResults.reduce((sum, c) => sum + c.student_count, 0)} students`,
     })
   } catch (error: any) {
-    console.error('[API] Exception in GET /api/results/school-classes-and-students:', error)
-    console.error('[API] Error stack:', error.stack)
+    console.error('[ClassAPI] Exception caught:', error)
+    console.error('[ClassAPI] Error stack:', error.stack)
     return NextResponse.json(
       {
         error: 'Internal server error',
         details: error.message,
+        stack: error.stack,
       },
       { status: 500 }
     )
