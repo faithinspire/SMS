@@ -201,7 +201,7 @@ export async function GET(
 
     console.log('[API] Returning enrolled subjects (no scores):', {
       subjectCount: subjects.length,
-      overall Score: 0,
+      overallScore: 0,
       timestamp: new Date().toISOString(),
     })
 
