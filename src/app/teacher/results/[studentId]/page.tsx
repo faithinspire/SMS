@@ -68,6 +68,8 @@ export default function StudentDetailPage() {
 
   const loadStudentResult = async (schoolId: string, studId: string) => {
     try {
+      console.log('[StudentDetail] ========== LOAD START ==========')
+      
       // Get student info
       const { data: student, error: studentError } = await supabase
         .from('students')
@@ -81,6 +83,8 @@ export default function StudentDetailPage() {
         toast.error('Student not found')
         return
       }
+
+      console.log('[StudentDetail] Found student:', student.id, student.admission_number)
 
       // Get current term (from session parameters or use latest)
       const { data: session } = await supabase
@@ -96,6 +100,8 @@ export default function StudentDetailPage() {
         toast.error('No academic session found')
         return
       }
+
+      console.log('[StudentDetail] Found session:', session.id)
 
       const { data: term } = await supabase
         .from('academic_terms')
@@ -114,43 +120,6 @@ export default function StudentDetailPage() {
       setTermId(term.id)
       console.log('[StudentDetail] Using term:', term.id)
 
-      // ===== NEW: Call the new dedicated results API instead =====
-      console.log('[StudentDetail] Calling results API with:', {
-        studentId: studId,
-        schoolId,
-        termId: term.id,
-        timestamp: new Date().toISOString(),
-      })
-
-      const apiUrl = `/api/results/student/${studId}?schoolId=${schoolId}&termId=${term.id}&t=${Date.now()}`
-      console.log('[StudentDetail] API URL:', apiUrl)
-
-      const apiResponse = await fetch(apiUrl)
-      const apiData = await apiResponse.json()
-
-      console.log('[StudentDetail] API Response Status:', apiResponse.status)
-      console.log('[StudentDetail] API Response Data:', JSON.stringify(apiData, null, 2))
-      console.log('[StudentDetail] Subjects count:', apiData.subjects?.length || 0)
-      console.log('[StudentDetail] Overall Score:', apiData.overall_score)
-      console.log('[StudentDetail] Overall Grade:', apiData.overall_grade)
-      
-      if (apiData.subjects && apiData.subjects.length > 0) {
-        console.log('[StudentDetail] First subject:', apiData.subjects[0])
-        console.log('[StudentDetail] First subject scores - Test1:', apiData.subjects[0].test1, 'Exam:', apiData.subjects[0].exam)
-      }
-
-      if (!apiResponse.ok) {
-        console.error('[StudentDetail] API Error:', apiData)
-        toast.error('Failed to fetch scores')
-        return
-      }
-
-      if (!apiData.subjects || apiData.subjects.length === 0) {
-        console.warn('[StudentDetail] No subjects found for this student')
-        // This is OK - student may not be enrolled in any subjects yet
-        // But don't show empty result yet, continue to get student info
-      }
-
       // Get student name
       let studentName = 'Unknown'
       if (student.user_id) {
@@ -165,7 +134,38 @@ export default function StudentDetailPage() {
         }
       }
 
-      // Format the result - works with or without subjects
+      // ===== CALL API TO GET SCORES =====
+      console.log('[StudentDetail] Calling results API with:', {
+        studentId: studId,
+        schoolId,
+        termId: term.id,
+        timestamp: new Date().toISOString(),
+      })
+
+      const apiUrl = `/api/results/student/${studId}?schoolId=${schoolId}&termId=${term.id}&t=${Date.now()}`
+      console.log('[StudentDetail] API URL:', apiUrl)
+
+      const apiResponse = await fetch(apiUrl)
+      const apiData = await apiResponse.json()
+
+      console.log('[StudentDetail] API Response Status:', apiResponse.status)
+      console.log('[StudentDetail] API Response:', JSON.stringify(apiData, null, 2))
+      
+      if (!apiResponse.ok) {
+        console.error('[StudentDetail] API Error:', apiData)
+        toast.error('Failed to fetch scores')
+        return
+      }
+
+      console.log('[StudentDetail] Subjects count:', apiData.subjects?.length || 0)
+      console.log('[StudentDetail] Overall Score:', apiData.overall_score)
+      console.log('[StudentDetail] Overall Grade:', apiData.overall_grade)
+      
+      if (apiData.subjects && apiData.subjects.length > 0) {
+        console.log('[StudentDetail] First subject:', JSON.stringify(apiData.subjects[0], null, 2))
+      }
+
+      // Format the result
       const formattedResult: StudentResult = {
         student_id: studId,
         student_name: studentName,
@@ -175,11 +175,12 @@ export default function StudentDetailPage() {
         subjects: apiData.subjects || [],
         overall_score: apiData.overall_score || 0,
         overall_grade: apiData.overall_grade || 'N/A',
-        status: (apiData.overall_score || 0) > 0 ? 'PASS' : (apiData.subjects && apiData.subjects.length > 0 ? 'INCOMPLETE' : 'NO_ENROLLMENT'),
+        status: (apiData.overall_score || 0) >= 50 ? 'PASS' : ((apiData.subjects && apiData.subjects.length > 0) ? 'INCOMPLETE' : 'NO_ENROLLMENT'),
       }
 
-      console.log('[StudentDetail] Formatted result:', formattedResult)
-      console.log('[StudentDetail] Subjects count:', formattedResult.subjects.length)
+      console.log('[StudentDetail] Formatted result:', JSON.stringify(formattedResult, null, 2))
+      console.log('[StudentDetail] ========== LOAD COMPLETE ==========')
+      
       setResult(formattedResult)
 
       // Load comment

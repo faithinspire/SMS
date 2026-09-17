@@ -7,32 +7,12 @@ export const revalidate = 0
 /**
  * GET /api/results/student/[studentId]
  * 
- * Fetch all scores for a student in a specific term
- * Returns scores from score_sheets table (both manual and CBT)
+ * SIMPLIFIED: Fetch scores directly, no fallback complexity
+ * Returns ALL subject scores for a student in a term
  * 
  * Query params:
  * - schoolId: UUID (required)
  * - termId: UUID (required)
- * 
- * Response:
- * {
- *   subjects: [
- *     {
- *       subject_id: UUID,
- *       subject_name: string,
- *       test1: number | null,
- *       test2: number | null,
- *       test3: number | null,
- *       test4: number | null,
- *       exam: number | null,
- *       total: number,
- *       grade: string,
- *       sources: { test1_source, test2_source, ... }
- *     }
- *   ],
- *   overall_score: number,
- *   overall_grade: string
- * }
  */
 export async function GET(
   request: NextRequest,
@@ -44,15 +24,15 @@ export async function GET(
     const termId = searchParams.get('termId')
     const studentId = params.studentId
 
-    console.log('[API] GET /api/results/student fetch START:', {
-      schoolId,
+    const timestamp = new Date().toISOString()
+    console.log(`[RESULTS API] ${timestamp} - START fetch for student:`, {
       studentId,
+      schoolId,
       termId,
-      timestamp: new Date().toISOString(),
     })
 
     if (!schoolId || !studentId || !termId) {
-      console.error('[API] Missing params:', { schoolId, studentId, termId })
+      console.error('[RESULTS API] Missing required params')
       return NextResponse.json(
         { error: 'Missing required parameters: schoolId, studentId, termId' },
         { status: 400 }
@@ -60,12 +40,11 @@ export async function GET(
     }
 
     // ========================================================================
-    // STEP 1: FETCH SCORES DIRECTLY FROM SCORE_SHEETS (PRIMARY)
+    // DIRECT QUERY: Get all scores from score_sheets for this student/term
     // ========================================================================
-    
-    console.log('[API] Fetching scores directly from score_sheets...')
-    
-    const { data: scores, error: scoresError } = await supabase
+    console.log('[RESULTS API] Querying score_sheets with exact filters...')
+
+    const { data: allScores, error: scoresError } = await supabase
       .from('score_sheets')
       .select(
         `
@@ -73,6 +52,7 @@ export async function GET(
         student_id,
         subject_id,
         term_id,
+        school_id,
         test1,
         test2,
         test3,
@@ -93,17 +73,72 @@ export async function GET(
       .eq('term_id', termId)
 
     if (scoresError) {
-      console.error('[API] Error fetching scores:', scoresError)
-      throw scoresError
+      console.error('[RESULTS API] Score_sheets query failed:', scoresError)
+      return NextResponse.json(
+        { error: 'Failed to fetch scores', details: scoresError.message },
+        { status: 500 }
+      )
     }
 
-    console.log('[API] Direct score query returned:', scores?.length || 0, 'records')
+    console.log('[RESULTS API] Score_sheets query returned:', allScores?.length || 0, 'records')
 
-    // If scores found, return them
-    if (scores && scores.length > 0) {
-      console.log('[API] Found scores directly. Processing...')
+    if (!allScores || allScores.length === 0) {
+      console.warn('[RESULTS API] No scores in score_sheets. Checking enrollment...')
       
-      const subjects = scores.map((score: any) => ({
+      // Check if student is even enrolled
+      const { data: enrollment } = await supabase
+        .from('student_subjects')
+        .select('subject_id, subjects(id, name, code)')
+        .eq('student_id', studentId)
+
+      console.log('[RESULTS API] Student enrolled in:', enrollment?.length || 0, 'subjects')
+      
+      if (!enrollment || enrollment.length === 0) {
+        console.warn('[RESULTS API] Student not enrolled in any subjects')
+        return NextResponse.json({
+          success: true,
+          subjects: [],
+          overall_score: 0,
+          overall_grade: 'N/A',
+          message: 'Student has no enrolled subjects',
+        })
+      }
+
+      // Return enrolled subjects with no scores
+      const subjectsWithoutScores = enrollment.map((e: any) => ({
+        subject_id: e.subject_id,
+        subject_name: e.subjects?.name || 'Unknown',
+        test1: null,
+        test2: null,
+        test3: null,
+        test4: null,
+        exam: null,
+        total: 0,
+        grade: null,
+      }))
+
+      console.log('[RESULTS API] Returning enrolled subjects without scores')
+      return NextResponse.json({
+        success: true,
+        subjects: subjectsWithoutScores,
+        overall_score: 0,
+        overall_grade: 'N/A',
+        message: `Found ${enrollment.length} enrolled subjects but no scores entered`,
+      })
+    }
+
+    // ========================================================================
+    // FORMAT SCORES FOR RESPONSE
+    // ========================================================================
+    console.log('[RESULTS API] Processing scores for response...')
+
+    const subjects = allScores.map((score: any) => {
+      const hasAnyScore = 
+        score.test1 !== null || score.test2 !== null || 
+        score.test3 !== null || score.test4 !== null || 
+        score.exam !== null
+
+      return {
         subject_id: score.subject_id,
         subject_name: score.subjects?.name || 'Unknown Subject',
         test1: score.test1,
@@ -113,107 +148,51 @@ export async function GET(
         exam: score.exam,
         total: score.total || 0,
         grade: score.grade || null,
+        hasScores: hasAnyScore,
         sources: {
-          test1_source: score.test1_source || null,
-          test2_source: score.test2_source || null,
-          test3_source: score.test3_source || null,
-          test4_source: score.test4_source || null,
-          exam_source: score.exam_source || null,
+          test1_source: score.test1_source,
+          test2_source: score.test2_source,
+          test3_source: score.test3_source,
+          test4_source: score.test4_source,
+          exam_source: score.exam_source,
         },
-      }))
+      }
+    })
 
-      // Calculate overall score
-      const totalScore = subjects.reduce((sum: number, s: any) => sum + (s.total || 0), 0)
-      const overallScore = subjects.length > 0 ? Math.round(totalScore / subjects.length) : 0
+    // Calculate overall score and grade
+    const validScores = subjects.filter((s: any) => s.total > 0)
+    const totalScore = validScores.reduce((sum: number, s: any) => sum + (s.total || 0), 0)
+    const overallScore = validScores.length > 0 ? Math.round(totalScore / validScores.length) : 0
 
-      // Determine overall grade
-      let overallGrade = 'F'
-      if (overallScore >= 90) overallGrade = 'A'
-      else if (overallScore >= 80) overallGrade = 'B'
-      else if (overallScore >= 70) overallGrade = 'C'
-      else if (overallScore >= 60) overallGrade = 'D'
-      else if (overallScore >= 40) overallGrade = 'E'
+    let overallGrade = 'N/A'
+    if (overallScore >= 90) overallGrade = 'A'
+    else if (overallScore >= 80) overallGrade = 'B'
+    else if (overallScore >= 70) overallGrade = 'C'
+    else if (overallScore >= 60) overallGrade = 'D'
+    else if (overallScore >= 50) overallGrade = 'E'
+    else if (overallScore > 0) overallGrade = 'F'
 
-      console.log('[API] Returning direct scores:', {
-        subjectCount: subjects.length,
-        overallScore,
-        overallGrade,
-        timestamp: new Date().toISOString(),
-      })
-
-      return NextResponse.json({
-        success: true,
-        subjects,
-        overall_score: overallScore,
-        overall_grade: overallGrade,
-        message: `Found ${subjects.length} subjects with scores`,
-      })
-    }
-
-    // ========================================================================
-    // STEP 2: IF NO SCORES, GET ENROLLED SUBJECTS (FALLBACK)
-    // ========================================================================
-    
-    console.log('[API] No scores found, fetching enrolled subjects as fallback...')
-
-    const { data: studentSubjects, error: subjectsError } = await supabase
-      .from('student_subjects')
-      .select('subject_id, subjects(id, name, code)')
-      .eq('student_id', studentId)
-
-    if (subjectsError) {
-      console.error('[API] Error fetching student subjects:', subjectsError)
-      throw subjectsError
-    }
-
-    console.log('[API] Found enrolled subjects:', studentSubjects?.length || 0)
-
-    if (!studentSubjects || studentSubjects.length === 0) {
-      console.warn('[API] Student not enrolled in any subjects')
-      return NextResponse.json({
-        success: true,
-        subjects: [],
-        overall_score: 0,
-        overall_grade: 'N/A',
-        message: 'Student has no enrolled subjects',
-      })
-    }
-
-    // Format enrolled subjects without scores
-    const subjects = studentSubjects.map((ss: any) => ({
-      subject_id: ss.subject_id,
-      subject_name: ss.subjects?.name || 'Unknown Subject',
-      test1: null,
-      test2: null,
-      test3: null,
-      test4: null,
-      exam: null,
-      total: 0,
-      grade: null,
-      sources: {
-        test1_source: null,
-        test2_source: null,
-        test3_source: null,
-        test4_source: null,
-        exam_source: null,
-      },
-    }))
-
-    console.log('[API] Returning enrolled subjects (no scores):', {
+    console.log('[RESULTS API] Response:', {
       subjectCount: subjects.length,
-      overallScore: 0,
+      scoresWithValues: validScores.length,
+      overallScore,
+      overallGrade,
       timestamp: new Date().toISOString(),
     })
 
     return NextResponse.json({
       success: true,
       subjects,
-      overall_score: 0,
-      overall_grade: 'N/A',
-      message: `Found ${subjects.length} enrolled subjects but no scores yet`,
+      overall_score: overallScore,
+      overall_grade: overallGrade,
+      stats: {
+        totalSubjects: subjects.length,
+        subjectsWithScores: validScores.length,
+      },
+      message: `Found ${subjects.length} subjects with ${validScores.length} graded`,
     })
   } catch (error: any) {
-    console.error('[API] Exception in GET /api/results/student:', error)
+    console.error('[RESULTS API] Exception:', error)
     return NextResponse.json(
       {
         success: false,
