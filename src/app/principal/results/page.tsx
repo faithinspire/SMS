@@ -6,10 +6,11 @@ import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
 import StaffHeader from '@/components/StaffHeader'
 
-interface ClassResult {
+interface ClassWithStudents {
   id: string
   class_name: string
   arm_name: string
+  student_count: number
   students: StudentResult[]
 }
 
@@ -21,32 +22,56 @@ interface StudentResult {
   performance_rating: string
 }
 
+interface Session {
+  id: string
+  session_year: string
+  is_active: boolean
+}
+
+interface Term {
+  id: string
+  session_id: string
+  term_name: string
+  term_number: number
+  is_active: boolean
+}
+
 export default function PrincipalResultsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [school, setSchool] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [classes, setClasses] = useState<ClassResult[]>([])
+  const [classes, setClasses] = useState<ClassWithStudents[]>([])
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
-  const [selectedClassData, setSelectedClassData] = useState<ClassResult | null>(null)
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const [terms, setTerms] = useState<any[]>([])
+  const [selectedClassData, setSelectedClassData] = useState<ClassWithStudents | null>(null)
+  
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [terms, setTerms] = useState<Term[]>([])
+  const [selectedSession, setSelectedSession] = useState<string | null>(null)
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null)
+  const [loadingClasses, setLoadingClasses] = useState(false)
 
-  // Force refresh on mount
+  // Load on mount
   useEffect(() => {
-    // Clear any cached data
-    localStorage.removeItem('principalResultsCache')
-    sessionStorage.removeItem('principalResultsCache')
-    loadData()
+    loadInitialData()
   }, [])
 
-  // Reload classes when selected term changes
+  // When session changes, load its terms
   useEffect(() => {
-    if (selectedTerm) {
-      loadClassesForTerm(selectedTerm)
+    if (selectedSession) {
+      const sessionTerms = terms.filter((t) => t.session_id === selectedSession)
+      if (sessionTerms.length > 0) {
+        setSelectedTerm(sessionTerms[0].id)
+      }
     }
-  }, [selectedTerm])
+  }, [selectedSession])
+
+  // When term changes, load classes and students
+  useEffect(() => {
+    if (selectedTerm && user?.school_id) {
+      loadClassesForTerm(user.school_id, selectedTerm)
+    }
+  }, [selectedTerm, user?.school_id])
 
   // Auto-select first class when classes load
   useEffect(() => {
@@ -55,13 +80,13 @@ export default function PrincipalResultsPage() {
       setSelectedClass(classes[0].id)
       setSelectedClassData(classes[0])
     }
-  }, [classes, selectedClass])
+  }, [classes])
 
-  const loadData = async () => {
+  const loadInitialData = async () => {
     try {
       setLoading(true)
-      console.log('[Principal] Loading data...')
-      
+      console.log('[Principal] Loading initial data...')
+
       const currentUser = await AuthService.getCurrentUser()
 
       if (!currentUser || !['PRINCIPAL', 'HEAD_TEACHER'].includes(currentUser.role)) {
@@ -71,47 +96,45 @@ export default function PrincipalResultsPage() {
 
       setUser(currentUser)
 
-      if (currentUser.school_id) {
-        console.log('[Principal] School ID:', currentUser.school_id)
-        
-        // Load school
-        const { data: schoolData, error: schoolError } = await supabase
-          .from('schools')
-          .select('*')
-          .eq('id', currentUser.school_id)
-          .single()
+      if (!currentUser.school_id) {
+        console.error('[Principal] No school ID found')
+        return
+      }
 
-        if (schoolError) {
-          console.error('[Principal] School fetch error:', schoolError)
-          throw schoolError
-        }
+      // Load school info
+      const { data: schoolData } = await supabase
+        .from('schools')
+        .select('id, name, logo_url')
+        .eq('id', currentUser.school_id)
+        .single()
 
-        setSchool(schoolData)
-        console.log('[Principal] School loaded:', schoolData?.name)
+      setSchool(schoolData)
+      console.log('[Principal] School loaded:', schoolData?.name)
 
-        // Load all terms directly (skip sessions - they may not exist)
-        console.log('[Principal] Loading terms directly...')
-        const { data: termData, error: termError } = await supabase
-          .from('academic_terms')
-          .select('id, term_name, session_id')
-          .order('term_name', { ascending: true })
+      // Load sessions and terms
+      console.log('[Principal] Loading sessions and terms...')
+      const response = await fetch(
+        `/api/results/school-sessions-and-terms?schoolId=${currentUser.school_id}`
+      )
 
-        if (termError) {
-          console.error('[Principal] Terms fetch error:', termError)
-          throw termError
-        }
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
 
-        console.log('[Principal] Available terms:', termData?.length || 0)
-        setTerms(termData || [])
+      const data = await response.json()
+      console.log('[Principal] Sessions and terms loaded:', {
+        sessions: data.sessions?.length || 0,
+        terms: data.terms?.length || 0,
+      })
 
-        if (termData && termData.length > 0) {
-          // Auto-select the first term
-          const firstTerm = termData[0]
-          console.log('[Principal] Auto-selecting term:', firstTerm.id, firstTerm.term_name)
-          setSelectedTerm(firstTerm.id)
-          // Immediately load classes for this term
-          await loadClassesForTermImmediate(currentUser.school_id, firstTerm.id)
-        }
+      setSessions(data.sessions || [])
+      setTerms(data.terms || [])
+
+      // Auto-select first session
+      if (data.sessions && data.sessions.length > 0) {
+        const firstSession = data.sessions[0]
+        console.log('[Principal] Auto-selecting session:', firstSession.session_year)
+        setSelectedSession(firstSession.id)
       }
     } catch (error) {
       console.error('[Principal] Load error:', error)
@@ -120,87 +143,32 @@ export default function PrincipalResultsPage() {
     }
   }
 
-  const loadClassesForTermImmediate = async (schoolId: string, termId: string) => {
+  const loadClassesForTerm = async (schoolId: string, termId: string) => {
     try {
-      console.log('[Principal] Loading classes immediately for term:', termId)
+      setLoadingClasses(true)
+      console.log('[Principal] Loading classes for term:', termId)
 
-      // Load all classes
-      const { data: classesData, error: classesError } = await supabase
-        .from('class_arm_combos')
-        .select(`
-          id,
-          classes(id, name),
-          arms(id, name)
-        `)
-        .eq('school_id', schoolId)
+      const response = await fetch(
+        `/api/results/school-classes-and-students?schoolId=${schoolId}&termId=${termId}&t=${Date.now()}`
+      )
 
-      if (classesError) {
-        console.error('[Principal] Classes fetch error:', classesError)
-        return
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
       }
 
-      console.log('[Principal] Classes loaded:', classesData?.length || 0)
+      const data = await response.json()
+      console.log('[Principal] Classes loaded:', data.classes?.length || 0)
 
-      // Get results for each class
-      const classResults: ClassResult[] = []
-
-      for (const classCombo of classesData || []) {
-        const className = classCombo.classes?.name || 'Class'
-        const armName = classCombo.arms?.name || ''
-        const fullName = armName ? `${className} ${armName}` : className
-
-        try {
-          console.log('[Principal] Fetching results for class:', fullName)
-          
-          // Call class summary API with cache-busting
-          const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${schoolId}&termId=${termId}&t=${Date.now()}`
-          const response = await fetch(apiUrl)
-          
-          if (!response.ok) {
-            console.error('[Principal] API error:', response.status)
-            throw new Error(`API returned ${response.status}`)
-          }
-          
-          const data = await response.json()
-
-          const studentResults: StudentResult[] = data.students || []
-
-          classResults.push({
-            id: classCombo.id,
-            class_name: className,
-            arm_name: armName,
-            students: studentResults,
-          })
-          
-          console.log('[Principal] Class results loaded:', fullName, 'students:', studentResults.length)
-        } catch (err) {
-          console.error('[Principal] Error loading class results:', err)
-          classResults.push({
-            id: classCombo.id,
-            class_name: className,
-            arm_name: armName,
-            students: [],
-          })
-        }
-      }
-
-      setClasses(classResults)
-      if (classResults.length > 0) {
-        setSelectedClass(classResults[0].id)
-        setSelectedClassData(classResults[0])
-      }
-      console.log('[Principal] All classes loaded')
+      setClasses(data.classes || [])
+      setSelectedClass(null)
+      setSelectedClassData(null)
     } catch (error) {
-      console.error('[Principal] Load classes error:', error)
-    }
-  }
-
-  const loadClassesForTerm = async (termId: string) => {
-    try {
-      if (!user?.school_id) return
-      await loadClassesForTermImmediate(user.school_id, termId)
-    } catch (error) {
-      console.error('[Principal] Load classes error:', error)
+      console.error('[Principal] Error loading classes:', error)
+      setClasses([])
+      setSelectedClass(null)
+      setSelectedClassData(null)
+    } finally {
+      setLoadingClasses(false)
     }
   }
 
@@ -245,21 +213,42 @@ export default function PrincipalResultsPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-8">📊 Student Results & Performance</h1>
 
-        {/* Term Filter */}
-        <div className="mb-6 bg-white rounded-lg shadow-lg p-4">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Filter by Term:</label>
-          <select
-            value={selectedTerm || ''}
-            onChange={(e) => setSelectedTerm(e.target.value)}
-            className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-amber-600 focus:outline-none"
-          >
-            <option value="">-- Select Term --</option>
-            {terms.map((term) => (
-              <option key={term.id} value={term.id}>
-                {term.term_name}
-              </option>
-            ))}
-          </select>
+        {/* Session and Term Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-lg shadow-lg p-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Session:</label>
+            <select
+              value={selectedSession || ''}
+              onChange={(e) => setSelectedSession(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-amber-600 focus:outline-none"
+            >
+              <option value="">-- Select Session --</option>
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.session_year} {session.is_active ? '(Active)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-lg p-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Term:</label>
+            <select
+              value={selectedTerm || ''}
+              onChange={(e) => setSelectedTerm(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-amber-600 focus:outline-none"
+              disabled={!selectedSession}
+            >
+              <option value="">-- Select Term --</option>
+              {terms
+                .filter((t) => t.session_id === selectedSession)
+                .map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.term_name}
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -267,14 +256,18 @@ export default function PrincipalResultsPage() {
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-lg overflow-hidden">
               <div className="bg-amber-600 text-white px-6 py-4">
-                <h2 className="text-xl font-bold">Classes</h2>
+                <h2 className="text-xl font-bold">Classes ({classes.length})</h2>
               </div>
-              <div className="max-h-96 overflow-y-auto">
-                {classes.length === 0 ? (
-                  <div className="p-6 text-center text-gray-600">
-                    <p>No classes found</p>
-                  </div>
-                ) : (
+              {loadingClasses ? (
+                <div className="p-6 text-center text-gray-600">
+                  <p>Loading classes...</p>
+                </div>
+              ) : classes.length === 0 ? (
+                <div className="p-6 text-center text-gray-600">
+                  <p>No classes found</p>
+                </div>
+              ) : (
+                <div className="max-h-96 overflow-y-auto">
                   <div className="divide-y">
                     {classes.map((cls) => (
                       <button
@@ -293,13 +286,13 @@ export default function PrincipalResultsPage() {
                           {cls.class_name} {cls.arm_name}
                         </h3>
                         <p className="text-xs text-gray-600 mt-1">
-                          {cls.students.length} students
+                          👥 {cls.student_count} students
                         </p>
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -313,7 +306,7 @@ export default function PrincipalResultsPage() {
                     {selectedClassData.class_name} {selectedClassData.arm_name}
                   </h2>
                   <p className="text-sm text-amber-100 mt-1">
-                    {selectedClassData.students.length} Students
+                    📊 {selectedClassData.student_count} Students
                   </p>
                 </div>
 
@@ -333,7 +326,7 @@ export default function PrincipalResultsPage() {
                       {selectedClassData.students.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="px-6 py-8 text-center text-gray-600">
-                            No results available
+                            No students in this class
                           </td>
                         </tr>
                       ) : (
@@ -344,7 +337,7 @@ export default function PrincipalResultsPage() {
                             <td className="px-6 py-4 text-gray-600">{student.admission_number}</td>
                             <td className="px-6 py-4 text-center">
                               <span className="font-bold text-lg text-gray-900">
-                                {student.overall_score.toFixed(2)}
+                                {student.overall_score}
                               </span>
                             </td>
                             <td className="px-6 py-4">

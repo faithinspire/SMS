@@ -6,10 +6,11 @@ import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
 import StaffHeader from '@/components/StaffHeader'
 
-interface ClassResult {
+interface ClassWithStudents {
   id: string
   class_name: string
   arm_name: string
+  student_count: number
   students: StudentResult[]
 }
 
@@ -21,161 +22,180 @@ interface StudentResult {
   performance_rating: string
 }
 
-export default function HeadteacherResultsPage() {
+interface Session {
+  id: string
+  session_year: string
+  is_active: boolean
+}
+
+interface Term {
+  id: string
+  session_id: string
+  term_name: string
+  term_number: number
+  is_active: boolean
+}
+
+export default function HeadTeacherResultsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [school, setSchool] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [classes, setClasses] = useState<ClassResult[]>([])
+  const [classes, setClasses] = useState<ClassWithStudents[]>([])
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
-  const [selectedClassData, setSelectedClassData] = useState<ClassResult | null>(null)
-  const [terms, setTerms] = useState<any[]>([])
+  const [selectedClassData, setSelectedClassData] = useState<ClassWithStudents | null>(null)
+  
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [terms, setTerms] = useState<Term[]>([])
+  const [selectedSession, setSelectedSession] = useState<string | null>(null)
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null)
+  const [loadingClasses, setLoadingClasses] = useState(false)
 
+  // Load on mount
   useEffect(() => {
-    loadData()
+    loadInitialData()
   }, [])
 
+  // When session changes, load its terms
   useEffect(() => {
-    if (selectedTerm) {
-      loadClassesForTerm(selectedTerm)
+    if (selectedSession) {
+      const sessionTerms = terms.filter((t) => t.session_id === selectedSession)
+      if (sessionTerms.length > 0) {
+        setSelectedTerm(sessionTerms[0].id)
+      }
     }
-  }, [selectedTerm])
+  }, [selectedSession])
 
-  const loadData = async () => {
+  // When term changes, load classes and students
+  useEffect(() => {
+    if (selectedTerm && user?.school_id) {
+      loadClassesForTerm(user.school_id, selectedTerm)
+    }
+  }, [selectedTerm, user?.school_id])
+
+  // Auto-select first class when classes load
+  useEffect(() => {
+    if (classes.length > 0 && !selectedClass) {
+      console.log('[HeadTeacher] Auto-selecting first class:', classes[0].class_name)
+      setSelectedClass(classes[0].id)
+      setSelectedClassData(classes[0])
+    }
+  }, [classes])
+
+  const loadInitialData = async () => {
     try {
       setLoading(true)
+      console.log('[HeadTeacher] Loading initial data...')
+
       const currentUser = await AuthService.getCurrentUser()
 
-      if (!currentUser || currentUser.role !== 'HEAD_TEACHER') {
+      if (!currentUser || !['PRINCIPAL', 'HEAD_TEACHER'].includes(currentUser.role)) {
         router.push('/landing')
         return
       }
 
       setUser(currentUser)
 
-      if (currentUser.school_id) {
-        // Load school
-        const { data: schoolData } = await supabase
-          .from('schools')
-          .select('*')
-          .eq('id', currentUser.school_id)
-          .single()
+      if (!currentUser.school_id) {
+        console.error('[HeadTeacher] No school ID found')
+        return
+      }
 
-        setSchool(schoolData)
+      // Load school info
+      const { data: schoolData } = await supabase
+        .from('schools')
+        .select('id, name, logo_url')
+        .eq('id', currentUser.school_id)
+        .single()
 
-        // Load all terms directly (skip sessions - they may not exist)
-        console.log('[HeadTeacher] Loading terms directly...')
-        const { data: termData, error: termError } = await supabase
-          .from('academic_terms')
-          .select('id, term_name, session_id')
-          .order('term_name', { ascending: true })
+      setSchool(schoolData)
+      console.log('[HeadTeacher] School loaded:', schoolData?.name)
 
-        if (termError) {
-          console.error('[HeadTeacher] Terms fetch error:', termError)
-          setLoading(false)
-          return
-        }
+      // Load sessions and terms
+      console.log('[HeadTeacher] Loading sessions and terms...')
+      const response = await fetch(
+        `/api/results/school-sessions-and-terms?schoolId=${currentUser.school_id}`
+      )
 
-        console.log('[HeadTeacher] Available terms:', termData?.length || 0)
-        setTerms(termData || [])
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
 
-        if (termData && termData.length > 0) {
-          // Auto-select the first term
-          const firstTerm = termData[0]
-          console.log('[HeadTeacher] Auto-selecting term:', firstTerm.id, firstTerm.term_name)
-          setSelectedTerm(firstTerm.id)
-          // Immediately load classes for this term
-          await loadClassesForTermImmediate(currentUser.school_id, firstTerm.id)
-        }
+      const data = await response.json()
+      console.log('[HeadTeacher] Sessions and terms loaded:', {
+        sessions: data.sessions?.length || 0,
+        terms: data.terms?.length || 0,
+      })
+
+      setSessions(data.sessions || [])
+      setTerms(data.terms || [])
+
+      // Auto-select first session
+      if (data.sessions && data.sessions.length > 0) {
+        const firstSession = data.sessions[0]
+        console.log('[HeadTeacher] Auto-selecting session:', firstSession.session_year)
+        setSelectedSession(firstSession.id)
       }
     } catch (error) {
-      console.error('Load error:', error)
+      console.error('[HeadTeacher] Load error:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const loadClassesForTermImmediate = async (schoolId: string, termId: string) => {
+  const loadClassesForTerm = async (schoolId: string, termId: string) => {
     try {
+      setLoadingClasses(true)
       console.log('[HeadTeacher] Loading classes for term:', termId)
 
-      // Load only PRIMARY school classes
-      const { data: classesData } = await supabase
-        .from('class_arm_combos')
-        .select(`
-          id,
-          classes(id, name, school_level),
-          arms(id, name)
-        `)
-        .eq('school_id', schoolId)
+      const response = await fetch(
+        `/api/results/school-classes-and-students?schoolId=${schoolId}&termId=${termId}&t=${Date.now()}`
+      )
 
-      // Filter for PRIMARY level only
-      const primaryClasses = classesData?.filter(
-        (c: any) => c.classes?.school_level === 'PRIMARY'
-      ) || []
-
-      // Get results for each class
-      const classResults: ClassResult[] = []
-
-      for (const classCombo of primaryClasses) {
-        const className = classCombo.classes?.name || 'Class'
-        const armName = classCombo.arms?.name || ''
-
-        try {
-          // Call class summary API
-          const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${schoolId}&termId=${termId}&t=${Date.now()}`
-          const response = await fetch(apiUrl)
-          const data = await response.json()
-
-          const studentResults: StudentResult[] = data.students || []
-
-          classResults.push({
-            id: classCombo.id,
-            class_name: className,
-            arm_name: armName,
-            students: studentResults,
-          })
-        } catch (err) {
-          console.error('Error loading class results:', err)
-          classResults.push({
-            id: classCombo.id,
-            class_name: className,
-            arm_name: armName,
-            students: [],
-          })
-        }
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
       }
 
-      setClasses(classResults)
-      if (classResults.length > 0) {
-        setSelectedClass(classResults[0].id)
-        setSelectedClassData(classResults[0])
-      }
+      const data = await response.json()
+      console.log('[HeadTeacher] All classes loaded:', data.classes?.length || 0)
+
+      // Filter to only primary school classes (JSS 1, JSS 2, JSS 3, SS 1, SS 2, SS 3)
+      // Headteacher typically manages primary/secondary school, not pre-primary
+      const primaryClasses = (data.classes || []).filter((cls: ClassWithStudents) => {
+        const className = cls.class_name.toLowerCase()
+        // Include JSS and SS classes, exclude Pre/Nursery/Primary
+        return className.includes('jss') || className.includes('ss') || className.includes('form')
+      })
+
+      console.log('[HeadTeacher] Filtered to primary classes:', primaryClasses.length)
+
+      setClasses(primaryClasses)
+      setSelectedClass(null)
+      setSelectedClassData(null)
     } catch (error) {
-      console.error('Load classes error:', error)
+      console.error('[HeadTeacher] Error loading classes:', error)
+      setClasses([])
+      setSelectedClass(null)
+      setSelectedClassData(null)
+    } finally {
+      setLoadingClasses(false)
     }
   }
 
-  const loadClassesForTerm = async (termId: string) => {
-    try {
-      if (!user?.school_id) return
-      await loadClassesForTermImmediate(user.school_id, termId)
-    } catch (error) {
-      console.error('Load classes error:', error)
-    }
-  }
-
-  const getRatingColor = (rating: string) => {
+  const getPerformanceColor = (rating: string) => {
     switch (rating) {
       case 'Excellent':
         return 'bg-green-100 text-green-800'
       case 'Very Good':
         return 'bg-blue-100 text-blue-800'
       case 'Good':
-        return 'bg-yellow-100 text-yellow-800'
+        return 'bg-cyan-100 text-cyan-800'
       case 'Fair':
+        return 'bg-yellow-100 text-yellow-800'
+      case 'Poor':
         return 'bg-orange-100 text-orange-800'
+      case 'Very Poor':
+        return 'bg-red-100 text-red-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -183,9 +203,9 @@ export default function HeadteacherResultsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-indigo-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-500 border-t-pink-500 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading results...</p>
         </div>
       </div>
@@ -193,46 +213,71 @@ export default function HeadteacherResultsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50">
       <StaffHeader
         staffName={user?.full_name || 'Head Teacher'}
         schoolName={school?.name || 'School'}
-        section="Student Results (Primary Level)"
+        section="Student Results"
       />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
-        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-8">📊 Primary School Results</h1>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <h1 className="text-4xl font-bold text-gray-900 mb-8">📊 Student Results & Performance</h1>
 
-        {/* Term Filter */}
-        <div className="mb-6 bg-white rounded-lg shadow-lg p-4">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Filter by Term:</label>
-          <select
-            value={selectedTerm || ''}
-            onChange={(e) => setSelectedTerm(e.target.value)}
-            className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
-          >
-            <option value="">-- Select Term --</option>
-            {terms.map((term) => (
-              <option key={term.id} value={term.id}>
-                {term.term_name}
-              </option>
-            ))}
-          </select>
+        {/* Session and Term Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-lg shadow-lg p-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Session:</label>
+            <select
+              value={selectedSession || ''}
+              onChange={(e) => setSelectedSession(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
+            >
+              <option value="">-- Select Session --</option>
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.session_year} {session.is_active ? '(Active)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-lg p-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Term:</label>
+            <select
+              value={selectedTerm || ''}
+              onChange={(e) => setSelectedTerm(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
+              disabled={!selectedSession}
+            >
+              <option value="">-- Select Term --</option>
+              {terms
+                .filter((t) => t.session_id === selectedSession)
+                .map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.term_name}
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Classes List */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-              <div className="bg-blue-600 text-white px-4 sm:px-6 py-4">
-                <h2 className="text-lg sm:text-xl font-bold">Classes</h2>
+              <div className="bg-purple-600 text-white px-6 py-4">
+                <h2 className="text-xl font-bold">Classes ({classes.length})</h2>
               </div>
-              <div className="max-h-96 overflow-y-auto">
-                {classes.length === 0 ? (
-                  <div className="p-6 text-center text-gray-600">
-                    <p className="text-sm">No primary classes found</p>
-                  </div>
-                ) : (
+              {loadingClasses ? (
+                <div className="p-6 text-center text-gray-600">
+                  <p>Loading classes...</p>
+                </div>
+              ) : classes.length === 0 ? (
+                <div className="p-6 text-center text-gray-600">
+                  <p>No classes found</p>
+                </div>
+              ) : (
+                <div className="max-h-96 overflow-y-auto">
                   <div className="divide-y">
                     {classes.map((cls) => (
                       <button
@@ -241,9 +286,9 @@ export default function HeadteacherResultsPage() {
                           setSelectedClass(cls.id)
                           setSelectedClassData(cls)
                         }}
-                        className={`w-full text-left p-4 hover:bg-blue-50 transition-colors border-l-4 text-sm sm:text-base ${
+                        className={`w-full text-left p-4 hover:bg-purple-50 transition-colors border-l-4 ${
                           selectedClass === cls.id
-                            ? 'border-blue-600 bg-blue-50'
+                            ? 'border-purple-600 bg-purple-50'
                             : 'border-gray-200'
                         }`}
                       >
@@ -251,13 +296,13 @@ export default function HeadteacherResultsPage() {
                           {cls.class_name} {cls.arm_name}
                         </h3>
                         <p className="text-xs text-gray-600 mt-1">
-                          👥 {cls.students.length} students
+                          👥 {cls.student_count} students
                         </p>
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -266,45 +311,47 @@ export default function HeadteacherResultsPage() {
             {selectedClassData ? (
               <div className="bg-white rounded-lg shadow-lg overflow-hidden">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 sm:px-6 py-4">
-                  <h2 className="text-xl sm:text-2xl font-bold">
+                <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-4">
+                  <h2 className="text-2xl font-bold">
                     {selectedClassData.class_name} {selectedClassData.arm_name}
                   </h2>
-                  <p className="text-xs sm:text-sm text-blue-100 mt-1">
-                    👥 {selectedClassData.students.length} Students Enrolled
+                  <p className="text-sm text-purple-100 mt-1">
+                    📊 {selectedClassData.student_count} Students
                   </p>
                 </div>
 
                 {/* Results Table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm sm:text-base">
+                  <table className="w-full">
                     <thead className="bg-gray-100">
                       <tr>
-                        <th className="px-3 sm:px-6 py-3 text-left font-semibold text-gray-900">#</th>
-                        <th className="px-3 sm:px-6 py-3 text-left font-semibold text-gray-900">Name</th>
-                        <th className="px-3 sm:px-6 py-3 text-left font-semibold text-gray-900 hidden sm:table-cell">Admission</th>
-                        <th className="px-3 sm:px-6 py-3 text-center font-semibold text-gray-900">Score</th>
-                        <th className="px-3 sm:px-6 py-3 text-left font-semibold text-gray-900">Rating</th>
+                        <th className="px-6 py-3 text-left font-semibold text-gray-900">#</th>
+                        <th className="px-6 py-3 text-left font-semibold text-gray-900">Student Name</th>
+                        <th className="px-6 py-3 text-left font-semibold text-gray-900">Admission #</th>
+                        <th className="px-6 py-3 text-center font-semibold text-gray-900">Overall Score</th>
+                        <th className="px-6 py-3 text-left font-semibold text-gray-900">Performance</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
                       {selectedClassData.students.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="px-6 py-8 text-center text-gray-600">
-                            No results available
+                            No students in this class
                           </td>
                         </tr>
                       ) : (
-                        selectedClassData.students.map((student, idx) => (
-                          <tr key={student.id} className="hover:bg-gray-50">
-                            <td className="px-3 sm:px-6 py-4 text-gray-900 font-medium">{idx + 1}</td>
-                            <td className="px-3 sm:px-6 py-4 text-gray-900 font-medium truncate">{student.full_name}</td>
-                            <td className="px-3 sm:px-6 py-4 text-gray-600 hidden sm:table-cell text-sm">{student.admission_number}</td>
-                            <td className="px-3 sm:px-6 py-4 text-center font-bold text-lg text-blue-600">
-                              {student.overall_score.toFixed(1)}
+                        selectedClassData.students.map((student, index) => (
+                          <tr key={student.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4 font-bold text-gray-900">{index + 1}</td>
+                            <td className="px-6 py-4 text-gray-900">{student.full_name}</td>
+                            <td className="px-6 py-4 text-gray-600">{student.admission_number}</td>
+                            <td className="px-6 py-4 text-center">
+                              <span className="font-bold text-lg text-gray-900">
+                                {student.overall_score}
+                              </span>
                             </td>
-                            <td className="px-3 sm:px-6 py-4">
-                              <span className={`px-2 py-1 rounded-full text-xs font-semibold inline-block ${getRatingColor(student.performance_rating)}`}>
+                            <td className="px-6 py-4">
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPerformanceColor(student.performance_rating)}`}>
                                 {student.performance_rating}
                               </span>
                             </td>
@@ -314,40 +361,10 @@ export default function HeadteacherResultsPage() {
                     </tbody>
                   </table>
                 </div>
-
-                {/* Summary */}
-                {selectedClassData.students.length > 0 && (
-                  <div className="bg-gray-50 px-4 sm:px-6 py-4 border-t">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <p className="text-gray-600">Total Students</p>
-                        <p className="text-2xl font-bold text-blue-600">{selectedClassData.students.length}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Average Score</p>
-                        <p className="text-2xl font-bold text-indigo-600">
-                          {(selectedClassData.students.reduce((a, b) => a + b.overall_score, 0) / selectedClassData.students.length).toFixed(1)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Highest Score</p>
-                        <p className="text-2xl font-bold text-green-600">
-                          {Math.max(...selectedClassData.students.map(s => s.overall_score)).toFixed(1)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Lowest Score</p>
-                        <p className="text-2xl font-bold text-orange-600">
-                          {Math.min(...selectedClassData.students.map(s => s.overall_score)).toFixed(1)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
-              <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-                <p className="text-gray-600">Select a class to view results</p>
+              <div className="bg-white rounded-lg shadow-lg p-8 text-center text-gray-600">
+                <p className="text-lg">👈 Select a class to view results</p>
               </div>
             )}
           </div>
