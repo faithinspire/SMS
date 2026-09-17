@@ -323,30 +323,36 @@ export default function TeacherResultsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {studentResults.map((result) => (
-                    <tr 
-                      key={result.student_id}
-                      onClick={() => router.push(`/teacher/results/${result.student_id}`)}
-                      className={`border-b hover:bg-gray-100 cursor-pointer transition ${result.status === 'PASS' ? 'bg-green-50 border-l-4 border-green-500' : 'bg-red-50 border-l-4 border-red-500'}`}
-                    >
-                      <td className="px-4 py-3 font-semibold text-gray-800">{result.admission_number}</td>
-                      <td className="px-4 py-3 text-gray-700">{result.student_name}</td>
-                      <td className="px-4 py-3 text-center font-semibold text-gray-700">{result.subjects.length}</td>
-                      <td className="px-4 py-3 text-center font-bold text-indigo-600 text-lg">{result.overall_score}</td>
-                      <td className="px-4 py-3 text-center font-bold text-indigo-600 text-lg">{result.overall_grade}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-block px-3 py-1 rounded-full font-semibold text-sm ${
-                          result.status === 'PASS' 
-                            ? 'bg-green-200 text-green-800 border border-green-400'
-                            : result.status === 'FAIL'
-                            ? 'bg-red-200 text-red-800 border border-red-400'
-                            : 'bg-yellow-200 text-yellow-800 border border-yellow-400'
-                        }`}>
-                          {result.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {studentResults.map((result) => {
+                    // Find the selected term name
+                    const selectedTermData = terms.find(t => t.id === selectedTerm)
+                    const termName = selectedTermData?.term_name || 'Unknown'
+                    
+                    return (
+                      <tr 
+                        key={result.student_id}
+                        onClick={() => router.push(`/teacher/results/${result.student_id}?termId=${selectedTerm}&termName=${encodeURIComponent(termName)}`)}
+                        className={`border-b hover:bg-gray-100 cursor-pointer transition ${result.status === 'PASS' ? 'bg-green-50 border-l-4 border-green-500' : 'bg-red-50 border-l-4 border-red-500'}`}
+                      >
+                        <td className="px-4 py-3 font-semibold text-gray-800">{result.admission_number}</td>
+                        <td className="px-4 py-3 text-gray-700">{result.student_name}</td>
+                        <td className="px-4 py-3 text-center font-semibold text-gray-700">{result.subjects.length}</td>
+                        <td className="px-4 py-3 text-center font-bold text-indigo-600 text-lg">{result.overall_score}</td>
+                        <td className="px-4 py-3 text-center font-bold text-indigo-600 text-lg">{result.overall_grade}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`inline-block px-3 py-1 rounded-full font-semibold text-sm ${
+                            result.status === 'PASS' 
+                              ? 'bg-green-200 text-green-800 border border-green-400'
+                              : result.status === 'FAIL'
+                              ? 'bg-red-200 text-red-800 border border-red-400'
+                              : 'bg-yellow-200 text-yellow-800 border border-yellow-400'
+                          }`}>
+                            {result.status}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

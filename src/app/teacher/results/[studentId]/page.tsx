@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
-import { ResultAggregationService } from '@/services/result-aggregation.service'
 import { supabase } from '@/lib/supabase-client'
 import toast from 'react-hot-toast'
 
@@ -26,7 +25,12 @@ interface StudentResult {
 export default function StudentDetailPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const studentId = params.studentId as string
+  
+  // ===== FIX: Get term from URL parameters =====
+  const termIdFromUrl = searchParams.get('termId')
+  const termNameFromUrl = searchParams.get('termName')
 
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -34,12 +38,13 @@ export default function StudentDetailPage() {
   const [comment, setComment] = useState<string>('')
   const [isEditingComment, setIsEditingComment] = useState(false)
   const [savingComment, setSavingComment] = useState(false)
-  const [termId, setTermId] = useState<string>('')
+  const [termId, setTermId] = useState<string>(termIdFromUrl || '')
+  const [termName, setTermName] = useState<string>(termNameFromUrl || '')
 
   // Initialize
   useEffect(() => {
     initialize()
-  }, [])
+  }, [termIdFromUrl]) // Re-run if term changes
 
   const initialize = async () => {
     try {
@@ -86,39 +91,46 @@ export default function StudentDetailPage() {
 
       console.log('[StudentDetail] Found student:', student.id, student.admission_number)
 
-      // Get current term (from session parameters or use latest)
-      const { data: session } = await supabase
-        .from('academic_sessions')
-        .select('id')
-        .eq('school_id', schoolId)
-        .order('session_year', { ascending: false })
-        .limit(1)
-        .single()
+      let activeTermId = termIdFromUrl
+      let activeTermName = termNameFromUrl
 
-      if (!session) {
-        console.error('[StudentDetail] No academic session found')
-        toast.error('No academic session found')
-        return
+      // If no term in URL, get the active term
+      if (!activeTermId) {
+        const { data: session } = await supabase
+          .from('academic_sessions')
+          .select('id')
+          .eq('school_id', schoolId)
+          .order('session_year', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (!session) {
+          console.error('[StudentDetail] No academic session found')
+          toast.error('No academic session found')
+          return
+        }
+
+        const { data: term } = await supabase
+          .from('academic_terms')
+          .select('id, term_name')
+          .eq('session_id', session.id)
+          .order('term_name', { ascending: true })
+          .limit(1)
+          .single()
+
+        if (!term) {
+          console.error('[StudentDetail] No term found')
+          toast.error('No term found')
+          return
+        }
+
+        activeTermId = term.id
+        activeTermName = term.term_name
       }
 
-      console.log('[StudentDetail] Found session:', session.id)
-
-      const { data: term } = await supabase
-        .from('academic_terms')
-        .select('id')
-        .eq('session_id', session.id)
-        .order('term_name', { ascending: true })
-        .limit(1)
-        .single()
-
-      if (!term) {
-        console.error('[StudentDetail] No term found')
-        toast.error('No term found')
-        return
-      }
-
-      setTermId(term.id)
-      console.log('[StudentDetail] Using term:', term.id)
+      setTermId(activeTermId)
+      setTermName(activeTermName)
+      console.log('[StudentDetail] Using term:', activeTermId, activeTermName)
 
       // Get student name
       let studentName = 'Unknown'
@@ -138,11 +150,12 @@ export default function StudentDetailPage() {
       console.log('[StudentDetail] Calling results API with:', {
         studentId: studId,
         schoolId,
-        termId: term.id,
+        termId: activeTermId,
+        termName: activeTermName,
         timestamp: new Date().toISOString(),
       })
 
-      const apiUrl = `/api/results/student/${studId}?schoolId=${schoolId}&termId=${term.id}&t=${Date.now()}`
+      const apiUrl = `/api/results/student/${studId}?schoolId=${schoolId}&termId=${activeTermId}&t=${Date.now()}`
       console.log('[StudentDetail] API URL:', apiUrl)
 
       const apiResponse = await fetch(apiUrl)
@@ -165,13 +178,13 @@ export default function StudentDetailPage() {
         console.log('[StudentDetail] First subject:', JSON.stringify(apiData.subjects[0], null, 2))
       }
 
-      // Format the result
+      // Format the result - USE ACTUAL TERM NAME FROM URL/DB
       const formattedResult: StudentResult = {
         student_id: studId,
         student_name: studentName,
         admission_number: student.admission_number,
         session_year: '2025/2026',
-        term_name: 'First Term',
+        term_name: activeTermName || 'Unknown Term',
         subjects: apiData.subjects || [],
         overall_score: apiData.overall_score || 0,
         overall_grade: apiData.overall_grade || 'N/A',
@@ -184,7 +197,7 @@ export default function StudentDetailPage() {
       setResult(formattedResult)
 
       // Load comment
-      await loadComment(schoolId, studId, term.id)
+      await loadComment(schoolId, studId, activeTermId)
     } catch (err) {
       console.error('[StudentDetail] Load result error:', err)
       toast.error('Failed to load student result')
