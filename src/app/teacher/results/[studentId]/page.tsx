@@ -119,9 +119,10 @@ export default function StudentDetailPage() {
         studentId: studId,
         schoolId,
         termId: term.id,
+        timestamp: new Date().toISOString(),
       })
 
-      const apiUrl = `/api/results/student/${studId}?schoolId=${schoolId}&termId=${term.id}`
+      const apiUrl = `/api/results/student/${studId}?schoolId=${schoolId}&termId=${term.id}&t=${Date.now()}`
       console.log('[StudentDetail] API URL:', apiUrl)
 
       const apiResponse = await fetch(apiUrl)
@@ -130,8 +131,12 @@ export default function StudentDetailPage() {
       console.log('[StudentDetail] API Response Status:', apiResponse.status)
       console.log('[StudentDetail] API Response Data:', JSON.stringify(apiData, null, 2))
       console.log('[StudentDetail] Subjects count:', apiData.subjects?.length || 0)
+      console.log('[StudentDetail] Overall Score:', apiData.overall_score)
+      console.log('[StudentDetail] Overall Grade:', apiData.overall_grade)
+      
       if (apiData.subjects && apiData.subjects.length > 0) {
         console.log('[StudentDetail] First subject:', apiData.subjects[0])
+        console.log('[StudentDetail] First subject scores - Test1:', apiData.subjects[0].test1, 'Exam:', apiData.subjects[0].exam)
       }
 
       if (!apiResponse.ok) {
