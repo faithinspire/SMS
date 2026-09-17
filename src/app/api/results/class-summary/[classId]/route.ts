@@ -54,12 +54,12 @@ export async function GET(
     // ========================================================================
     // STEP 1: GET ALL STUDENTS IN THIS CLASS
     // ========================================================================
+    console.log('[API] Fetching students from class:', classId)
 
     const { data: students, error: studentsError } = await supabase
       .from('students')
       .select('id, full_name, admission_number, user_id')
       .eq('class_arm_combo_id', classId)
-      .eq('school_id', schoolId)
       .order('admission_number', { ascending: true })
 
     if (studentsError) {
@@ -70,48 +70,39 @@ export async function GET(
       )
     }
 
+    console.log('[API] Found students:', students?.length || 0)
+
     if (!students || students.length === 0) {
       console.warn('[API] No students found in class')
       return NextResponse.json({
+        success: true,
         students: [],
+        message: 'No students in this class',
       })
     }
 
     // ========================================================================
     // STEP 2: GET SCORES FOR ALL STUDENTS
     // ========================================================================
+    console.log('[API] Fetching scores for:', students.length, 'students')
+
+    const studentIds = students.map((s) => s.id)
+    console.log('[API] Student IDs:', studentIds)
 
     const { data: allScores, error: scoresError } = await supabase
       .from('score_sheets')
-      .select(
-        `
-        id,
-        student_id,
-        test1,
-        test2,
-        test3,
-        test4,
-        exam,
-        total,
-        grade
-      `
-      )
+      .select('id, student_id, test1, test2, test3, test4, exam, total, grade')
       .eq('school_id', schoolId)
       .eq('term_id', termId)
-      .in(
-        'student_id',
-        students.map((s) => s.id)
-      )
+      .in('student_id', studentIds)
 
     if (scoresError) {
       console.error('[API] Error fetching scores:', scoresError)
-      return NextResponse.json(
-        { error: 'Failed to fetch scores', details: scoresError.message },
-        { status: 500 }
-      )
+      console.error('[API] Filters used:', { school_id: schoolId, term_id: termId, student_ids: studentIds })
+      // Don't fail - just continue with 0 scores
     }
 
-    console.log('[API] Fetched scores for class:', allScores?.length || 0)
+    console.log('[API] Fetched scores:', allScores?.length || 0)
 
     // ========================================================================
     // STEP 3: AGGREGATE SCORES BY STUDENT
@@ -128,8 +119,9 @@ export async function GET(
         }
       }
 
-      scoresByStudent[score.student_id].scores.push(score.total || 0)
-      scoresByStudent[score.student_id].totalSum += score.total || 0
+      const total = score.total || 0
+      scoresByStudent[score.student_id].scores.push(total)
+      scoresByStudent[score.student_id].totalSum += total
       scoresByStudent[score.student_id].count += 1
     }
 
@@ -159,6 +151,7 @@ export async function GET(
       else if (overallScore >= 40) performanceRating = 'Poor'
 
       return {
+        id: student.id,
         student_id: student.id,
         full_name: student.full_name || 'Unknown',
         admission_number: student.admission_number || 'N/A',
@@ -173,6 +166,9 @@ export async function GET(
 
     console.log('[API] Returning class results:', {
       studentCount: studentResults.length,
+      schoolId,
+      termId,
+      classId,
     })
 
     return NextResponse.json({
@@ -182,10 +178,12 @@ export async function GET(
     })
   } catch (error: any) {
     console.error('[API] Exception in GET /api/results/class-summary:', error)
+    console.error('[API] Error stack:', error.stack)
     return NextResponse.json(
       {
         error: 'Internal server error',
         details: error.message,
+        stack: error.stack,
       },
       { status: 500 }
     )

@@ -89,34 +89,11 @@ export default function PrincipalResultsPage() {
         setSchool(schoolData)
         console.log('[Principal] School loaded:', schoolData?.name)
 
-        // Load available terms and sessions
-        const { data: sessionData, error: sessionError } = await supabase
-          .from('academic_sessions')
-          .select('id, session_year')
-          .eq('school_id', currentUser.school_id)
-          .order('session_year', { ascending: false })
-
-        if (sessionError) {
-          console.error('[Principal] Session fetch error:', sessionError)
-          throw sessionError
-        }
-
-        if (!sessionData || sessionData.length === 0) {
-          console.warn('[Principal] No academic sessions found')
-          setLoading(false)
-          return
-        }
-
-        console.log('[Principal] Found sessions:', sessionData.length)
-
-        // Get all terms for these sessions
+        // Load all terms directly (skip sessions - they may not exist)
+        console.log('[Principal] Loading terms directly...')
         const { data: termData, error: termError } = await supabase
           .from('academic_terms')
           .select('id, term_name, session_id')
-          .in(
-            'session_id',
-            sessionData.map((s) => s.id)
-          )
           .order('term_name', { ascending: true })
 
         if (termError) {
@@ -128,7 +105,7 @@ export default function PrincipalResultsPage() {
         setTerms(termData || [])
 
         if (termData && termData.length > 0) {
-          // Auto-select the first term (most recent session's first term)
+          // Auto-select the first term
           const firstTerm = termData[0]
           console.log('[Principal] Auto-selecting term:', firstTerm.id, firstTerm.term_name)
           setSelectedTerm(firstTerm.id)

@@ -64,33 +64,11 @@ export default function SchoolAdminResultsPage() {
 
         setSchool(schoolData)
 
-        // Load available sessions
-        const { data: sessionData, error: sessionError } = await supabase
-          .from('academic_sessions')
-          .select('id, session_year')
-          .eq('school_id', currentUser.school_id)
-          .order('session_year', { ascending: false })
-
-        if (sessionError) {
-          console.error('[SchoolAdmin] Session fetch error:', sessionError)
-          setLoading(false)
-          return
-        }
-
-        if (!sessionData || sessionData.length === 0) {
-          console.warn('[SchoolAdmin] No academic sessions found')
-          setLoading(false)
-          return
-        }
-
-        // Get all terms
+        // Load all terms directly (skip sessions - they may not exist)
+        console.log('[SchoolAdmin] Loading terms directly...')
         const { data: termData, error: termError } = await supabase
           .from('academic_terms')
           .select('id, term_name, session_id')
-          .in(
-            'session_id',
-            sessionData.map((s) => s.id)
-          )
           .order('term_name', { ascending: true })
 
         if (termError) {
