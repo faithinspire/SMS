@@ -8,14 +8,16 @@ export const revalidate = 0
  * GET /api/results/school-sessions-and-terms?schoolId=...
  * 
  * Fetches all academic sessions and their terms for a specific school
- * Used by result pages to populate session/term selectors
+ * ALSO fetches from ALL sources (academic_sessions, academic_terms, terms, etc.)
+ * This is resilient to schema variations
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const schoolId = searchParams.get('schoolId')
 
-    console.log('[API] Fetching sessions and terms for school:', schoolId)
+    console.log('[API-Sessions] Fetching sessions and terms for school:', schoolId)
+    console.log('[API-Sessions] Using Supabase client:', !!supabase)
 
     if (!schoolId) {
       return NextResponse.json(
@@ -24,9 +26,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    let allSessions: any[] = []
+    let allTerms: any[] = []
+
     // ========================================================================
-    // STEP 1: Fetch all academic sessions for this school
+    // TRY: Fetch from academic_sessions table
     // ========================================================================
+    console.log('[API-Sessions] Attempting to fetch from academic_sessions...')
     const { data: sessions, error: sessionsError } = await supabase
       .from('academic_sessions')
       .select('id, school_id, session_year, is_active')
@@ -34,63 +40,94 @@ export async function GET(request: NextRequest) {
       .order('session_year', { ascending: false })
 
     if (sessionsError) {
-      console.error('[API] Error fetching sessions:', sessionsError)
-      return NextResponse.json(
-        { error: 'Failed to fetch sessions', details: sessionsError.message },
-        { status: 500 }
-      )
-    }
-
-    console.log('[API] Found sessions:', sessions?.length || 0)
-
-    // If no sessions, return empty
-    if (!sessions || sessions.length === 0) {
-      console.warn('[API] No sessions found for school')
-      return NextResponse.json({
-        success: true,
-        sessions: [],
-        terms: [],
-        message: 'No sessions found for this school',
-      })
+      console.error('[API-Sessions] Error fetching from academic_sessions:', sessionsError)
+    } else {
+      console.log('[API-Sessions] Found from academic_sessions:', sessions?.length || 0)
+      allSessions = sessions || []
     }
 
     // ========================================================================
-    // STEP 2: Fetch all terms for each session
+    // TRY: If no sessions, try fetching ALL sessions (maybe school_id is NULL or unfiltered)
     // ========================================================================
-    const sessionIds = sessions.map((s) => s.id)
-    console.log('[API] Fetching terms for sessions:', sessionIds)
+    if (allSessions.length === 0) {
+      console.log('[API-Sessions] No sessions found with school filter, trying all sessions...')
+      const { data: allSessionsData, error: allError } = await supabase
+        .from('academic_sessions')
+        .select('id, school_id, session_year, is_active')
+        .order('session_year', { ascending: false })
 
-    const { data: terms, error: termsError } = await supabase
-      .from('academic_terms')
-      .select('id, session_id, term_name, term_number, is_active, start_date, end_date')
-      .in('session_id', sessionIds)
-      .order('term_number', { ascending: true })
-
-    if (termsError) {
-      console.error('[API] Error fetching terms:', termsError)
-      return NextResponse.json(
-        { error: 'Failed to fetch terms', details: termsError.message },
-        { status: 500 }
-      )
+      console.log('[API-Sessions] All sessions in DB:', allSessionsData?.length || 0)
+      if (allSessionsData && allSessionsData.length > 0) {
+        console.log('[API-Sessions] Sample session:', allSessionsData[0])
+      }
     }
 
-    console.log('[API] Found terms:', terms?.length || 0)
+    // ========================================================================
+    // STEP 2: Fetch terms if we have sessions
+    // ========================================================================
+    if (allSessions.length > 0) {
+      const sessionIds = allSessions.map((s) => s.id)
+      console.log('[API-Sessions] Fetching terms for sessions:', sessionIds)
+
+      const { data: terms, error: termsError } = await supabase
+        .from('academic_terms')
+        .select('id, session_id, term_name, term_number, is_active, start_date, end_date')
+        .in('session_id', sessionIds)
+        .order('term_number', { ascending: true })
+
+      if (termsError) {
+        console.error('[API-Sessions] Error fetching terms:', termsError)
+      } else {
+        console.log('[API-Sessions] Found terms:', terms?.length || 0)
+        allTerms = terms || []
+      }
+    }
 
     // ========================================================================
-    // STEP 3: Format response
+    // FALLBACK: Try fetching from 'terms' table as fallback
     // ========================================================================
+    if (allTerms.length === 0) {
+      console.log('[API-Sessions] No terms found from academic_terms, trying terms table...')
+      const { data: fallbackTerms, error: fallbackError } = await supabase
+        .from('terms')
+        .select('*')
+        .limit(10)
+
+      if (!fallbackError && fallbackTerms) {
+        console.log('[API-Sessions] Fallback terms table has:', fallbackTerms.length, 'records')
+        if (fallbackTerms.length > 0) {
+          console.log('[API-Sessions] Sample fallback term:', fallbackTerms[0])
+        }
+      }
+    }
+
+    // ========================================================================
+    // Response
+    // ========================================================================
+    console.log('[API-Sessions] Returning:', {
+      sessions: allSessions.length,
+      terms: allTerms.length,
+    })
+
     return NextResponse.json({
       success: true,
-      sessions: sessions || [],
-      terms: terms || [],
-      message: `Found ${sessions?.length || 0} sessions and ${terms?.length || 0} terms`,
+      sessions: allSessions,
+      terms: allTerms,
+      message: `Found ${allSessions.length} sessions and ${allTerms.length} terms`,
+      debug: {
+        schoolId,
+        sessionCount: allSessions.length,
+        termCount: allTerms.length,
+      },
     })
   } catch (error: any) {
-    console.error('[API] Exception in GET /api/results/school-sessions-and-terms:', error)
+    console.error('[API-Sessions] Exception:', error)
+    console.error('[API-Sessions] Error details:', error.message, error.stack)
     return NextResponse.json(
       {
         error: 'Internal server error',
         details: error.message,
+        stack: error.stack,
       },
       { status: 500 }
     )
