@@ -7,8 +7,9 @@ export const revalidate = 0
 /**
  * GET /api/results/student/[studentId]
  * 
- * SIMPLIFIED: Fetch scores directly, no fallback complexity
+ * ENHANCED: Fetch scores from score_sheets (includes manual + CBT)
  * Returns ALL subject scores for a student in a term
+ * Includes detailed logging for debugging
  * 
  * Query params:
  * - schoolId: UUID (required)
@@ -40,7 +41,7 @@ export async function GET(
     }
 
     // ========================================================================
-    // DIRECT QUERY: Get all scores from score_sheets for this student/term
+    // STEP 1: Query score_sheets with ALL columns (manual + CBT)
     // ========================================================================
     console.log('[RESULTS API] Querying score_sheets with exact filters...')
 
@@ -65,6 +66,9 @@ export async function GET(
         test3_source,
         test4_source,
         exam_source,
+        class_arm_combo_id,
+        created_at,
+        updated_at,
         subjects:subject_id(id, name, code)
       `
       )
@@ -81,6 +85,11 @@ export async function GET(
     }
 
     console.log('[RESULTS API] Score_sheets query returned:', allScores?.length || 0, 'records')
+    
+    // Log sample if scores found
+    if (allScores && allScores.length > 0) {
+      console.log('[RESULTS API] Sample score record:', JSON.stringify(allScores[0], null, 2))
+    }
 
     if (!allScores || allScores.length === 0) {
       console.warn('[RESULTS API] No scores in score_sheets. Checking enrollment...')
@@ -115,6 +124,13 @@ export async function GET(
         exam: null,
         total: 0,
         grade: null,
+        sources: {
+          test1_source: null,
+          test2_source: null,
+          test3_source: null,
+          test4_source: null,
+          exam_source: null,
+        },
       }))
 
       console.log('[RESULTS API] Returning enrolled subjects without scores')
@@ -128,7 +144,7 @@ export async function GET(
     }
 
     // ========================================================================
-    // FORMAT SCORES FOR RESPONSE
+    // STEP 2: Format scores for response (include sources for debugging)
     // ========================================================================
     console.log('[RESULTS API] Processing scores for response...')
 
@@ -150,7 +166,7 @@ export async function GET(
         grade: score.grade || null,
         hasScores: hasAnyScore,
         sources: {
-          test1_source: score.test1_source,
+          test1_source: score.test1_source, // 'Manual' or 'CBT'
           test2_source: score.test2_source,
           test3_source: score.test3_source,
           test4_source: score.test4_source,
