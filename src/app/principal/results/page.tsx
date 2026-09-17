@@ -60,7 +60,7 @@ export default function PrincipalResultsPage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      console.log('[Principal] Loading data... Trigger:', refreshTrigger)
+      console.log('[Principal] Loading data...')
       
       const currentUser = await AuthService.getCurrentUser()
 
@@ -89,40 +89,51 @@ export default function PrincipalResultsPage() {
         setSchool(schoolData)
         console.log('[Principal] School loaded:', schoolData?.name)
 
-        // Load available terms
-        const { data: sessionData } = await supabase
+        // Load available terms and sessions
+        const { data: sessionData, error: sessionError } = await supabase
           .from('academic_sessions')
           .select('id, session_year')
           .eq('school_id', currentUser.school_id)
           .order('session_year', { ascending: false })
 
-        if (sessionData && sessionData.length > 0) {
-          const { data: termData } = await supabase
-            .from('academic_terms')
-            .select('id, term_name')
-            .in(
-              'session_id',
-              sessionData.map((s) => s.id)
-            )
-            .order('term_name', { ascending: true })
+        if (sessionError) {
+          console.error('[Principal] Session fetch error:', sessionError)
+          throw sessionError
+        }
 
-          console.log('[Principal] Available terms:', termData?.length || 0)
-          setTerms(termData || [])
+        if (!sessionData || sessionData.length === 0) {
+          console.warn('[Principal] No academic sessions found')
+          setLoading(false)
+          return
+        }
 
-          // Auto-select active term or first term
-          const { data: activeTerm } = await supabase
-            .from('academic_terms')
-            .select('id')
-            .eq('session_id', sessionData[0].id)
-            .eq('is_active', true)
-            .limit(1)
-            .single()
+        console.log('[Principal] Found sessions:', sessionData.length)
 
-          if (activeTerm) {
-            setSelectedTerm(activeTerm.id)
-          } else if (termData && termData.length > 0) {
-            setSelectedTerm(termData[0].id)
-          }
+        // Get all terms for these sessions
+        const { data: termData, error: termError } = await supabase
+          .from('academic_terms')
+          .select('id, term_name, session_id')
+          .in(
+            'session_id',
+            sessionData.map((s) => s.id)
+          )
+          .order('term_name', { ascending: true })
+
+        if (termError) {
+          console.error('[Principal] Terms fetch error:', termError)
+          throw termError
+        }
+
+        console.log('[Principal] Available terms:', termData?.length || 0)
+        setTerms(termData || [])
+
+        if (termData && termData.length > 0) {
+          // Auto-select the first term (most recent session's first term)
+          const firstTerm = termData[0]
+          console.log('[Principal] Auto-selecting term:', firstTerm.id, firstTerm.term_name)
+          setSelectedTerm(firstTerm.id)
+          // Immediately load classes for this term
+          await loadClassesForTermImmediate(currentUser.school_id, firstTerm.id)
         }
       }
     } catch (error) {
@@ -132,11 +143,9 @@ export default function PrincipalResultsPage() {
     }
   }
 
-  const loadClassesForTerm = async (termId: string) => {
+  const loadClassesForTermImmediate = async (schoolId: string, termId: string) => {
     try {
-      if (!user?.school_id) return
-
-      console.log('[Principal] Loading classes for term:', termId)
+      console.log('[Principal] Loading classes immediately for term:', termId)
 
       // Load all classes
       const { data: classesData, error: classesError } = await supabase
@@ -146,11 +155,11 @@ export default function PrincipalResultsPage() {
           classes(id, name),
           arms(id, name)
         `)
-        .eq('school_id', user.school_id)
+        .eq('school_id', schoolId)
 
       if (classesError) {
         console.error('[Principal] Classes fetch error:', classesError)
-        throw classesError
+        return
       }
 
       console.log('[Principal] Classes loaded:', classesData?.length || 0)
@@ -167,7 +176,7 @@ export default function PrincipalResultsPage() {
           console.log('[Principal] Fetching results for class:', fullName)
           
           // Call class summary API with cache-busting
-          const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${user.school_id}&termId=${termId}&t=${Date.now()}`
+          const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${schoolId}&termId=${termId}&t=${Date.now()}`
           const response = await fetch(apiUrl)
           
           if (!response.ok) {
@@ -199,9 +208,20 @@ export default function PrincipalResultsPage() {
       }
 
       setClasses(classResults)
-      setSelectedClass(null)
-      setSelectedClassData(null)
+      if (classResults.length > 0) {
+        setSelectedClass(classResults[0].id)
+        setSelectedClassData(classResults[0])
+      }
       console.log('[Principal] All classes loaded')
+    } catch (error) {
+      console.error('[Principal] Load classes error:', error)
+    }
+  }
+
+  const loadClassesForTerm = async (termId: string) => {
+    try {
+      if (!user?.school_id) return
+      await loadClassesForTermImmediate(user.school_id, termId)
     } catch (error) {
       console.error('[Principal] Load classes error:', error)
     }

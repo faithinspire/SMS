@@ -64,40 +64,51 @@ export default function SchoolAdminResultsPage() {
 
         setSchool(schoolData)
 
-        // Load available terms
-        const { data: sessionData } = await supabase
+        // Load available sessions
+        const { data: sessionData, error: sessionError } = await supabase
           .from('academic_sessions')
           .select('id, session_year')
           .eq('school_id', currentUser.school_id)
           .order('session_year', { ascending: false })
 
-        if (sessionData && sessionData.length > 0) {
-          const { data: termData } = await supabase
-            .from('academic_terms')
-            .select('id, term_name')
-            .in(
-              'session_id',
-              sessionData.map((s) => s.id)
-            )
-            .order('term_name', { ascending: true })
+        if (sessionError) {
+          console.error('[SchoolAdmin] Session fetch error:', sessionError)
+          setLoading(false)
+          return
+        }
 
-          console.log('[SchoolAdmin] Available terms:', termData?.length || 0)
-          setTerms(termData || [])
+        if (!sessionData || sessionData.length === 0) {
+          console.warn('[SchoolAdmin] No academic sessions found')
+          setLoading(false)
+          return
+        }
 
-          // Auto-select active term or first term
-          const { data: activeTerm } = await supabase
-            .from('academic_terms')
-            .select('id')
-            .eq('session_id', sessionData[0].id)
-            .eq('is_active', true)
-            .limit(1)
-            .single()
+        // Get all terms
+        const { data: termData, error: termError } = await supabase
+          .from('academic_terms')
+          .select('id, term_name, session_id')
+          .in(
+            'session_id',
+            sessionData.map((s) => s.id)
+          )
+          .order('term_name', { ascending: true })
 
-          if (activeTerm) {
-            setSelectedTerm(activeTerm.id)
-          } else if (termData && termData.length > 0) {
-            setSelectedTerm(termData[0].id)
-          }
+        if (termError) {
+          console.error('[SchoolAdmin] Terms fetch error:', termError)
+          setLoading(false)
+          return
+        }
+
+        console.log('[SchoolAdmin] Available terms:', termData?.length || 0)
+        setTerms(termData || [])
+
+        if (termData && termData.length > 0) {
+          // Auto-select the first term
+          const firstTerm = termData[0]
+          console.log('[SchoolAdmin] Auto-selecting term:', firstTerm.id, firstTerm.term_name)
+          setSelectedTerm(firstTerm.id)
+          // Immediately load classes for this term
+          await loadClassesForTermImmediate(currentUser.school_id, firstTerm.id)
         }
       }
     } catch (error) {
@@ -107,10 +118,8 @@ export default function SchoolAdminResultsPage() {
     }
   }
 
-  const loadClassesForTerm = async (termId: string) => {
+  const loadClassesForTermImmediate = async (schoolId: string, termId: string) => {
     try {
-      if (!user?.school_id) return
-
       console.log('[SchoolAdmin] Loading classes for term:', termId)
 
       // Load all classes
@@ -121,7 +130,7 @@ export default function SchoolAdminResultsPage() {
           classes(id, name),
           arms(id, name)
         `)
-        .eq('school_id', user.school_id)
+        .eq('school_id', schoolId)
 
       // Get results for each class
       const classResults: ClassResult[] = []
@@ -129,13 +138,12 @@ export default function SchoolAdminResultsPage() {
       for (const classCombo of classesData || []) {
         const className = classCombo.classes?.name || 'Class'
         const armName = classCombo.arms?.name || ''
-        const fullName = armName ? `${className} ${armName}` : className
 
         try {
-          console.log('[SchoolAdmin] Fetching results for class:', fullName)
+          console.log('[SchoolAdmin] Fetching results for class')
 
-          // Call class summary API with cache-busting
-          const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${user.school_id}&termId=${termId}&t=${Date.now()}`
+          // Call class summary API
+          const apiUrl = `/api/results/class-summary/${classCombo.id}?schoolId=${schoolId}&termId=${termId}&t=${Date.now()}`
           const response = await fetch(apiUrl)
 
           if (!response.ok) {
@@ -154,7 +162,7 @@ export default function SchoolAdminResultsPage() {
             students: studentResults,
           })
 
-          console.log('[SchoolAdmin] Class results loaded:', fullName, 'students:', studentResults.length)
+          console.log('[SchoolAdmin] Class results loaded, students:', studentResults.length)
         } catch (err) {
           console.error('[SchoolAdmin] Error loading class results:', err)
           classResults.push({
@@ -167,11 +175,22 @@ export default function SchoolAdminResultsPage() {
       }
 
       setClasses(classResults)
-      setSelectedClass(null)
-      setSelectedClassData(null)
+      if (classResults.length > 0) {
+        setSelectedClass(classResults[0].id)
+        setSelectedClassData(classResults[0])
+      }
       console.log('[SchoolAdmin] All classes loaded')
     } catch (error) {
       console.error('[SchoolAdmin] Load classes error:', error)
+    }
+  }
+
+  const loadClassesForTerm = async (termId: string) => {
+    try {
+      if (!user?.school_id) return
+      await loadClassesForTermImmediate(user.school_id, termId)
+    } catch (error) {
+      console.error('Load classes error:', error)
     }
   }
 
