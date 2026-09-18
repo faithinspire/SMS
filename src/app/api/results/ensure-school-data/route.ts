@@ -93,24 +93,27 @@ export async function POST(request: NextRequest) {
       const termData = [
         {
           session_id: sessionId,
+          school_id: schoolId,
           term_name: 'First Term',
-          term_number: 1,
+          term_order: 1,
           is_active: true,
           start_date: '2025-09-01',
           end_date: '2025-11-30',
         },
         {
           session_id: sessionId,
+          school_id: schoolId,
           term_name: 'Second Term',
-          term_number: 2,
+          term_order: 2,
           is_active: false,
           start_date: '2025-12-01',
           end_date: '2026-02-28',
         },
         {
           session_id: sessionId,
+          school_id: schoolId,
           term_name: 'Third Term',
-          term_number: 3,
+          term_order: 3,
           is_active: false,
           start_date: '2026-03-01',
           end_date: '2026-05-31',
@@ -193,21 +196,48 @@ export async function POST(request: NextRequest) {
           const armId = armData.id
 
           // Create class-arm combo
-          const { error: comboError } = await supabase
+          const { data: comboData, error: comboError } = await supabase
             .from('class_arm_combos')
             .insert({
               school_id: schoolId,
               class_id: classId,
               arm_id: armId,
             })
+            .select('id')
+            .single()
 
           if (comboError) {
             console.error('[EnsureData] Error creating combo:', comboError)
+            continue
           }
+
+          // Auto-create 10 test students for each class-arm combo
+          console.log(`[EnsureData] Creating test students for ${className} ${armName}...`)
+          const classComboId = comboData.id
+
+          for (let i = 1; i <= 10; i++) {
+            const admissionNumber = `${className.replace(/\s+/g, '').toUpperCase()}${armName}${String(i).padStart(3, '0')}`
+
+            // Create student record (simulate without full user creation for performance)
+            const { error: studentError } = await supabase
+              .from('students')
+              .insert({
+                school_id: schoolId,
+                class_arm_combo_id: classComboId,
+                admission_number: admissionNumber,
+                date_of_birth: `${2010 + Math.floor(Math.random() * 5)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
+              })
+
+            if (studentError) {
+              console.warn(`[EnsureData] Warning creating student ${admissionNumber}:`, studentError.message)
+            }
+          }
+
+          console.log(`[EnsureData] Created 10 test students for ${className} ${armName}`)
         }
       }
 
-      console.log('[EnsureData] Classes and arms created')
+      console.log('[EnsureData] Classes, arms, and test students created')
     } else {
       console.log('[EnsureData] Classes already exist:', existingClasses.length)
     }
