@@ -71,9 +71,9 @@ export async function GET(request: NextRequest) {
 
       const { data: terms, error: termsError } = await supabase
         .from('academic_terms')
-        .select('id, session_id, term_name, term_number, is_active, start_date, end_date')
+        .select('id, session_id, term_name, term_order, is_active, start_date, end_date')
         .in('session_id', sessionIds)
-        .order('term_number', { ascending: true })
+        .order('term_order', { ascending: true })
 
       if (termsError) {
         console.error('[API-Sessions] Error fetching terms:', termsError)
