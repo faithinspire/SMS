@@ -217,15 +217,40 @@ export async function POST(request: NextRequest) {
 
           for (let i = 1; i <= 10; i++) {
             const admissionNumber = `${className.replace(/\s+/g, '').toUpperCase()}${armName}${String(i).padStart(3, '0')}`
+            const studentName = `Student ${admissionNumber}`
+            const studentEmail = `student.${admissionNumber}@school.local`
 
-            // Create student record (simulate without full user creation for performance)
+            // STEP 1: Create user account for the student
+            const { data: userData, error: userError } = await supabase
+              .auth.admin.createUser({
+                email: studentEmail,
+                password: 'TestPassword123!',
+                email_confirm: true,
+                user_metadata: {
+                  role: 'STUDENT',
+                  full_name: studentName,
+                },
+              })
+
+            if (userError) {
+              console.warn(`[EnsureData] Warning creating user for ${admissionNumber}:`, userError.message)
+              continue
+            }
+
+            const userId = userData.user.id
+
+            // STEP 2: Create student record with user_id
+            const dateOfBirth = `${2010 + Math.floor(Math.random() * 5)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`
+
             const { error: studentError } = await supabase
               .from('students')
               .insert({
+                user_id: userId,
                 school_id: schoolId,
                 class_arm_combo_id: classComboId,
                 admission_number: admissionNumber,
-                date_of_birth: `${2010 + Math.floor(Math.random() * 5)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
+                full_name: studentName,
+                date_of_birth: dateOfBirth,
               })
 
             if (studentError) {
