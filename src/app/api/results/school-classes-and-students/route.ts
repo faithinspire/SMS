@@ -120,8 +120,8 @@ export async function GET(request: NextRequest) {
       const { data: students, error: studentsError } = await supabase
         .from('students')
         .select('id, full_name, admission_number')
-        .eq('class_arm_combo_id', classId)
-        .is('deleted_at', null)
+        .eq('school_id', schoolId)  // Filter by school
+        .eq('class_arm_combo_id', classId)  // Filter by class
         .order('admission_number', { ascending: true })
 
       if (studentsError) {
