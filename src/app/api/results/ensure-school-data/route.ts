@@ -45,6 +45,63 @@ export async function POST(request: NextRequest) {
     console.log('[EnsureData] School found:', school.name)
 
     // ========================================================================
+    // STEP 1B: Ensure academic sessions exist
+    // ========================================================================
+    const { data: existingSessions } = await supabase
+      .from('academic_sessions')
+      .select('id')
+      .eq('school_id', schoolId)
+
+    if (!existingSessions || existingSessions.length === 0) {
+      console.log('[EnsureData] No academic sessions found, creating default session...')
+
+      const currentYear = new Date().getFullYear()
+      const sessionYear = `${currentYear}/${currentYear + 1}`
+
+      const { data: sessionData, error: sessionError } = await supabase
+        .from('academic_sessions')
+        .insert({
+          school_id: schoolId,
+          session_year: sessionYear,
+          is_active: true,
+        })
+        .select('id')
+        .single()
+
+      if (!sessionError && sessionData) {
+        console.log('[EnsureData] Academic session created:', sessionYear)
+
+        // Create terms for this session
+        const terms = [
+          { term_name: 'First Term', term_order: 1 },
+          { term_name: 'Second Term', term_order: 2 },
+          { term_name: 'Third Term', term_order: 3 },
+        ]
+
+        for (const term of terms) {
+          const { error: termError } = await supabase
+            .from('academic_terms')
+            .insert({
+              session_id: sessionData.id,
+              term_name: term.term_name,
+              term_order: term.term_order,
+              is_active: term.term_order === 1,
+            })
+
+          if (termError) {
+            console.warn('[EnsureData] Error creating term:', termError.message)
+          }
+        }
+
+        console.log('[EnsureData] Academic terms created')
+      } else if (sessionError) {
+        console.warn('[EnsureData] Error creating academic session:', sessionError.message)
+      }
+    } else {
+      console.log('[EnsureData] Academic sessions already exist:', existingSessions.length)
+    }
+
+    // ========================================================================
     // STEP 2: Check if classes exist, create if not
     // ========================================================================
     const { data: existingClasses } = await supabase

@@ -53,26 +53,17 @@ export default function SchoolAdminSchoolFeesPage() {
 
         setSchool(schoolData)
 
-        // Load transactions (payment records) - Query both STUDENT_PAYMENT and SCHOOL_FEE types
+        // Load transactions (payment records) - NO JOINS, just get raw data
         let query = supabase
           .from('transactions')
           .select(`
             id,
             recipient_id,
+            recipient_name,
             amount,
             payment_method,
             status,
-            created_at,
-            recipient_name,
-            students!recipient_id(
-              full_name,
-              admission_number,
-              class_arm_combo_id,
-              class_arm_combos(
-                classes(name),
-                arms(name)
-              )
-            )
+            created_at
           `)
           .eq('school_id', currentUser.school_id)
           .in('type', ['STUDENT_PAYMENT', 'SCHOOL_FEE'])
@@ -81,28 +72,29 @@ export default function SchoolAdminSchoolFeesPage() {
           query = query.eq('status', filterStatus)
         }
 
-        const { data: transactionsData } = await query.order('created_at', { ascending: false })
+        const { data: transactionsData, error: txError } = await query.order('created_at', { ascending: false })
 
-        // Process and format the data
-        const records: StudentFeeRecord[] = (transactionsData || []).map((tx: any) => {
-          const studentInfo = tx.students?.[0]
-          const classInfo = studentInfo?.class_arm_combos
-          return {
-            id: tx.id,
-            student_id: tx.recipient_id,
-            student_name: studentInfo?.full_name || tx.recipient_name || 'Unknown',
-            admission_number: studentInfo?.admission_number || 'N/A',
-            class_name: classInfo
-              ? `${classInfo.classes?.name || ''} ${classInfo.arms?.name || ''}`.trim()
-              : 'N/A',
-            amount_paid: tx.amount || 0,
-            payment_status: tx.status === 'COMPLETED' ? 'PAID' : tx.status || 'PENDING',
-            payment_date: tx.created_at,
-            payment_method: tx.payment_method || 'N/A',
-          }
-        })
+        if (txError) {
+          console.error('Error fetching transactions:', txError)
+          setFeeRecords([])
+        } else {
+          // Process and format the data - NO joins needed, all data in transactions table
+          const records: StudentFeeRecord[] = (transactionsData || []).map((tx: any) => {
+            return {
+              id: tx.id,
+              student_id: tx.recipient_id,
+              student_name: tx.recipient_name || 'Unknown',
+              admission_number: 'N/A',
+              class_name: 'N/A',
+              amount_paid: tx.amount || 0,
+              payment_status: tx.status === 'COMPLETED' ? 'PAID' : tx.status || 'PENDING',
+              payment_date: tx.created_at,
+              payment_method: tx.payment_method || 'N/A',
+            }
+          })
 
-        setFeeRecords(records)
+          setFeeRecords(records)
+        }
       }
     } catch (error) {
       console.error('Load error:', error)

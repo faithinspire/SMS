@@ -141,6 +141,7 @@ export async function GET(request: NextRequest) {
       }
 
       console.log(`[ClassAPI] Found ${students?.length || 0} students in ${className} ${armName}`)
+      console.log(`[ClassAPI] Student IDs:`, students?.map(s => s.id) || [])
 
       if (!students || students.length === 0) {
         classResults.push({

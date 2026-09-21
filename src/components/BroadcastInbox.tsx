@@ -59,27 +59,30 @@ export default function BroadcastInbox({
   const loadBroadcasts = async () => {
     try {
       setLoading(true)
+      
+      // Query broadcasts WITHOUT any joins - broadcasts table stores data directly
       const { data, error } = await supabase
         .from('broadcasts')
-        .select(
-          `
+        .select(`
           id,
           message,
           sender_id,
           sender_name,
           created_at
-        `
-        )
+        `)
         .eq('school_id', schoolId)
         .order('created_at', { ascending: false })
         .limit(50)
 
       if (error) {
         console.error('Error loading broadcasts:', error)
+        // Don't return - continue with empty broadcasts
+        setBroadcasts([])
+        setLoading(false)
         return
       }
 
-      // Filter broadcasts for current user and map data
+      // Map broadcasts WITHOUT any joins
       const userBroadcasts = (data || [])
         .map((b: any) => ({
           id: b.id,
