@@ -65,10 +65,11 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Get unique subject IDs, class_arm_combo IDs, and created_by IDs
+    // Get unique subject IDs, class_arm_combo IDs, and teacher IDs
+    // NOTE: lesson_notes table has 'teacher_id', NOT 'created_by'
     const subjectIds = [...new Set(lessonNotes.map((n: any) => n.subject_id).filter(Boolean))]
     const classArmIds = [...new Set(lessonNotes.map((n: any) => n.class_arm_combo_id).filter(Boolean))]
-    const userIds = [...new Set(lessonNotes.map((n: any) => n.created_by).filter(Boolean))]
+    const userIds = [...new Set(lessonNotes.map((n: any) => n.teacher_id).filter(Boolean))]
 
     // Fetch related data in parallel
     const [subjectsResult, classArmsResult, usersResult] = await Promise.all([
@@ -130,13 +131,13 @@ export async function GET(request: NextRequest) {
 
       return {
         id: note.id,
-        title: note.title,
-        content: note.content,
-        attachments: note.attachments,
+        title: note.topic,
+        content: note.content_summary,
+        attachments: note.file_path ? [{ name: note.file_name, path: note.file_path, size: note.file_size }] : [],
         status: note.status,
-        created_at: note.created_at,
+        created_at: note.submitted_at,
         teacher: {
-          id: note.created_by,
+          id: note.teacher_id,
           full_name: user?.full_name || 'Unknown',
           email: user?.email || '',
         },

@@ -25,7 +25,7 @@ export default function BottomNavigation() {
     }
 
     getUser()
-  }, [pathname])
+  }, [])
 
   if (loading || !user) return null
 
