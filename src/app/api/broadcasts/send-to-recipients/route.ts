@@ -48,30 +48,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Handle sender info
-    let finalSenderName = senderName || 'School Admin'
-
-    // If sender_id provided but no name, try to fetch from DB
-    if (!senderName) {
-      try {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('full_name')
-          .eq('id', senderId)
-          .single()
-
-        if (userData?.full_name) {
-          finalSenderName = userData.full_name
-        }
-      } catch (err) {
-        console.warn('[BroadcastAPI] Could not fetch sender name from DB')
-      }
-    }
-
     console.log('[BroadcastAPI] Sending broadcast:', {
       schoolId,
       messageLength: message.length,
-      senderName: finalSenderName,
+      senderId,
       specificRecipientIds: recipientIds?.length || 0,
       recipientRoles: recipientRoles || singleRole,
     })
@@ -82,8 +62,8 @@ export async function POST(request: NextRequest) {
       .insert({
         school_id: schoolId,
         message,
-        sender_id: senderId, // ✅ Use provided senderId (now required and validated)
-        sender_name: finalSenderName,
+        sender_id: senderId,
+        broadcast_type: 'GENERAL',
       })
       .select('id')
       .single()
