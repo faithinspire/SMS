@@ -157,7 +157,6 @@ export async function POST(request: NextRequest) {
                 school_id: schoolId,
                 class_arm_combo_id: classComboId,
                 admission_number: admissionNumber,
-                full_name: studentName,
                 date_of_birth: dateOfBirth,
               })
               .select('id')
