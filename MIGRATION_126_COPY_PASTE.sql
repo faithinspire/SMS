@@ -122,7 +122,7 @@ BEGIN
         NOW(),
         NOW()
       )
-      ON CONFLICT (school_id, student_id, subject_id, term_id, class_arm_combo_id) DO
+      ON CONFLICT (school_id, student_id, subject_id, term_id) DO
       UPDATE SET
         updated_at = NOW()
       RETURNING id INTO v_academic_session_id;
@@ -244,7 +244,7 @@ SELECT
   NOW(),
   NOW()
 FROM graded_submissions gs
-ON CONFLICT (school_id, student_id, subject_id, term_id, class_arm_combo_id) DO
+ON CONFLICT (school_id, student_id, subject_id, term_id) DO
 UPDATE SET
   test1 = COALESCE(EXCLUDED.test1, score_sheets.test1),
   test2 = COALESCE(EXCLUDED.test2, score_sheets.test2),
