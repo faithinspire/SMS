@@ -64,20 +64,15 @@ export default function BroadcastInbox({
         .select(
           `
           id,
-          title,
           message,
-          created_by,
-          created_at,
-          users!created_by (full_name),
-          broadcast_recipients (
-            id,
-            user_id,
-            is_read
-          )
+          sender_id,
+          sender_name,
+          created_at
         `
         )
         .eq('school_id', schoolId)
         .order('created_at', { ascending: false })
+        .limit(50)
 
       if (error) {
         console.error('Error loading broadcasts:', error)
@@ -86,19 +81,14 @@ export default function BroadcastInbox({
 
       // Filter broadcasts for current user and map data
       const userBroadcasts = (data || [])
-        .filter((b: any) => {
-          // Check if user is a recipient or if broadcast is for all staff
-          const recipient = b.broadcast_recipients?.[0]
-          return !recipient || recipient.user_id === userId
-        })
         .map((b: any) => ({
           id: b.id,
-          title: b.title,
+          title: 'Broadcast Message',
           message: b.message,
-          created_by: b.created_by,
+          created_by: b.sender_id,
           created_at: b.created_at,
-          sender_name: b.users?.full_name || 'School Admin',
-          is_read: b.broadcast_recipients?.[0]?.is_read || false,
+          sender_name: b.sender_name || 'School Admin',
+          is_read: false,
         }))
 
       setBroadcasts(userBroadcasts)

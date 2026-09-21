@@ -119,7 +119,11 @@ export async function GET(request: NextRequest) {
       console.log(`[ClassAPI] Fetching students for class_arm_combo_id: ${classId}`)
       const { data: students, error: studentsError } = await supabase
         .from('students')
-        .select('id, full_name, admission_number')
+        .select(`
+          id, 
+          admission_number,
+          users!students_user_id_fkey(id, full_name)
+        `)
         .eq('school_id', schoolId)  // Filter by school
         .eq('class_arm_combo_id', classId)  // Filter by class
         .order('admission_number', { ascending: true })
@@ -209,7 +213,7 @@ export async function GET(request: NextRequest) {
 
         return {
           id: student.id,
-          full_name: student.full_name || 'Unknown',
+          full_name: student.users?.full_name || 'Unknown',
           admission_number: student.admission_number || 'N/A',
           overall_score: overallScore,
           overall_grade: overallGrade,
