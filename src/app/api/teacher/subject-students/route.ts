@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
         admission_number,
         class_arm_combo_id,
         user_id,
-        users (
+        users!students_user_id_fkey (
           id,
           full_name,
           email,
@@ -160,6 +160,8 @@ export async function GET(request: NextRequest) {
         ),
         class_arm_combos (
           id,
+          class_id,
+          arm_id,
           classes (id, name, level, type),
           arms (id, name)
         )

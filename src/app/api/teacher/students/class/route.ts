@@ -67,13 +67,15 @@ export async function GET(request: NextRequest) {
         admission_number,
         photo_url,
         class_arm_combo_id,
-        users (
+        users!students_user_id_fkey (
           id,
           full_name,
           email
         ),
         class_arm_combos (
           id,
+          arm_id,
+          class_id,
           classes (name),
           arms (name)
         ),

@@ -45,99 +45,7 @@ export async function POST(request: NextRequest) {
     console.log('[EnsureData] School found:', school.name)
 
     // ========================================================================
-    // STEP 2: Check if sessions exist, create if not
-    // ========================================================================
-    const { data: existingSessions } = await supabase
-      .from('academic_sessions')
-      .select('id')
-      .eq('school_id', schoolId)
-
-    let sessionId: string | null = null
-
-    if (!existingSessions || existingSessions.length === 0) {
-      console.log('[EnsureData] No sessions found, creating 2025/2026...')
-
-      const { data: newSession, error: sessionError } = await supabase
-        .from('academic_sessions')
-        .insert({
-          school_id: schoolId,
-          session_year: '2025/2026',
-          is_active: true,
-        })
-        .select('id')
-        .single()
-
-      if (sessionError) {
-        console.error('[EnsureData] Error creating session:', sessionError)
-        throw sessionError
-      }
-
-      sessionId = newSession.id
-      console.log('[EnsureData] Session created:', sessionId)
-    } else {
-      sessionId = existingSessions[0].id
-      console.log('[EnsureData] Session already exists:', sessionId)
-    }
-
-    // ========================================================================
-    // STEP 3: Check if terms exist, create if not
-    // ========================================================================
-    const { data: existingTerms } = await supabase
-      .from('academic_terms')
-      .select('id')
-      .eq('session_id', sessionId)
-
-    if (!existingTerms || existingTerms.length === 0) {
-      console.log('[EnsureData] No terms found, creating 3 terms...')
-
-      const termData = [
-        {
-          session_id: sessionId,
-          school_id: schoolId,
-          term_name: 'First Term',
-          term_order: 1,
-          is_active: true,
-          start_date: '2025-09-01',
-          end_date: '2025-11-30',
-        },
-        {
-          session_id: sessionId,
-          school_id: schoolId,
-          term_name: 'Second Term',
-          term_order: 2,
-          is_active: false,
-          start_date: '2025-12-01',
-          end_date: '2026-02-28',
-        },
-        {
-          session_id: sessionId,
-          school_id: schoolId,
-          term_name: 'Third Term',
-          term_order: 3,
-          is_active: false,
-          start_date: '2026-03-01',
-          end_date: '2026-05-31',
-        },
-      ]
-
-      for (const term of termData) {
-        const { error: termError } = await supabase
-          .from('academic_terms')
-          .insert(term)
-
-        if (termError) {
-          console.error('[EnsureData] Error creating term:', termError)
-          // Continue - one failure shouldn't stop others
-        }
-      }
-
-      console.log('[EnsureData] Terms created')
-    } else {
-      console.log('[EnsureData] Terms already exist:', existingTerms.length)
-    }
-
-    // ========================================================================
-    // STEP 4: Check if classes exist, create if not
+    // STEP 2: Check if classes exist, create if not
     // ========================================================================
     const { data: existingClasses } = await supabase
       .from('class_arm_combos')
@@ -322,7 +230,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ========================================================================
-    // STEP 5: Return success
+    // STEP 3: Return success
     // ========================================================================
     return NextResponse.json({
       success: true,
