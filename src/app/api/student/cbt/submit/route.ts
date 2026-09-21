@@ -154,13 +154,14 @@ export async function POST(request: NextRequest) {
     const percentage = examTotalMarks > 0 ? (totalScore / examTotalMarks) * 100 : 0
     const passed = percentage >= (exam.passing_percentage || 50)
 
-    // Update submission with final scores
+    // Update submission with final scores and set status to GRADED
+    // This triggers Migration 126's auto_populate_score_sheets_from_cbt trigger
     const now = new Date()
     const { data: updatedSubmission, error: updateError } = await supabase
       .from('cbt_submissions')
       .update({
         submitted_at: now.toISOString(),
-        status: 'GRADED',
+        status: 'GRADED', // ✅ CRITICAL: Sets status to GRADED to trigger score_sheets auto-population
         score: totalScore,
         percentage: Math.round(percentage * 100) / 100,
         passed,
@@ -170,6 +171,22 @@ export async function POST(request: NextRequest) {
       .eq('id', submission_id)
       .select()
       .single()
+
+    if (updateError) {
+      console.error('Error updating submission:', updateError)
+      return NextResponse.json(
+        { error: `Failed to finalize submission: ${updateError.message}` },
+        { status: 500 }
+      )
+    }
+
+    // ✅ Log for debugging - verify status was set to GRADED
+    console.log('[CBT Submit] ✅ Submission status set to GRADED, score_sheets trigger should fire:', {
+      submission_id,
+      status: updatedSubmission?.status,
+      score: totalScore,
+      student_id,
+    })
 
     if (updateError) {
       console.error('Error updating submission:', updateError)
