@@ -60,7 +60,7 @@ export default function BroadcastInbox({
     try {
       setLoading(true)
       
-      // Query broadcasts WITHOUT any joins - broadcasts table stores data directly
+      // Query broadcasts with proper recipient filtering
       const { data, error } = await supabase
         .from('broadcasts')
         .select(`
@@ -68,31 +68,61 @@ export default function BroadcastInbox({
           message,
           sender_id,
           sender_name,
-          created_at
+          created_at,
+          broadcast_recipients(id, user_id, is_read)
         `)
         .eq('school_id', schoolId)
+        .eq('broadcast_recipients.user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50)
 
       if (error) {
         console.error('Error loading broadcasts:', error)
-        // Don't return - continue with empty broadcasts
-        setBroadcasts([])
+        // Fallback: try without recipient filter for backward compatibility
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('broadcasts')
+          .select(`
+            id,
+            message,
+            sender_id,
+            sender_name,
+            created_at
+          `)
+          .eq('school_id', schoolId)
+          .order('created_at', { ascending: false })
+          .limit(50)
+
+        if (!fallbackError && fallbackData) {
+          setBroadcasts(
+            fallbackData.map((b: any) => ({
+              id: b.id,
+              title: 'Broadcast Message',
+              message: b.message,
+              created_by: b.sender_id,
+              created_at: b.created_at,
+              sender_name: b.sender_name || 'School Admin',
+              is_read: false,
+            }))
+          )
+        }
         setLoading(false)
         return
       }
 
-      // Map broadcasts WITHOUT any joins
+      // Map broadcasts with read status from broadcast_recipients
       const userBroadcasts = (data || [])
-        .map((b: any) => ({
-          id: b.id,
-          title: 'Broadcast Message',
-          message: b.message,
-          created_by: b.sender_id,
-          created_at: b.created_at,
-          sender_name: b.sender_name || 'School Admin',
-          is_read: false,
-        }))
+        .map((b: any) => {
+          const recipientRecord = b.broadcast_recipients?.[0]
+          return {
+            id: b.id,
+            title: 'Broadcast Message',
+            message: b.message,
+            created_by: b.sender_id,
+            created_at: b.created_at,
+            sender_name: b.sender_name || 'School Admin',
+            is_read: recipientRecord?.is_read || false,
+          }
+        })
 
       setBroadcasts(userBroadcasts)
 

@@ -68,8 +68,13 @@ export default function BottomNavigation() {
           { icon: '📚', label: 'Students', path: '/school-admin/students' },
         ]
       case 'ACCOUNTANT':
-        // Accountant dashboard has internal tabs, don't show bottom nav
-        return []
+        // Accountant dashboard needs navigation to other sections
+        return [
+          { icon: '📊', label: 'Dashboard', href: '/accountant/dashboard' },
+          { icon: '💰', label: 'Primary', href: '/accountant/primary/dashboard' },
+          { icon: '📈', label: 'Secondary', href: '/accountant/secondary/dashboard' },
+          { icon: '📋', label: 'History', href: '/accountant/payment-history' },
+        ]
       default:
         return []
     }
