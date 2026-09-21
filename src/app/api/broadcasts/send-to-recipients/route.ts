@@ -41,19 +41,18 @@ export async function POST(request: NextRequest) {
       recipient_role: singleRole, // backward compatibility
     } = body
 
-    if (!schoolId || !message) {
+    if (!schoolId || !message || !senderId) {
       return NextResponse.json(
-        { error: 'Missing required fields: school_id, message' },
+        { error: 'Missing required fields: school_id, message, sender_id' },
         { status: 400 }
       )
     }
 
     // Handle sender info
-    let finalSenderId = senderId || 'SYSTEM'
     let finalSenderName = senderName || 'School Admin'
 
     // If sender_id provided but no name, try to fetch from DB
-    if (senderId && !senderName) {
+    if (!senderName) {
       try {
         const { data: userData } = await supabase
           .from('users')
@@ -83,7 +82,7 @@ export async function POST(request: NextRequest) {
       .insert({
         school_id: schoolId,
         message,
-        sender_id: finalSenderId,
+        sender_id: senderId, // ✅ Use provided senderId (now required and validated)
         sender_name: finalSenderName,
       })
       .select('id')
