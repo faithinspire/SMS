@@ -76,14 +76,9 @@ export default function PrincipalBroadcastsPage() {
         .insert([
           {
             school_id: user.school_id,
-            created_by: user.id,
-            sender_name: user.full_name,
-            title: `Announcement from Principal`,
+            sender_id: user.id,
             message: message,
             broadcast_type: 'ANNOUNCEMENT',
-            target_role: recipientRole,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
           },
         ])
         .select()

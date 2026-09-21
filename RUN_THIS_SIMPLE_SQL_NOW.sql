@@ -1,18 +1,10 @@
 -- ============================================================================
--- SIMPLE SQL - Just verify the schema is correct
+-- ULTRA SIMPLE - Just verify tables exist
 -- Copy and paste THIS into Supabase SQL Editor
 -- ============================================================================
 
--- Verify broadcasts table
-SELECT 'broadcasts' as table_name, 
-       array_agg(column_name ORDER BY ordinal_position) as columns
-FROM information_schema.columns
-WHERE table_name = 'broadcasts'
-GROUP BY table_name;
+-- Check if broadcasts table exists and show all data
+SELECT * FROM broadcasts LIMIT 1;
 
--- Verify broadcast_recipients table
-SELECT 'broadcast_recipients' as table_name,
-       array_agg(column_name ORDER BY ordinal_position) as columns
-FROM information_schema.columns
-WHERE table_name = 'broadcast_recipients'
-GROUP BY table_name;
+-- Check if broadcast_recipients table exists
+SELECT * FROM broadcast_recipients LIMIT 1;

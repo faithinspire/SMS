@@ -47,14 +47,11 @@ export default function TeacherBroadcastsPage() {
       setContext(currentUser)
       console.log('[TeacherBroadcasts] Loading for:', currentUser.role)
 
-      // Load broadcasts for the school that are either:
-      // 1. For all staff (target_role = null)
-      // 2. For the user's role
+      // Load all broadcasts for this school
       const { data: broadcastData, error: broadcastError } = await supabase
         .from('broadcasts')
         .select('*')
         .eq('school_id', currentUser.school_id)
-        .or(`target_role.is.null,target_role.eq.${currentUser.role}`)
         .order('created_at', { ascending: false })
 
       if (broadcastError) {
@@ -63,31 +60,21 @@ export default function TeacherBroadcastsPage() {
         return
       }
 
-      // Enrich with creator names and read status
+      // Enrich with read status from broadcast_recipients
       const enrichedBroadcasts = await Promise.all(
         (broadcastData || []).map(async (broadcast: any) => {
-          let createdByName = 'Unknown'
-          if (broadcast.created_by) {
-            const { data: userData } = await supabase
-              .from('users')
-              .select('full_name')
-              .eq('id', broadcast.created_by)
-              .single()
-            createdByName = userData?.full_name || 'Unknown'
-          }
-
-          // Check if user has read this broadcast
+          // Check if user has received this broadcast (is in broadcast_recipients)
           const { data: readData } = await supabase
-            .from('broadcast_read_status')
-            .select('id')
+            .from('broadcast_recipients')
+            .select('is_read')
             .eq('broadcast_id', broadcast.id)
             .eq('user_id', currentUser.id)
             .single()
 
           return {
             ...broadcast,
-            created_by_name: createdByName,
-            is_read: !!readData,
+            created_by_name: 'Administrator',
+            is_read: readData?.is_read || false,
           }
         })
       )
@@ -104,25 +91,20 @@ export default function TeacherBroadcastsPage() {
 
   const markAsRead = async (broadcastId: string) => {
     try {
-      // Check if already marked as read
-      const { data: existingRead } = await supabase
-        .from('broadcast_read_status')
+      // Check if broadcast_recipients record exists and update read status
+      const { data: existingRecord } = await supabase
+        .from('broadcast_recipients')
         .select('id')
         .eq('broadcast_id', broadcastId)
         .eq('user_id', user?.id)
         .single()
 
-      if (!existingRead) {
+      if (existingRecord) {
         // Mark as read
         await supabase
-          .from('broadcast_read_status')
-          .insert([
-            {
-              broadcast_id: broadcastId,
-              user_id: user?.id,
-              read_at: new Date().toISOString(),
-            },
-          ])
+          .from('broadcast_recipients')
+          .update({ is_read: true, read_at: new Date().toISOString() })
+          .eq('id', existingRecord.id)
 
         // Update local state
         setBroadcasts(prev =>
