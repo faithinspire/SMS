@@ -1,28 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * POST /api/broadcasts/send-to-recipients
- * 
+ *
  * Sends a broadcast message to specific recipients and tracks delivery
  * Creates broadcast record and adds entries to broadcast_recipients table
+ *
+ * REQUEST BODY:
+ * {
+ *   school_id: UUID (required),
+ *   message: string (required),
+ *   sender_id: UUID (optional, defaults to 'SYSTEM'),
+ *   sender_name: string (optional, defaults to 'School Admin'),
+ *   recipient_ids?: UUID[] (optional - specific user IDs),
+ *   recipient_roles?: string[] (optional - roles like TEACHER, PRINCIPAL, etc),
+ *   recipient_role?: string (optional - single role for backward compatibility)
+ * }
+ *
+ * RETURNS:
+ * {
+ *   success: boolean,
+ *   broadcast_id: UUID,
+ *   recipients_added: number,
+ *   message: string
+ * }
  */
 export async function POST(request: NextRequest) {
   try {
-    const { schoolId, message, senderName, recipientIds, recipientTypes } = await request.json()
+    const body = await request.json()
+    const {
+      school_id: schoolId,
+      message,
+      sender_id: senderId,
+      sender_name: senderName,
+      recipient_ids: recipientIds,
+      recipient_roles: recipientRoles,
+      recipient_role: singleRole, // backward compatibility
+    } = body
 
-    if (!schoolId || !message || (!recipientIds?.length && !recipientTypes?.length)) {
+    if (!schoolId || !message) {
       return NextResponse.json(
-        { error: 'Missing required fields: schoolId, message, and (recipientIds or recipientTypes)' },
+        { error: 'Missing required fields: school_id, message' },
         { status: 400 }
       )
+    }
+
+    // Handle sender info
+    let finalSenderId = senderId || 'SYSTEM'
+    let finalSenderName = senderName || 'School Admin'
+
+    // If sender_id provided but no name, try to fetch from DB
+    if (senderId && !senderName) {
+      try {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('full_name')
+          .eq('id', senderId)
+          .single()
+
+        if (userData?.full_name) {
+          finalSenderName = userData.full_name
+        }
+      } catch (err) {
+        console.warn('[BroadcastAPI] Could not fetch sender name from DB')
+      }
     }
 
     console.log('[BroadcastAPI] Sending broadcast:', {
       schoolId,
       messageLength: message.length,
-      recipientIds: recipientIds?.length || 0,
-      recipientTypes: recipientTypes || [],
+      senderName: finalSenderName,
+      specificRecipientIds: recipientIds?.length || 0,
+      recipientRoles: recipientRoles || singleRole,
     })
 
     // STEP 1: Create the broadcast record
@@ -31,8 +83,8 @@ export async function POST(request: NextRequest) {
       .insert({
         school_id: schoolId,
         message,
-        sender_id: 'SYSTEM',
-        sender_name: senderName || 'School Admin',
+        sender_id: finalSenderId,
+        sender_name: finalSenderName,
       })
       .select('id')
       .single()
@@ -51,44 +103,69 @@ export async function POST(request: NextRequest) {
     let recipientUserIds: string[] = []
 
     if (recipientIds && recipientIds.length > 0) {
+      // Direct recipient IDs provided
       recipientUserIds = recipientIds
-    } else if (recipientTypes && recipientTypes.length > 0) {
-      // Query for users matching the recipient types
-      const { data: users, error: userError } = await supabase
+    } else {
+      // Determine roles to query
+      let rolesToQuery: string[] = []
+
+      if (recipientRoles && recipientRoles.length > 0) {
+        rolesToQuery = recipientRoles
+      } else if (singleRole) {
+        rolesToQuery = singleRole === 'ALL' ? [] : [singleRole]
+      }
+
+      // Query for users matching the recipient roles
+      let userQuery = supabase
         .from('users')
         .select('id')
         .eq('school_id', schoolId)
-        .in('role', recipientTypes)
+
+      if (rolesToQuery.length > 0) {
+        userQuery = userQuery.in('role', rolesToQuery)
+      } else if (singleRole === 'ALL') {
+        // Send to all staff roles (exclude students)
+        userQuery = userQuery.in('role', ['TEACHER', 'PRINCIPAL', 'HEAD_TEACHER', 'HEADTEACHER', 'ACCOUNTANT', 'SCHOOL_ADMIN', 'OTHER_STAFF'])
+      }
+
+      const { data: users, error: userError } = await userQuery
 
       if (userError) {
-        console.warn('[BroadcastAPI] Error querying users by type:', userError)
+        console.warn('[BroadcastAPI] Error querying users by role:', userError)
       } else {
         recipientUserIds = (users || []).map(u => u.id)
       }
     }
 
-    console.log('[BroadcastAPI] Recipient user IDs:', recipientUserIds.length)
+    console.log('[BroadcastAPI] Found recipient user IDs:', recipientUserIds.length)
+
+    if (recipientUserIds.length === 0) {
+      return NextResponse.json(
+        { error: 'No recipients found matching criteria' },
+        { status: 404 }
+      )
+    }
 
     // STEP 3: Add broadcast recipients
-    if (recipientUserIds.length > 0) {
-      const recipientRecords = recipientUserIds.map(userId => ({
-        broadcast_id: broadcast.id,
-        user_id: userId,
-        school_id: schoolId,
-        is_read: false,
-      }))
+    const recipientRecords = recipientUserIds.map(userId => ({
+      broadcast_id: broadcast.id,
+      user_id: userId,
+      is_read: false,
+    }))
 
-      const { error: recipientError } = await supabase
-        .from('broadcast_recipients')
-        .insert(recipientRecords)
+    const { error: recipientError } = await supabase
+      .from('broadcast_recipients')
+      .insert(recipientRecords)
 
-      if (recipientError) {
-        console.warn('[BroadcastAPI] Warning adding recipients:', recipientError)
-        // Don't fail - broadcast is created, just recipients might not be tracked
-      } else {
-        console.log('[BroadcastAPI] Added', recipientUserIds.length, 'recipients')
-      }
+    if (recipientError) {
+      console.error('[BroadcastAPI] Error adding recipients:', recipientError)
+      return NextResponse.json(
+        { error: 'Failed to add recipients', details: recipientError.message },
+        { status: 500 }
+      )
     }
+
+    console.log('[BroadcastAPI] ✅ Broadcast sent successfully to', recipientUserIds.length, 'recipients')
 
     return NextResponse.json({
       success: true,

@@ -62,14 +62,15 @@ export default function PrincipalLessonNotesPage() {
 
       setSchool(schoolData)
 
-      // Load lesson notes
+      // Load lesson notes with proper schema matching
       let query = supabase
         .from('lesson_notes')
         .select(`
-          id, teacher_name, lesson_date, topic, file_name, file_path, status,
-          submitted_at, reviewer_feedback, approval_status, content_summary,
+          id, teacher_id, lesson_date, topic, file_name, file_path, status,
+          created_at, reviewed_by, reviewed_at, reviewer_comments,
           subjects(name),
-          class_arm_combos(name)
+          class_arm_combos(name),
+          users!teacher_id(full_name)
         `)
         .eq('school_id', currentUser.school_id)
 
@@ -77,11 +78,11 @@ export default function PrincipalLessonNotesPage() {
         query = query.eq('status', filterStatus)
       }
 
-      const { data: notesData } = await query.order('submitted_at', { ascending: false })
+      const { data: notesData } = await query.order('created_at', { ascending: false })
 
       const formattedNotes = (notesData || []).map((note: any) => ({
         id: note.id,
-        teacher_name: note.teacher_name,
+        teacher_name: note.users?.full_name || 'Unknown',
         lesson_date: note.lesson_date,
         topic: note.topic,
         subject_name: note.subjects?.name || 'Unknown',
@@ -89,10 +90,10 @@ export default function PrincipalLessonNotesPage() {
         file_name: note.file_name,
         file_path: note.file_path,
         status: note.status,
-        submitted_at: note.submitted_at,
-        reviewer_feedback: note.reviewer_feedback,
-        approval_status: note.approval_status,
-        content_summary: note.content_summary,
+        submitted_at: note.created_at,
+        reviewer_feedback: note.reviewer_comments,
+        approval_status: note.status, // Use status field instead of approval_status
+        content_summary: note.reviewer_comments, // Use reviewer_comments as summary
       }))
 
       setLessonNotes(formattedNotes)
@@ -133,11 +134,9 @@ export default function PrincipalLessonNotesPage() {
         .from('lesson_notes')
         .update({
           status: approvalStatus === 'APPROVED' ? 'APPROVED' : approvalStatus === 'REJECTED' ? 'SUBMITTED' : 'NEEDS_REVISION',
-          reviewer_feedback: feedback,
-          approval_status: approvalStatus,
+          reviewer_comments: feedback,
           reviewed_at: new Date().toISOString(),
           reviewed_by: user?.id,
-          reviewer_name: user?.full_name,
         })
         .eq('id', selectedNote.id)
 
