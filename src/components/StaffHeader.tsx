@@ -54,13 +54,13 @@ export default function StaffHeader({ staffName, schoolName, staffPhoto, section
         .select(
           `
           id,
-          title,
           message,
           created_at,
-          users!created_by (full_name),
+          sender_id,
           broadcast_recipients (
             id,
-            is_read
+            is_read,
+            user_id
           )
         `
         )
@@ -79,14 +79,14 @@ export default function StaffHeader({ staffName, schoolName, staffPhoto, section
       const userBroadcasts = (data || [])
         .map((broadcast: any) => {
           const recipientRecord = broadcast.broadcast_recipients?.find(
-            (r: any) => r.id  // Just check if recipient record exists
+            (r: any) => r.user_id  // Match current user
           )
           return {
             id: broadcast.id,
             broadcast_id: broadcast.id,
-            title: broadcast.title,
+            title: broadcast.message,  // Use message as title
             message: broadcast.message,
-            sender_name: broadcast.users?.full_name || 'Administrator',
+            sender_name: 'Administrator',
             is_read: recipientRecord?.is_read || false,
             created_at: broadcast.created_at,
           }
@@ -95,7 +95,7 @@ export default function StaffHeader({ staffName, schoolName, staffPhoto, section
           // Only show broadcasts where user is a recipient
           return (data || []).some((broadcast: any) =>
             broadcast.broadcast_recipients?.some(
-              (r: any) => r.id
+              (r: any) => r.user_id
             )
           )
         })

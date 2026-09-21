@@ -67,7 +67,6 @@ export default function BroadcastInbox({
           id,
           message,
           sender_id,
-          sender_name,
           created_at,
           broadcast_recipients(id, user_id, is_read)
         `)
@@ -85,7 +84,6 @@ export default function BroadcastInbox({
             id,
             message,
             sender_id,
-            sender_name,
             created_at
           `)
           .eq('school_id', schoolId)
@@ -100,7 +98,7 @@ export default function BroadcastInbox({
               message: b.message,
               created_by: b.sender_id,
               created_at: b.created_at,
-              sender_name: b.sender_name || 'School Admin',
+              sender_name: 'Administrator',
               is_read: false,
             }))
           )
@@ -119,7 +117,7 @@ export default function BroadcastInbox({
             message: b.message,
             created_by: b.sender_id,
             created_at: b.created_at,
-            sender_name: b.sender_name || 'School Admin',
+            sender_name: 'Administrator',
             is_read: recipientRecord?.is_read || false,
           }
         })
