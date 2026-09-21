@@ -397,6 +397,12 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
 
   const stats = getTransactionStats()
 
+  // Helper function to get responsive font size
+  const getResponsiveFontSize = (mobile: string, desktop: string) => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) return mobile
+    return desktop
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
@@ -406,28 +412,28 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f3f4f6' }}>
-      {/* Modern Header/Navbar */}
-      <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '1.5rem' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            {school?.logo_url && <img src={school.logo_url} alt="Logo" style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />}
-            <div>
-              <h1 style={{ margin: 0, fontSize: '1.5rem' }}>{school?.name}</h1>
-              <p style={{ margin: '0.25rem 0 0 0', opacity: 0.9 }}>💰 Accountant Portal</p>
+    <div style={{ minHeight: '100vh', background: '#f3f4f6', overflowX: 'hidden' }}>
+      {/* Modern Header/Navbar - Responsive */}
+      <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: 'clamp(1rem, 2vw, 1.5rem)' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 2vw, 1rem)', minWidth: 0 }}>
+            {school?.logo_url && <img src={school.logo_url} alt="Logo" style={{ width: 'clamp(40px, 8vw, 50px)', height: 'clamp(40px, 8vw, 50px)', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }} />}
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ margin: 0, fontSize: 'clamp(1.1rem, 4vw, 1.5rem)', wordBreak: 'break-word' }}>{school?.name}</h1>
+              <p style={{ margin: '0.25rem 0 0 0', opacity: 0.9, fontSize: 'clamp(0.75rem, 2vw, 1rem)' }}>💰 Accountant Portal</p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <button onClick={initializeDashboard} style={{ padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>🔄 Refresh</button>
-            <button onClick={handleLogout} style={{ padding: '0.5rem 1rem', background: '#ef4444', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>🚪 Logout</button>
+          <div style={{ display: 'flex', gap: 'clamp(0.5rem, 1vw, 1rem)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button onClick={initializeDashboard} style={{ padding: 'clamp(0.4rem, 1vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)', background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: 'clamp(0.75rem, 1.5vw, 1rem)', whiteSpace: 'nowrap' }}>🔄 Refresh</button>
+            <button onClick={handleLogout} style={{ padding: 'clamp(0.4rem, 1vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)', background: '#ef4444', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: 'clamp(0.75rem, 1.5vw, 1rem)', whiteSpace: 'nowrap' }}>🚪 Logout</button>
           </div>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '0 1.5rem' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', gap: '2rem' }}>
+      {/* Navigation Tabs - Responsive Horizontal Scroll on Mobile */}
+      <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '0 clamp(0.75rem, 2vw, 1.5rem)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', gap: 'clamp(1rem, 3vw, 2rem)', minWidth: 'min-content' }}>
           {(['dashboard', 'transactions', 'reports', 'settings'] as NavTab[]).map(tab => (
             <button
               key={tab}
@@ -440,7 +446,8 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
                 fontWeight: activeNav === tab ? '700' : '600',
                 color: activeNav === tab ? '#667eea' : '#6b7280',
                 borderBottom: activeNav === tab ? '2px solid #667eea' : 'none',
-                fontSize: '1rem',
+                fontSize: 'clamp(0.85rem, 2vw, 1rem)',
+                whiteSpace: 'nowrap',
               }}
             >
               {tab === 'dashboard' && '📊 Dashboard'}
@@ -452,46 +459,47 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
         </div>
       </div>
 
-      {/* Main Content */}
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem' }}>
-        {error && <div style={{ background: '#fee', color: '#c33', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>❌ {error}</div>}
-        {success && <div style={{ background: '#d1fae5', color: '#065f46', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>✅ {success}</div>}
+      {/* Main Content - Responsive Padding */}
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: 'clamp(1rem, 3vw, 2rem) clamp(0.75rem, 2vw, 1.5rem)' }}>
+        {error && <div style={{ background: '#fee', color: '#c33', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: 'clamp(0.85rem, 2vw, 1rem)' }}>❌ {error}</div>}
+        {success && <div style={{ background: '#d1fae5', color: '#065f46', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: 'clamp(0.85rem, 2vw, 1rem)' }}>✅ {success}</div>}
 
         {activeNav === 'dashboard' && (
           <>
-            {/* Stats Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-              <div style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: '0.9rem' }}>Total Transactions</p>
-                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#667eea' }}>{transactions.length}</p>
+            {/* Stats Cards - 1 column on mobile, auto-fit on desktop */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(clamp(150px, 100%, 280px), 1fr))', gap: 'clamp(0.75rem, 2vw, 1rem)', marginBottom: 'clamp(1rem, 3vw, 2rem)' }}>
+              <div style={{ background: 'white', padding: 'clamp(1rem, 3vw, 1.5rem)', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>Total Transactions</p>
+                <p style={{ margin: 0, fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 'bold', color: '#667eea' }}>{transactions.length}</p>
               </div>
-              <div style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: '0.9rem' }}>Total Amount</p>
-                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.total)}</p>
+              <div style={{ background: 'white', padding: 'clamp(1rem, 3vw, 1.5rem)', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>Total Amount</p>
+                <p style={{ margin: 0, fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.total)}</p>
               </div>
-              <div style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: '0.9rem' }}>Completed</p>
-                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#10b981' }}>{stats.completed}</p>
+              <div style={{ background: 'white', padding: 'clamp(1rem, 3vw, 1.5rem)', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>Completed</p>
+                <p style={{ margin: 0, fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 'bold', color: '#10b981' }}>{stats.completed}</p>
               </div>
-              <div style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: '0.9rem' }}>Pending</p>
-                <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.pending}</p>
+              <div style={{ background: 'white', padding: 'clamp(1rem, 3vw, 1.5rem)', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontWeight: '500', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>Pending</p>
+                <p style={{ margin: 0, fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 'bold', color: '#f59e0b' }}>{stats.pending}</p>
               </div>
             </div>
 
-            {/* Tabs: Staff vs Students */}
-            <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '1rem' }}>
+            {/* Tabs: Staff vs Students - Responsive Button Layout */}
+            <div style={{ background: 'white', borderRadius: '8px', padding: 'clamp(1rem, 3vw, 1.5rem)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <div style={{ display: 'flex', gap: 'clamp(0.5rem, 2vw, 1rem)', marginBottom: 'clamp(1rem, 2vw, 1.5rem)', borderBottom: '1px solid #e5e7eb', paddingBottom: 'clamp(0.75rem, 2vw, 1rem)', flexWrap: 'wrap' }}>
                 <button
                   onClick={() => setActiveTab('staff')}
                   style={{
-                    padding: '0.5rem 1rem',
+                    padding: 'clamp(0.4rem, 1vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
                     background: activeTab === 'staff' ? '#667eea' : '#f3f4f6',
                     color: activeTab === 'staff' ? 'white' : '#111827',
                     border: 'none',
                     borderRadius: '6px',
                     cursor: 'pointer',
                     fontWeight: '600',
+                    fontSize: 'clamp(0.8rem, 1.5vw, 1rem)',
                   }}
                 >
                   👨‍💼 Staff ({staffList.length})
@@ -499,13 +507,14 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
                 <button
                   onClick={() => setActiveTab('students')}
                   style={{
-                    padding: '0.5rem 1rem',
+                    padding: 'clamp(0.4rem, 1vw, 0.5rem) clamp(0.75rem, 2vw, 1rem)',
                     background: activeTab === 'students' ? '#667eea' : '#f3f4f6',
                     color: activeTab === 'students' ? 'white' : '#111827',
                     border: 'none',
                     borderRadius: '6px',
                     cursor: 'pointer',
                     fontWeight: '600',
+                    fontSize: 'clamp(0.8rem, 1.5vw, 1rem)',
                   }}
                 >
                   👨‍🎓 Students ({studentList.length})
@@ -513,9 +522,9 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
               </div>
 
               {activeTab === 'staff' && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(150px, 100%, 250px), 1fr))', gap: 'clamp(0.75rem, 2vw, 1rem)' }}>
                   {staffList.length === 0 ? (
-                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>No staff found</div>
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 'clamp(1.5rem, 4vw, 2rem)', color: '#9ca3af' }}>No staff found</div>
                   ) : (
                     staffList.map(staff => (
                       <div
@@ -523,11 +532,12 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
                         onClick={() => handleStaffClick(staff)}
                         style={{
                           background: '#f9fafb',
-                          padding: '1rem',
+                          padding: 'clamp(0.75rem, 2vw, 1rem)',
                           borderRadius: '6px',
                           cursor: 'pointer',
                           border: '1px solid #e5e7eb',
                           transition: 'all 0.2s',
+                          wordBreak: 'break-word',
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)'
@@ -538,9 +548,9 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
                           e.currentTarget.style.transform = 'translateY(0)'
                         }}
                       >
-                        <p style={{ margin: 0, fontWeight: '700', fontSize: '1rem' }}>{staff.full_name}</p>
-                        <p style={{ margin: '0.25rem 0 0 0', color: '#667eea', fontWeight: '600', fontSize: '0.9rem' }}>{staff.role}</p>
-                        <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280', fontSize: '0.85rem' }}>{staff.email}</p>
+                        <p style={{ margin: 0, fontWeight: '700', fontSize: 'clamp(0.9rem, 2vw, 1rem)' }}>{staff.full_name}</p>
+                        <p style={{ margin: '0.25rem 0 0 0', color: '#667eea', fontWeight: '600', fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)' }}>{staff.role}</p>
+                        <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280', fontSize: 'clamp(0.7rem, 1.5vw, 0.85rem)', wordBreak: 'break-all' }}>{staff.email}</p>
                       </div>
                     ))
                   )}
@@ -548,9 +558,9 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
               )}
 
               {activeTab === 'students' && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(150px, 100%, 250px), 1fr))', gap: 'clamp(0.75rem, 2vw, 1rem)' }}>
                   {studentList.length === 0 ? (
-                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>No students found</div>
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 'clamp(1.5rem, 4vw, 2rem)', color: '#9ca3af' }}>No students found</div>
                   ) : (
                     studentList.map(student => (
                       <div
@@ -558,10 +568,11 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
                         onClick={() => handleStudentClick(student)}
                         style={{
                           background: '#f9fafb',
-                          padding: '1rem',
+                          padding: 'clamp(0.75rem, 2vw, 1rem)',
                           borderRadius: '6px',
                           cursor: 'pointer',
                           border: '1px solid #e5e7eb',
+                          wordBreak: 'break-word',
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)'
@@ -572,9 +583,9 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
                           e.currentTarget.style.transform = 'translateY(0)'
                         }}
                       >
-                        <p style={{ margin: 0, fontWeight: '700', fontSize: '1rem' }}>{student.full_name}</p>
-                        <p style={{ margin: '0.25rem 0 0 0', color: '#667eea', fontWeight: '600' }}>{student.admission_number || 'N/A'}</p>
-                        <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280', fontSize: '0.85rem' }}>{student.email}</p>
+                        <p style={{ margin: 0, fontWeight: '700', fontSize: 'clamp(0.9rem, 2vw, 1rem)' }}>{student.full_name}</p>
+                        <p style={{ margin: '0.25rem 0 0 0', color: '#667eea', fontWeight: '600', fontSize: 'clamp(0.8rem, 1.5vw, 1rem)' }}>{student.admission_number || 'N/A'}</p>
+                        <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280', fontSize: 'clamp(0.7rem, 1.5vw, 0.85rem)', wordBreak: 'break-all' }}>{student.email}</p>
                       </div>
                     ))
                   )}
@@ -585,17 +596,17 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
         )}
 
         {activeNav === 'transactions' && (
-          <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h2 style={{ margin: '0 0 1.5rem 0' }}>📋 All Transactions</h2>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ background: 'white', borderRadius: '8px', padding: 'clamp(1rem, 3vw, 1.5rem)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ margin: '0 0 clamp(1rem, 2vw, 1.5rem) 0', fontSize: 'clamp(1.25rem, 3vw, 1.5rem)' }}>📋 All Transactions</h2>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', marginBottom: '1rem' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '500px' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '700', color: '#6b7280' }}>Recipient</th>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '700', color: '#6b7280' }}>Purpose</th>
-                    <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '700', color: '#6b7280' }}>Amount</th>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '700', color: '#6b7280' }}>Status</th>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '700', color: '#6b7280' }}>Date</th>
+                    <th style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', textAlign: 'left', fontWeight: '700', color: '#6b7280', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>Recipient</th>
+                    <th style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', textAlign: 'left', fontWeight: '700', color: '#6b7280', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>Purpose</th>
+                    <th style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', textAlign: 'right', fontWeight: '700', color: '#6b7280', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>Amount</th>
+                    <th style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', textAlign: 'left', fontWeight: '700', color: '#6b7280', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>Status</th>
+                    <th style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', textAlign: 'left', fontWeight: '700', color: '#6b7280', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -612,22 +623,22 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
                       onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
                       onMouseLeave={(e) => e.currentTarget.style.background = idx % 2 === 0 ? '#f9fafb' : 'white'}
                     >
-                      <td style={{ padding: '1rem' }}>{txn.recipient_name}</td>
-                      <td style={{ padding: '1rem' }}>{txn.purpose}</td>
-                      <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '700', color: '#667eea' }}>{formatCurrency(txn.amount)}</td>
-                      <td style={{ padding: '1rem' }}>
+                      <td style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', fontSize: 'clamp(0.75rem, 1.5vw, 0.95rem)', wordBreak: 'break-word' }}>{txn.recipient_name}</td>
+                      <td style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', fontSize: 'clamp(0.75rem, 1.5vw, 0.95rem)', wordBreak: 'break-word' }}>{txn.purpose}</td>
+                      <td style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', textAlign: 'right', fontWeight: '700', color: '#667eea', fontSize: 'clamp(0.75rem, 1.5vw, 0.95rem)', whiteSpace: 'nowrap' }}>{formatCurrency(txn.amount)}</td>
+                      <td style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', fontSize: 'clamp(0.7rem, 1.5vw, 0.85rem)' }}>
                         <span style={{
                           padding: '0.25rem 0.75rem',
                           borderRadius: '4px',
                           background: txn.status === 'COMPLETED' ? '#d1fae5' : txn.status === 'PENDING' ? '#fef3c7' : '#fee2e2',
                           color: txn.status === 'COMPLETED' ? '#065f46' : txn.status === 'PENDING' ? '#92400e' : '#991b1b',
                           fontWeight: '600',
-                          fontSize: '0.85rem',
+                          whiteSpace: 'nowrap',
                         }}>
                           {txn.status}
                         </span>
                       </td>
-                      <td style={{ padding: '1rem' }}>{new Date(txn.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', fontSize: 'clamp(0.75rem, 1.5vw, 0.95rem)', whiteSpace: 'nowrap' }}>{new Date(txn.created_at).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -640,28 +651,28 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
         )}
 
         {activeNav === 'reports' && (
-          <div style={{ background: 'white', borderRadius: '8px', padding: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h2 style={{ margin: 0 }}>📈 Financial Reports</h2>
-            <p style={{ marginTop: '1rem', color: '#6b7280' }}>Coming soon: Detailed financial reports and analytics</p>
+          <div style={{ background: 'white', borderRadius: '8px', padding: 'clamp(1.5rem, 3vw, 2rem)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ margin: 0, fontSize: 'clamp(1.25rem, 3vw, 1.5rem)' }}>📈 Financial Reports</h2>
+            <p style={{ marginTop: 'clamp(0.75rem, 2vw, 1rem)', color: '#6b7280', fontSize: 'clamp(0.85rem, 1.5vw, 1rem)' }}>Coming soon: Detailed financial reports and analytics</p>
           </div>
         )}
 
         {activeNav === 'settings' && (
-          <div style={{ background: 'white', borderRadius: '8px', padding: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h2 style={{ margin: 0 }}>⚙️ Settings</h2>
-            <div style={{ marginTop: '1.5rem' }}>
-              <p style={{ fontWeight: '600' }}>Account Information</p>
-              <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '6px', marginTop: '0.5rem' }}>
-                <p style={{ margin: '0.5rem 0', color: '#6b7280' }}><strong>Name:</strong> {currentUser?.full_name}</p>
-                <p style={{ margin: '0.5rem 0', color: '#6b7280' }}><strong>Email:</strong> {currentUser?.email}</p>
-                <p style={{ margin: '0.5rem 0', color: '#6b7280' }}><strong>Role:</strong> {currentUser?.role}</p>
+          <div style={{ background: 'white', borderRadius: '8px', padding: 'clamp(1.5rem, 3vw, 2rem)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ margin: 0, fontSize: 'clamp(1.25rem, 3vw, 1.5rem)' }}>⚙️ Settings</h2>
+            <div style={{ marginTop: 'clamp(1rem, 2vw, 1.5rem)' }}>
+              <p style={{ fontWeight: '600', fontSize: 'clamp(0.9rem, 1.5vw, 1rem)' }}>Account Information</p>
+              <div style={{ background: '#f9fafb', padding: 'clamp(0.75rem, 2vw, 1rem)', borderRadius: '6px', marginTop: '0.5rem', wordBreak: 'break-word' }}>
+                <p style={{ margin: '0.5rem 0', color: '#6b7280', fontSize: 'clamp(0.8rem, 1.5vw, 0.95rem)' }}><strong>Name:</strong> {currentUser?.full_name}</p>
+                <p style={{ margin: '0.5rem 0', color: '#6b7280', fontSize: 'clamp(0.8rem, 1.5vw, 0.95rem)' }}><strong>Email:</strong> {currentUser?.email}</p>
+                <p style={{ margin: '0.5rem 0', color: '#6b7280', fontSize: 'clamp(0.8rem, 1.5vw, 0.95rem)' }}><strong>Role:</strong> {currentUser?.role}</p>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Payment Modal */}
+      {/* Payment Modal - Responsive */}
       {selectedPayment && (
         <div
           style={{
@@ -675,6 +686,8 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
+            padding: 'clamp(0.5rem, 2vw, 1rem)',
+            overflowY: 'auto',
           }}
           onClick={() => setSelectedPayment(null)}
         >
@@ -682,58 +695,58 @@ Total: ₦${selectedPayment.allTransactions.reduce((sum, t) => sum + t.amount, 0
             style={{
               background: 'white',
               borderRadius: '12px',
-              padding: '2rem',
+              padding: 'clamp(1rem, 3vw, 2rem)',
               maxWidth: '600px',
-              width: '90%',
+              width: '100%',
               maxHeight: '90vh',
               overflowY: 'auto',
             }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', alignItems: 'center' }}>
-              <h2 style={{ margin: 0 }}>💳 {editMode ? 'Record Payment' : 'Payment Details'}</h2>
-              <button onClick={() => { setSelectedPayment(null); setEditMode(false) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem' }}>✕</button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'clamp(1rem, 2vw, 1.5rem)', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0, fontSize: 'clamp(1.1rem, 2vw, 1.35rem)' }}>💳 {editMode ? 'Record Payment' : 'Payment Details'}</h2>
+              <button onClick={() => { setSelectedPayment(null); setEditMode(false) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'clamp(1.25rem, 2vw, 1.5rem)', flexShrink: 0 }}>✕</button>
             </div>
 
             {!editMode ? (
               <>
-                <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                  <p style={{ margin: 0, fontWeight: '700' }}>{selectedPayment.school?.name}</p>
-                  <p style={{ margin: '0.5rem 0 0 0', fontWeight: '600' }}>{selectedPayment.recipient?.full_name}</p>
+                <div style={{ background: '#f9fafb', padding: 'clamp(0.75rem, 2vw, 1rem)', borderRadius: '8px', marginBottom: '1rem', wordBreak: 'break-word' }}>
+                  <p style={{ margin: 0, fontWeight: '700', fontSize: 'clamp(0.95rem, 1.5vw, 1.1rem)' }}>{selectedPayment.school?.name}</p>
+                  <p style={{ margin: '0.5rem 0 0 0', fontWeight: '600', fontSize: 'clamp(0.9rem, 1.5vw, 1rem)' }}>{selectedPayment.recipient?.full_name}</p>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'clamp(0.75rem, 2vw, 1rem)', marginBottom: '1rem' }}>
                   <div>
-                    <p style={{ margin: '0 0 0.5rem 0', fontWeight: '600', color: '#6b7280', fontSize: '0.9rem' }}>Amount</p>
-                    <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold', color: '#667eea' }}>{formatCurrency(selectedPayment.transaction.amount)}</p>
+                    <p style={{ margin: '0 0 0.5rem 0', fontWeight: '600', color: '#6b7280', fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)' }}>Amount</p>
+                    <p style={{ margin: 0, fontSize: 'clamp(1.2rem, 3vw, 1.5rem)', fontWeight: 'bold', color: '#667eea' }}>{formatCurrency(selectedPayment.transaction.amount)}</p>
                   </div>
                   <div>
-                    <p style={{ margin: '0 0 0.5rem 0', fontWeight: '600', color: '#6b7280', fontSize: '0.9rem' }}>Status</p>
-                    <p style={{ margin: 0, display: 'inline-block', padding: '0.25rem 0.75rem', borderRadius: '4px', background: selectedPayment.transaction.status === 'COMPLETED' ? '#d1fae5' : '#fef3c7', color: selectedPayment.transaction.status === 'COMPLETED' ? '#065f46' : '#92400e', fontWeight: '600', fontSize: '0.85rem' }}>{selectedPayment.transaction.status}</p>
+                    <p style={{ margin: '0 0 0.5rem 0', fontWeight: '600', color: '#6b7280', fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)' }}>Status</p>
+                    <p style={{ margin: 0, display: 'inline-block', padding: '0.25rem 0.75rem', borderRadius: '4px', background: selectedPayment.transaction.status === 'COMPLETED' ? '#d1fae5' : '#fef3c7', color: selectedPayment.transaction.status === 'COMPLETED' ? '#065f46' : '#92400e', fontWeight: '600', fontSize: 'clamp(0.75rem, 1.5vw, 0.85rem)' }}>{selectedPayment.transaction.status}</p>
                   </div>
                 </div>
 
                 <div style={{ marginBottom: '1rem' }}>
-                  <p style={{ margin: '0 0 0.5rem 0', fontWeight: '600', color: '#6b7280' }}>Purpose</p>
-                  <p style={{ margin: 0 }}>{selectedPayment.transaction.purpose}</p>
+                  <p style={{ margin: '0 0 0.5rem 0', fontWeight: '600', color: '#6b7280', fontSize: 'clamp(0.8rem, 1.5vw, 0.9rem)' }}>Purpose</p>
+                  <p style={{ margin: 0, fontSize: 'clamp(0.9rem, 1.5vw, 1rem)' }}>{selectedPayment.transaction.purpose}</p>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
-                  <button onClick={() => { setEditMode(true); setEditData({}) }} style={{ padding: '0.75rem', background: '#667eea', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>✏️ Edit</button>
-                  <button onClick={() => shareReceipt('email')} style={{ padding: '0.75rem', background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>📧 Email</button>
-                  <button onClick={() => shareReceipt('whatsapp')} style={{ padding: '0.75rem', background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>💬 WhatsApp</button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'clamp(0.5rem, 1vw, 0.75rem)' }}>
+                  <button onClick={() => { setEditMode(true); setEditData({}) }} style={{ padding: 'clamp(0.6rem, 1vw, 0.75rem)', background: '#667eea', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>✏️ Edit</button>
+                  <button onClick={() => shareReceipt('email')} style={{ padding: 'clamp(0.6rem, 1vw, 0.75rem)', background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>📧 Email</button>
+                  <button onClick={() => shareReceipt('whatsapp')} style={{ padding: 'clamp(0.6rem, 1vw, 0.75rem)', background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: 'clamp(0.75rem, 1.5vw, 0.9rem)' }}>💬 WhatsApp</button>
                 </div>
               </>
             ) : (
               <>
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem' }}>Amount *</label>
-                  <input type="number" min="0" value={editData.amount !== undefined ? editData.amount : selectedPayment.transaction.amount} onChange={(e) => setEditData({ ...editData, amount: parseFloat(e.target.value) })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '1rem', boxSizing: 'border-box' }} />
+                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', fontSize: 'clamp(0.85rem, 1.5vw, 0.95rem)' }}>Amount *</label>
+                  <input type="number" min="0" value={editData.amount !== undefined ? editData.amount : selectedPayment.transaction.amount} onChange={(e) => setEditData({ ...editData, amount: parseFloat(e.target.value) })} style={{ width: '100%', padding: 'clamp(0.6rem, 1vw, 0.75rem)', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: 'clamp(0.85rem, 1.5vw, 1rem)', boxSizing: 'border-box' }} />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <button onClick={savePayment} style={{ padding: '0.75rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700' }}>💾 Save</button>
-                  <button onClick={() => { setEditMode(false); setEditData({}) }} style={{ padding: '0.75rem', background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700' }}>Cancel</button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'clamp(0.75rem, 1vw, 1rem)' }}>
+                  <button onClick={savePayment} style={{ padding: 'clamp(0.6rem, 1vw, 0.75rem)', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', fontSize: 'clamp(0.85rem, 1.5vw, 0.95rem)' }}>💾 Save</button>
+                  <button onClick={() => { setEditMode(false); setEditData({}) }} style={{ padding: 'clamp(0.6rem, 1vw, 0.75rem)', background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', fontSize: 'clamp(0.85rem, 1.5vw, 0.95rem)' }}>Cancel</button>
                 </div>
               </>
             )}

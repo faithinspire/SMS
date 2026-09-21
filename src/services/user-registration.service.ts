@@ -362,17 +362,71 @@ export class UserRegistrationService {
             .insert(subjectRegistrations)
 
           if (subjectRegError) {
-            // If this is a score_sheets trigger error, skip enrollment
-            if (subjectRegError.message?.includes('score_sheets')) {
-              console.warn('⚠️ Score sheets trigger issue (no active term) - skipping enrollment for now')
-              // Subjects will be enrolled after trigger is fixed/disabled
-            } else {
-              console.error('❌ Subject registration failed:', subjectRegError)
-              console.error('❌ Subject registrations:', subjectRegistrations)
-              throw new Error(`Failed to enroll subjects: ${subjectRegError.message}`)
-            }
+            console.error('❌ Subject registration error:', subjectRegError)
+            console.error('❌ Subject registrations:', subjectRegistrations)
+            console.error('❌ This is CRITICAL - students MUST be enrolled in subjects for teacher dashboards to work')
+            // DO NOT silently ignore this error - it prevents students from appearing in teacher dashboards
+            throw new Error(`Failed to enroll subjects: ${subjectRegError.message}`)
           } else {
             console.log(`✅ Successfully enrolled student in ${subjectRegistrations.length} subjects`)
+          }
+        } else {
+          // If no subjects provided during registration, auto-enroll in all class subjects
+          console.log('📚 Auto-enrolling student in all subjects applicable to class...')
+          
+          try {
+            // Get all subjects applicable to this class level
+            const { data: classComboData } = await supabase
+              .from('class_arm_combos')
+              .select('classes(level)')
+              .eq('id', data.class_arm_combo_id)
+              .single()
+
+            if (classComboData?.classes?.level) {
+              const classLevel = classComboData.classes.level
+
+              // Get all subjects applicable to this class level
+              const { data: applicableSubjects, error: subjectsError } = await supabase
+                .from('subjects')
+                .select('id')
+                .eq('school_id', data.school_id)
+                .filter('applicable_to_levels', 'cs', `{${classLevel}}`)
+
+              if (!subjectsError && applicableSubjects && applicableSubjects.length > 0) {
+                // Auto-enroll in all applicable subjects
+                const autoEnrollments = await Promise.all(
+                  applicableSubjects.map(async (subject) => {
+                    const { data: teacherAssignment } = await supabase
+                      .from('subject_teacher_assignments')
+                      .select('teacher_id')
+                      .eq('school_id', data.school_id)
+                      .eq('subject_id', subject.id)
+                      .eq('class_arm_combo_id', data.class_arm_combo_id)
+                      .maybeSingle()
+
+                    return {
+                      student_id: studentRecord.id,
+                      subject_id: subject.id,
+                      school_id: data.school_id,
+                      subject_teacher_id: teacherAssignment?.teacher_id || null,
+                      created_at: new Date().toISOString(),
+                    }
+                  })
+                )
+
+                const { error: autoEnrollError } = await supabase
+                  .from('student_subjects')
+                  .insert(autoEnrollments)
+
+                if (!autoEnrollError) {
+                  console.log(`✅ Auto-enrolled student in ${autoEnrollments.length} subjects`)
+                } else {
+                  console.warn(`⚠️ Auto-enrollment partially failed: ${autoEnrollError.message}`)
+                }
+              }
+            }
+          } catch (autoEnrollErr) {
+            console.warn('⚠️ Auto-enrollment encountered an error (non-fatal):', autoEnrollErr)
           }
         }
       }

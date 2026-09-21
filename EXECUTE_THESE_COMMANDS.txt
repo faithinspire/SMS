@@ -1,0 +1,77 @@
+================================================================================
+EXECUTE THESE COMMANDS TO DEPLOY MIGRATION 121
+================================================================================
+
+STEP 1: Open Command Prompt (CMD)
+- Press Win+R
+- Type: cmd
+- Press Enter
+
+STEP 2: Navigate to project
+cd c:\Users\OLU\Desktop\SMS
+
+STEP 3: Verify git status
+git status
+
+STEP 4: Push to Vercel
+git push origin main
+
+STEP 5: Wait for deployment (5-10 minutes)
+- Vercel will detect the push
+- Vercel will rebuild
+- Migration 121 will run
+- RLS will be disabled
+- Result pages will work
+
+================================================================================
+
+WHAT TO EXPECT:
+
+After push:
+- "Enumerating objects..."
+- "Counting objects..."
+- "Writing objects..."
+- "Total ... (delta ...), reused ..."
+- "To https://github.com/faithinspire/SMS.git"
+- "[new branch] main -> main"
+- (or similar success message)
+
+================================================================================
+
+VERIFICATION (after 10 minutes):
+
+Open in browser:
+https://yourapp.vercel.app/principal/results
+
+Should show:
+✅ Sessions dropdown - POPULATED
+✅ Terms dropdown - POPULATED  
+✅ Classes list - DISPLAYED
+✅ Click class - Students show with scores
+
+================================================================================
+
+IF YOU GET AN ERROR:
+
+"fatal: unable to access repository"
+- Check internet connection
+- Make sure git is installed: git --version
+- Try again
+
+"everything up-to-date"
+- Migration might already be pushed
+- Check: git log origin/main -1
+- Should show: "FIX: Disable RLS on result tables"
+
+"permission denied"
+- Verify GitHub credentials
+- Try: git config user.email "your@email.com"
+- Try: git config user.name "Your Name"
+
+================================================================================
+
+FINAL COMMAND (copy and paste):
+
+cd c:\Users\OLU\Desktop\SMS && git push origin main
+
+================================================================================

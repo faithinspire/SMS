@@ -57,18 +57,23 @@ export default function HeadteacherSchoolFeesPage() {
           .from('transactions')
           .select(`
             id,
-            student_id,
+            recipient_id,
             amount,
             status,
             created_at,
-            students(full_name, admission_number, class_arm_combo_id),
-            class_arm_combos(
-              classes(name),
-              arms(name)
+            recipient_name,
+            students!recipient_id(
+              full_name,
+              admission_number,
+              class_arm_combo_id,
+              class_arm_combos(
+                classes(name),
+                arms(name)
+              )
             )
           `)
           .eq('school_id', currentUser.school_id)
-          .eq('type', 'SCHOOL_FEE')
+          .in('type', ['STUDENT_PAYMENT', 'SCHOOL_FEE'])
 
         if (filterStatus !== 'ALL') {
           query = query.eq('status', filterStatus)
@@ -77,18 +82,22 @@ export default function HeadteacherSchoolFeesPage() {
         const { data: transactionsData } = await query.order('created_at', { ascending: false })
 
         // Process and format the data
-        const records: StudentFeeRecord[] = (transactionsData || []).map((tx: any) => ({
-          id: tx.id,
-          student_id: tx.student_id,
-          student_name: tx.students?.full_name || 'Unknown',
-          admission_number: tx.students?.admission_number || 'N/A',
-          class_name: tx.class_arm_combos?.classes?.name 
-            ? `${tx.class_arm_combos.classes.name} ${tx.class_arm_combos.arms?.name || ''}`
-            : 'N/A',
-          amount_paid: tx.amount || 0,
-          payment_status: tx.status || 'PENDING',
-          payment_date: tx.created_at,
-        }))
+        const records: StudentFeeRecord[] = (transactionsData || []).map((tx: any) => {
+          const studentInfo = tx.students?.[0]
+          const classInfo = studentInfo?.class_arm_combos
+          return {
+            id: tx.id,
+            student_id: tx.recipient_id,
+            student_name: studentInfo?.full_name || tx.recipient_name || 'Unknown',
+            admission_number: studentInfo?.admission_number || 'N/A',
+            class_name: classInfo
+              ? `${classInfo.classes?.name || ''} ${classInfo.arms?.name || ''}`.trim()
+              : 'N/A',
+            amount_paid: tx.amount || 0,
+            payment_status: tx.status === 'COMPLETED' ? 'PAID' : tx.status || 'PENDING',
+            payment_date: tx.created_at,
+          }
+        })
 
         setFeeRecords(records)
       }

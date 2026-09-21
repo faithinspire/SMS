@@ -87,8 +87,20 @@ export default function StudentAssignmentsPage() {
 
       const studentClassId = studentData?.class_arm_combo_id
 
-      // Load assignments for student's class
-      const { data: assignmentData, error: assignmentError } = await supabase
+      // Get current active term
+      const { data: termData } = await supabase
+        .from('academic_terms')
+        .select('id')
+        .eq('school_id', currentUser.school_id)
+        .eq('is_active', true)
+        .order('term_order', { ascending: false })
+        .limit(1)
+        .single()
+
+      const currentTermId = termData?.id
+
+      // Load assignments for student's class (for current term or all if term not active)
+      let query = supabase
         .from('assignments')
         .select(`
           id, title, description, instructions, due_date, max_marks, created_at, status,
@@ -98,7 +110,13 @@ export default function StudentAssignmentsPage() {
         `)
         .eq('class_arm_combo_id', studentClassId)
         .eq('school_id', currentUser.school_id)
-        .order('due_date', { ascending: false })
+
+      // Filter by term if available, otherwise get all active assignments
+      if (currentTermId) {
+        query = query.eq('term_id', currentTermId)
+      }
+
+      const { data: assignmentData, error: assignmentError } = await query.order('due_date', { ascending: false })
 
       if (assignmentError) {
         console.error('[StudentAssignments] Assignment error:', assignmentError)
@@ -106,7 +124,7 @@ export default function StudentAssignmentsPage() {
         return
       }
 
-      // Enrich assignment data with teacher names
+      // Enrich assignment data with teacher, subject, and class names
       const enrichedAssignments = await Promise.all(
         (assignmentData || []).map(async (assignment: any) => {
           // Get teacher name
@@ -120,13 +138,37 @@ export default function StudentAssignmentsPage() {
             teacherName = teacherData?.full_name || 'Unknown'
           }
 
+          // Get subject name
+          let subjectName = 'Unknown Subject'
+          if (assignment.subject_id) {
+            const { data: subjectData } = await supabase
+              .from('subjects')
+              .select('name')
+              .eq('id', assignment.subject_id)
+              .single()
+            subjectName = subjectData?.name || 'Unknown Subject'
+          }
+
+          // Get class name
+          let className = 'Unknown Class'
+          if (assignment.class_arm_combo_id) {
+            const { data: classData } = await supabase
+              .from('class_arm_combos')
+              .select('classes(name), arms(name)')
+              .eq('id', assignment.class_arm_combo_id)
+              .single()
+            const cName = (classData?.classes as any)?.name || ''
+            const aName = (classData?.arms as any)?.name || ''
+            className = aName ? `${cName} ${aName}` : cName || 'Unknown Class'
+          }
+
           return {
             id: assignment.id,
             title: assignment.title,
             description: assignment.description,
             instructions: assignment.instructions,
-            subject_name: 'Subject',
-            class_name: 'Class',
+            subject_name: subjectName,
+            class_name: className,
             teacher_name: teacherName,
             due_date: assignment.due_date,
             max_marks: assignment.max_marks,

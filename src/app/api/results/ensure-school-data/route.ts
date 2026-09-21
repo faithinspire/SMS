@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
             // STEP 2: Create student record with user_id
             const dateOfBirth = `${2010 + Math.floor(Math.random() * 5)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`
 
-            const { error: studentError } = await supabase
+            const { data: studentData, error: studentError } = await supabase
               .from('students')
               .insert({
                 user_id: userId,
@@ -252,9 +252,63 @@ export async function POST(request: NextRequest) {
                 full_name: studentName,
                 date_of_birth: dateOfBirth,
               })
+              .select('id')
+              .single()
 
             if (studentError) {
               console.warn(`[EnsureData] Warning creating student ${admissionNumber}:`, studentError.message)
+              continue
+            }
+
+            const studentId = studentData.id
+
+            // STEP 3: Enroll student in class-applicable subjects
+            // Determine class level based on class name
+            let classLevelNumber = 0
+            if (className.includes('Primary')) {
+              const primaryMatch = className.match(/\d+/)
+              classLevelNumber = primaryMatch ? parseInt(primaryMatch[0]) : 0
+            } else if (className.includes('JSS')) {
+              const jssMatch = className.match(/\d+/)
+              classLevelNumber = jssMatch ? 8 + parseInt(jssMatch[0]) : 0 // JSS1=9, JSS2=10, JSS3=11
+            } else if (className.includes('SS')) {
+              const ssMatch = className.match(/\d+/)
+              classLevelNumber = ssMatch ? 11 + parseInt(ssMatch[0]) : 0 // SS1=12, SS2=13, SS3=14
+            }
+
+            if (classLevelNumber > 0) {
+              console.log(`[EnsureData] Enrolling ${studentName} in subjects for level ${classLevelNumber}...`)
+
+              // Fetch all subjects applicable to this level
+              const { data: applicableSubjects, error: subjectsError } = await supabase
+                .from('subjects')
+                .select('id')
+                .eq('school_id', schoolId)
+                .eq('is_active', true)
+                .contains('applicable_to_levels', [classLevelNumber])
+
+              if (subjectsError) {
+                console.warn(`[EnsureData] Error fetching subjects for level ${classLevelNumber}:`, subjectsError.message)
+              } else if (applicableSubjects && applicableSubjects.length > 0) {
+                // Enroll in all applicable subjects
+                const enrollmentData = applicableSubjects.map((subject) => ({
+                  student_id: studentId,
+                  subject_id: subject.id,
+                  school_id: schoolId,
+                }))
+
+                const { error: enrollError } = await supabase
+                  .from('student_subjects')
+                  .insert(enrollmentData)
+
+                if (enrollError) {
+                  console.warn(`[EnsureData] Warning enrolling ${studentName} in subjects:`, enrollError.message)
+                } else {
+                  console.log(`[EnsureData] ✅ ${studentName} enrolled in ${applicableSubjects.length} subjects`)
+                }
+              } else {
+                console.warn(`[EnsureData] No subjects found for level ${classLevelNumber}`)
+              }
             }
           }
 

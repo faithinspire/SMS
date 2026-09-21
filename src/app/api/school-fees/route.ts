@@ -30,10 +30,19 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Build query
+    // Build query with student class information
     let query = supabase
       .from('transactions')
-      .select('*')
+      .select(`
+        *,
+        students!recipient_id(
+          class_arm_combo_id,
+          class_arm_combos(
+            classes(name),
+            arms(name)
+          )
+        )
+      `)
       .eq('school_id', schoolId)
       .eq('type', type)
       .order('created_at', { ascending: false })
@@ -65,20 +74,33 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    // Process payments to add class information
+    const processedPayments = (payments || []).map((payment: any) => {
+      const classInfo = payment.students?.[0]?.class_arm_combos
+      return {
+        ...payment,
+        recipient_class: classInfo
+          ? `${classInfo.classes?.name || ''} ${classInfo.arms?.name || ''}`.trim()
+          : 'N/A',
+        // Remove nested students object to keep response clean
+        students: undefined,
+      }
+    })
+
     // Calculate statistics
     const stats = {
-      totalRecords: payments?.length || 0,
-      completed: payments?.filter(p => p.status === 'COMPLETED').length || 0,
-      pending: payments?.filter(p => p.status === 'PENDING').length || 0,
-      failed: payments?.filter(p => p.status === 'FAILED').length || 0,
-      totalAmount: payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0,
-      completedAmount: payments?.filter(p => p.status === 'COMPLETED').reduce((sum, p) => sum + (p.amount || 0), 0) || 0,
+      totalRecords: processedPayments?.length || 0,
+      completed: processedPayments?.filter(p => p.status === 'COMPLETED').length || 0,
+      pending: processedPayments?.filter(p => p.status === 'PENDING').length || 0,
+      failed: processedPayments?.filter(p => p.status === 'FAILED').length || 0,
+      totalAmount: processedPayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0,
+      completedAmount: processedPayments?.filter(p => p.status === 'COMPLETED').reduce((sum, p) => sum + (p.amount || 0), 0) || 0,
     }
 
     return NextResponse.json(
       {
         success: true,
-        data: payments || [],
+        data: processedPayments || [],
         stats,
       },
       { status: 200 }

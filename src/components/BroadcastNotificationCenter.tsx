@@ -7,10 +7,10 @@ import { AuthService } from '@/services/auth.service'
 interface Notification {
   id: string
   broadcast_id: string
+  title: string
   message: string
   sender_name: string
-  recipient_role: string
-  read: boolean
+  is_read: boolean
   created_at: string
 }
 
@@ -37,40 +37,95 @@ export default function BroadcastNotificationCenter() {
 
       setUser(currentUser)
 
-      // Query broadcast notifications for this user
+      // Query broadcasts with broadcast_recipients join to get user's broadcasts
       const { data, error } = await supabase
-        .from('broadcast_notifications')
-        .select('*')
-        .eq('user_id', currentUser.id)
+        .from('broadcasts')
+        .select(
+          `
+          id,
+          title,
+          message,
+          created_at,
+          users!created_by (full_name),
+          broadcast_recipients (
+            id,
+            is_read
+          )
+        `
+        )
+        .eq('school_id', currentUser.school_id)
         .order('created_at', { ascending: false })
         .limit(50)
 
       if (error) {
         console.error('[Notifications] Error:', error)
+        setNotifications([])
         setLoading(false)
         return
       }
 
-      setNotifications(data || [])
-      setUnreadCount((data || []).filter((n: any) => !n.read).length)
+      // Filter broadcasts where current user is a recipient
+      const userBroadcasts = (data || [])
+        .map((broadcast: any) => {
+          const recipientRecord = broadcast.broadcast_recipients?.find(
+            (r: any) => r.id  // Just check if recipient record exists
+          )
+          return {
+            id: broadcast.id,
+            broadcast_id: broadcast.id,
+            title: broadcast.title,
+            message: broadcast.message,
+            sender_name: broadcast.users?.full_name || 'Administrator',
+            is_read: recipientRecord?.is_read || false,
+            created_at: broadcast.created_at,
+          }
+        })
+        .filter((b: any) => {
+          // Only show broadcasts where user is a recipient
+          return (data || []).some((broadcast: any) =>
+            broadcast.broadcast_recipients?.some(
+              (r: any) => r.id
+            )
+          )
+        })
+
+      setNotifications(userBroadcasts)
+      setUnreadCount(
+        userBroadcasts.filter((n: any) => !n.is_read).length
+      )
       setLoading(false)
     } catch (err) {
       console.error('[Notifications] Load error:', err)
+      setNotifications([])
       setLoading(false)
     }
   }
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const { error } = await supabase
-        .from('broadcast_notifications')
-        .update({ read: true, read_at: new Date().toISOString() })
-        .eq('id', notificationId)
+      // Find the broadcast_recipients record for this user
+      const { data: recipients, error: fetchError } = await supabase
+        .from('broadcast_recipients')
+        .select('id')
+        .eq('broadcast_id', notificationId)
+        .eq('user_id', user.id)
+        .single()
 
-      if (!error) {
+      if (fetchError || !recipients) {
+        console.error('[Notifications] Error finding recipient record:', fetchError)
+        return
+      }
+
+      // Update the broadcast_recipients record
+      const { error: updateError } = await supabase
+        .from('broadcast_recipients')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('id', recipients.id)
+
+      if (!updateError) {
         setNotifications(
           notifications.map((n) =>
-            n.id === notificationId ? { ...n, read: true } : n
+            n.id === notificationId ? { ...n, is_read: true } : n
           )
         )
         setUnreadCount(Math.max(0, unreadCount - 1))
@@ -82,18 +137,32 @@ export default function BroadcastNotificationCenter() {
 
   const markAllAsRead = async () => {
     try {
-      const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id)
+      const unreadIds = notifications
+        .filter((n) => !n.is_read)
+        .map((n) => n.id)
 
-      if (unreadIds.length === 0) return
+      if (unreadIds.length === 0 || !user) return
 
-      const { error } = await supabase
-        .from('broadcast_notifications')
-        .update({ read: true, read_at: new Date().toISOString() })
-        .in('id', unreadIds)
+      // Update all unread broadcast_recipients records for this user
+      const { data: unreadRecipients } = await supabase
+        .from('broadcast_recipients')
+        .select('id')
+        .in('broadcast_id', unreadIds)
+        .eq('user_id', user.id)
 
-      if (!error) {
-        setNotifications(notifications.map((n) => ({ ...n, read: true })))
-        setUnreadCount(0)
+      if (unreadRecipients && unreadRecipients.length > 0) {
+        const { error: updateError } = await supabase
+          .from('broadcast_recipients')
+          .update({ is_read: true, read_at: new Date().toISOString() })
+          .in(
+            'id',
+            unreadRecipients.map((r: any) => r.id)
+          )
+
+        if (!updateError) {
+          setNotifications(notifications.map((n) => ({ ...n, is_read: true })))
+          setUnreadCount(0)
+        }
       }
     } catch (err) {
       console.error('[Notifications] Mark all read error:', err)
@@ -160,17 +229,22 @@ export default function BroadcastNotificationCenter() {
                 <div
                   key={notification.id}
                   className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
-                    !notification.read ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                    !notification.is_read ? 'bg-blue-50 border-l-4 border-blue-500' : ''
                   }`}
-                  onClick={() => !notification.read && markAsRead(notification.id)}
+                  onClick={() => !notification.is_read && markAsRead(notification.id)}
                 >
-                  {/* Sender Name */}
+                  {/* Sender Name and Title */}
                   <div className="flex justify-between items-start mb-2">
-                    <p className="font-bold text-gray-900">
-                      {notification.sender_name || 'Administrator'}
-                    </p>
-                    {!notification.read && (
-                      <span className="inline-block w-2 h-2 bg-blue-600 rounded-full"></span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-900">
+                        {notification.title || notification.sender_name || 'Administrator'}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        From: {notification.sender_name}
+                      </p>
+                    </div>
+                    {!notification.is_read && (
+                      <span className="inline-block w-2 h-2 bg-blue-600 rounded-full flex-shrink-0 mt-1 ml-2"></span>
                     )}
                   </div>
 
@@ -181,10 +255,7 @@ export default function BroadcastNotificationCenter() {
 
                   {/* Metadata */}
                   <div className="flex justify-between items-center text-xs text-gray-500">
-                    <span>📍 {notification.recipient_role}</span>
-                    <span>
-                      {new Date(notification.created_at).toLocaleDateString()}
-                    </span>
+                    <span>📅 {new Date(notification.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
               ))}

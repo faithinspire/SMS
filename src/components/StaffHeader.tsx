@@ -8,10 +8,10 @@ import { AuthService } from '@/services/auth.service'
 interface Notification {
   id: string
   broadcast_id: string
+  title: string
   message: string
   sender_name: string
-  recipient_role: string
-  read: boolean
+  is_read: boolean
   created_at: string
 }
 
@@ -48,32 +48,94 @@ export default function StaffHeader({ staffName, schoolName, staffPhoto, section
 
       setUser(currentUser)
 
-      const { data } = await supabase
-        .from('broadcast_notifications')
-        .select('*')
-        .eq('user_id', currentUser.id)
+      // Query broadcasts with broadcast_recipients join to get user's broadcasts
+      const { data, error } = await supabase
+        .from('broadcasts')
+        .select(
+          `
+          id,
+          title,
+          message,
+          created_at,
+          users!created_by (full_name),
+          broadcast_recipients (
+            id,
+            is_read
+          )
+        `
+        )
+        .eq('school_id', currentUser.school_id)
         .order('created_at', { ascending: false })
         .limit(50)
 
-      setNotifications(data || [])
-      setUnreadCount((data || []).filter((n: any) => !n.read).length)
+      if (error) {
+        console.error('Error loading broadcasts:', error)
+        setNotifications([])
+        setLoading(false)
+        return
+      }
+
+      // Filter broadcasts where current user is a recipient
+      const userBroadcasts = (data || [])
+        .map((broadcast: any) => {
+          const recipientRecord = broadcast.broadcast_recipients?.find(
+            (r: any) => r.id  // Just check if recipient record exists
+          )
+          return {
+            id: broadcast.id,
+            broadcast_id: broadcast.id,
+            title: broadcast.title,
+            message: broadcast.message,
+            sender_name: broadcast.users?.full_name || 'Administrator',
+            is_read: recipientRecord?.is_read || false,
+            created_at: broadcast.created_at,
+          }
+        })
+        .filter((b: any) => {
+          // Only show broadcasts where user is a recipient
+          return (data || []).some((broadcast: any) =>
+            broadcast.broadcast_recipients?.some(
+              (r: any) => r.id
+            )
+          )
+        })
+
+      setNotifications(userBroadcasts)
+      setUnreadCount(
+        userBroadcasts.filter((n: any) => !n.is_read).length
+      )
       setLoading(false)
     } catch (err) {
       console.error('Error loading notifications:', err)
+      setNotifications([])
       setLoading(false)
     }
   }
 
   const markAsRead = async (notificationId: string) => {
     try {
+      // Find the broadcast_recipients record for this user
+      const { data: recipients, error: fetchError } = await supabase
+        .from('broadcast_recipients')
+        .select('id')
+        .eq('broadcast_id', notificationId)
+        .eq('user_id', user.id)
+        .single()
+
+      if (fetchError || !recipients) {
+        console.error('Error finding recipient record:', fetchError)
+        return
+      }
+
+      // Update the broadcast_recipients record
       await supabase
-        .from('broadcast_notifications')
-        .update({ read: true, read_at: new Date().toISOString() })
-        .eq('id', notificationId)
+        .from('broadcast_recipients')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('id', recipients.id)
 
       setNotifications(
         notifications.map((n) =>
-          n.id === notificationId ? { ...n, read: true } : n
+          n.id === notificationId ? { ...n, is_read: true } : n
         )
       )
       setUnreadCount(Math.max(0, unreadCount - 1))
@@ -84,15 +146,30 @@ export default function StaffHeader({ staffName, schoolName, staffPhoto, section
 
   const markAllAsRead = async () => {
     try {
-      const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id)
-      if (unreadIds.length === 0) return
+      const unreadIds = notifications
+        .filter((n) => !n.is_read)
+        .map((n) => n.id)
 
-      await supabase
-        .from('broadcast_notifications')
-        .update({ read: true, read_at: new Date().toISOString() })
-        .in('id', unreadIds)
+      if (unreadIds.length === 0 || !user) return
 
-      setNotifications(notifications.map((n) => ({ ...n, read: true })))
+      // Update all unread broadcast_recipients records for this user
+      const { data: unreadRecipients } = await supabase
+        .from('broadcast_recipients')
+        .select('id')
+        .in('broadcast_id', unreadIds)
+        .eq('user_id', user.id)
+
+      if (unreadRecipients && unreadRecipients.length > 0) {
+        await supabase
+          .from('broadcast_recipients')
+          .update({ is_read: true, read_at: new Date().toISOString() })
+          .in(
+            'id',
+            unreadRecipients.map((r: any) => r.id)
+          )
+      }
+
+      setNotifications(notifications.map((n) => ({ ...n, is_read: true })))
       setUnreadCount(0)
     } catch (err) {
       console.error('Error marking all as read:', err)
@@ -190,18 +267,18 @@ export default function StaffHeader({ staffName, schoolName, staffPhoto, section
                 )}
               </button>
 
-              {/* Notification Dropdown */}
+              {/* Notification Dropdown - Fixed for mobile responsiveness */}
               {showNotifications && (
-                <div className="fixed bottom-auto top-20 left-4 right-4 sm:absolute sm:right-0 sm:left-auto sm:top-12 sm:w-96 w-full sm:max-w-96 bg-white rounded-lg shadow-2xl z-50 max-h-96 overflow-y-auto border border-gray-200">
+                <div className="fixed bottom-auto left-0 right-0 top-20 sm:absolute sm:right-0 sm:left-auto sm:top-12 sm:w-96 w-full sm:max-w-96 bg-white rounded-lg shadow-2xl z-50 max-h-96 overflow-y-auto border border-gray-200 mx-4 sm:mx-0">
                   {/* Header */}
-                  <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-500 text-white px-4 py-3 rounded-t-lg flex justify-between items-center">
-                    <h3 className="font-bold text-sm">📢 Broadcasts</h3>
+                  <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-500 text-white px-4 py-3 rounded-t-lg flex justify-between items-center gap-2">
+                    <h3 className="font-bold text-sm truncate">📢 Broadcasts</h3>
                     {unreadCount > 0 && (
                       <button
                         onClick={markAllAsRead}
-                        className="text-xs bg-white bg-opacity-20 hover:bg-opacity-30 px-2 py-1 rounded"
+                        className="text-xs bg-white bg-opacity-20 hover:bg-opacity-30 px-2 py-1 rounded whitespace-nowrap flex-shrink-0"
                       >
-                        Mark all read
+                        Mark read
                       </button>
                     )}
                   </div>
@@ -217,28 +294,28 @@ export default function StaffHeader({ staffName, schoolName, staffPhoto, section
                         <div
                           key={notification.id}
                           className={`p-3 hover:bg-gray-50 transition-colors cursor-pointer ${
-                            !notification.read
+                            !notification.is_read
                               ? 'bg-blue-50 border-l-4 border-blue-500'
                               : ''
                           }`}
                           onClick={() =>
-                            !notification.read && markAsRead(notification.id)
+                            !notification.is_read && markAsRead(notification.id)
                           }
                         >
-                          <div className="flex justify-between items-start mb-1">
-                            <p className="font-semibold text-gray-900 text-sm">
-                              {notification.sender_name || 'Admin'}
+                          <div className="flex justify-between items-start mb-1 gap-2">
+                            <p className="font-semibold text-gray-900 text-sm flex-1 min-w-0">
+                              {notification.title || notification.sender_name || 'Admin'}
                             </p>
-                            {!notification.read && (
-                              <span className="inline-block w-2 h-2 bg-blue-600 rounded-full mt-1"></span>
+                            {!notification.is_read && (
+                              <span className="inline-block w-2 h-2 bg-blue-600 rounded-full mt-1 flex-shrink-0"></span>
                             )}
                           </div>
                           <p className="text-gray-700 text-xs mb-2 line-clamp-2">
                             {notification.message}
                           </p>
-                          <div className="flex justify-between text-xs text-gray-500">
-                            <span>📍 {notification.recipient_role}</span>
-                            <span>
+                          <div className="flex justify-between text-xs text-gray-500 gap-2">
+                            <span className="truncate">From: {notification.sender_name}</span>
+                            <span className="flex-shrink-0">
                               {new Date(
                                 notification.created_at
                               ).toLocaleDateString()}
