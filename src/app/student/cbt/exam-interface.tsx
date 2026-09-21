@@ -153,7 +153,7 @@ export default function ExamInterface({
         body: JSON.stringify({
           school_id: schoolId,
           submission_id: submissionId,
-          student_id: studentHeader.student_name, // Should be actual student_id
+          student_id: studentHeader.student_id, // ✅ FIXED: Use student_id, not student_name
         }),
       })
 

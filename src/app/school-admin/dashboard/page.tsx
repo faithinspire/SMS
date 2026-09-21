@@ -224,15 +224,15 @@ export default function SchoolAdminDashboard() {
       setSendingBroadcast(true)
       setError('')
 
-      const response = await fetch('/api/admin/send-broadcast', {
+      const response = await fetch('/api/broadcasts/send-to-recipients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           school_id: user.school_id,
           message: broadcastMessage,
           recipient_role: broadcastRecipientRole,
-          sent_by: user.id,
-          sent_by_name: user.full_name,
+          sender_id: user.id,
+          sender_name: user.full_name,
         }),
       })
 
