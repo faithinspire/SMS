@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
         admission_number,
         class_arm_combo_id,
         user_id,
-        users!students_user_id_fkey (
+        users (
           id,
           full_name,
           email,
