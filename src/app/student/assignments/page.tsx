@@ -106,14 +106,17 @@ export default function StudentAssignmentsPage() {
           id, title, description, instructions, due_date, max_marks, created_at, status,
           subject_id,
           class_arm_combo_id,
-          teacher_id
+          teacher_id,
+          term_id
         `)
         .eq('class_arm_combo_id', studentClassId)
         .eq('school_id', currentUser.school_id)
+        .eq('status', 'ACTIVE')
 
-      // Filter by term if available, otherwise get all active assignments
+      // Filter by term if available - include both assignments for this term AND assignments with no term assigned
       if (currentTermId) {
-        query = query.eq('term_id', currentTermId)
+        // Include: (term_id = currentTermId) OR (term_id IS NULL)
+        query = query.or(`term_id.eq.${currentTermId},term_id.is.null`)
       }
 
       const { data: assignmentData, error: assignmentError } = await query.order('due_date', { ascending: false })
