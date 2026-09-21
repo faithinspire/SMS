@@ -57,9 +57,29 @@ export default function RootLayout({
         <link rel="icon" href="/ftech-logo.png" />
         <link rel="apple-touch-icon" href="/ftech-logo.png" />
         <link rel="shortcut icon" href="/ftech-logo.png" />
+        
+        {/* Global Error Handler Script */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Catch unhandled promise rejections
+              window.addEventListener('unhandledrejection', (event) => {
+                console.error('🔴 Unhandled Promise Rejection:', event.reason)
+                // Prevent default browser error handling
+                event.preventDefault()
+              })
+              
+              // Catch uncaught errors
+              window.addEventListener('error', (event) => {
+                console.error('🔴 Uncaught Error:', event.error)
+              })
+            `,
+          }}
+        />
       </head>
       <body>
         <PWAInstaller />
+        {/* Error boundary is at src/app/error.tsx */}
         {children}
         <BottomNavigation />
         <Toaster position="top-right" />

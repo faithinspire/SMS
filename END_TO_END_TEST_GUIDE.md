@@ -1,380 +1,579 @@
-# End-to-End Test Guide: Unified Score Sheet Architecture
+# End-to-End Test Guide - All Features for All Schools
 
-**Date:** August 25, 2026  
-**Status:** Complete Implementation  
-**Data Flow Validation:** Single source of truth via `score_sheets` table
+**Objective:** Verify that all 7 production fixes work correctly for BOTH new AND old schools
 
----
+**What to Test:**
+1. ✅ Broadcasts (admin sends → staff receives)
+2. ✅ Lesson Notes (teacher submits → principal reviews)
+3. ✅ Assignments (teacher creates → student sees)
+4. ✅ CBT (student submits → score in scoresheet)
+5. ✅ All APIs return success (no errors)
+6. ✅ All databases have correct schema
+7. ✅ All schools have complete base data
 
-## 🎯 Test Objective
-
-Verify that the complete unified architecture works end-to-end:
-1. Subject Teacher enters scores manually
-2. CBT scores auto-populate from student submission
-3. Class Teacher sees aggregated results (no re-entry)
-4. Student sees final report card (all scores from canonical source)
-
----
-
-## 📋 Pre-Test Requirements
-
-### Database State
-- [ ] Migration 043 executed: `drop result_entries, student_subject_enrollment, teacher_assignments`
-- [ ] Migration 044 executed: Verify `score_sheets` table exists with all columns
-- [ ] Verify no data in `result_entries`, `student_subject_enrollment`, `teacher_assignments` tables
-- [ ] Current term is marked as `is_current=true` in `terms` table
-
-### Test Data Setup
-- [ ] Create test school (if not exists)
-- [ ] Create test term marked as current
-- [ ] Create test academic session
-- [ ] Create test classes/arms
-- [ ] Create test students with enrollments
-- [ ] Create test subjects
-- [ ] Assign subject teacher to subjects+classes
-- [ ] Assign class teacher to class
-- [ ] Enroll students in subjects (via `student_subjects` table)
+**Time Required:** 20-30 minutes
+**Prerequisites:** 
+- Migration 127 executed (broadcasts schema fix)
+- Migration 130 executed (school data backfill)
+- Code deployed to Vercel
+- Access to both old and new schools
 
 ---
 
-## 🧪 Test Scenarios
+## TEST 1: Database Schema Verification
 
-### Scenario 1: Subject Teacher Manual Score Entry
+**Objective:** Confirm all required tables exist with correct schema
 
-**Goal:** Verify subject teacher can enter scores and they flow to `score_sheets`
+### 1.1 Verify Broadcasts Schema
 
-**Steps:**
+Run in Supabase SQL Editor:
 
-1. **Login as Subject Teacher**
-   - Navigate to `/teacher/subject-score-sheet`
-   - Expected: Page loads successfully
-   - Expected: Subject teacher's assigned subjects appear in dropdown
+```sql
+\d broadcasts;
+```
 
-2. **Select Subject and Class**
-   - Select a subject from dropdown
-   - Expected: Classes where teacher teaches that subject appear
-   - Select a class
-   - Expected: Students in that subject+class appear in table
-   - **CRITICAL:** Only students enrolled in BOTH the subject AND in that class should appear
-   - Verify: `subject_teacher_assignments` JOIN `student_subjects` is working
+**Expected output should show:**
+```
+Column      | Type           | Modifiers
+-----------|----------------|----------
+id         | uuid           | primary key
+school_id  | uuid           | FK → schools
+sender_id  | uuid           | FK → users
+message    | text           | 
+broadcast_type | varchar(50)| 
+created_at | timestamp      | 
+updated_at | timestamp      | 
+```
 
-3. **Enter Scores**
-   - Enter Test1: 8/10
-   - Enter Test2: 7/10
-   - Enter Test3: 9/10
-   - Enter Test4: 8/10
-   - Enter Exam: 45/60
-   - Expected: Total auto-calculates to 77/100
-   - Expected: Grade auto-calculates to A (70+)
-   - Click "✅ Save All Scores"
+**Mark:** ✅ if correct, ❌ if missing columns
 
-4. **Verify Score Sheet Entry**
+---
+
+### 1.2 Verify broadcast_recipients Schema
+
+```sql
+\d broadcast_recipients;
+```
+
+**Expected output should show:**
+```
+Column       | Type      | Modifiers
+------------|-----------|----------
+id          | uuid      | primary key
+broadcast_id| uuid      | FK → broadcasts
+user_id     | uuid      | FK → users
+is_read     | boolean   | 
+read_at     | timestamp | 
+created_at  | timestamp | 
+```
+
+**Mark:** ✅ if correct, ❌ if missing
+
+---
+
+### 1.3 Verify lesson_notes Schema
+
+```sql
+\d lesson_notes;
+```
+
+**Expected to have these columns (from Migration 083):**
+- teacher_id (UUID)
+- topic (TEXT) — NOT "title"
+- content_summary (TEXT) — NOT "content"
+- lesson_date (DATE)
+- file_path, file_name (TEXT)
+- status (TEXT)
+- reviewed_by, reviewed_at, reviewer_comments
+- subject_id, class_arm_combo_id, school_id (UUIDs)
+
+**Mark:** ✅ if all present, ❌ if using wrong column names
+
+---
+
+### 1.4 Verify All Schools Have Base Data
+
+```sql
+-- Check that ALL schools have the required data
+SELECT 
+  COUNT(DISTINCT s.id) as total_schools,
+  COUNT(DISTINCT CASE WHEN ast.id IS NOT NULL THEN s.id END) as schools_with_sessions,
+  COUNT(DISTINCT CASE WHEN at.id IS NOT NULL THEN s.id END) as schools_with_terms,
+  COUNT(DISTINCT CASE WHEN st.id IS NOT NULL THEN s.id END) as schools_with_streams,
+  COUNT(DISTINCT CASE WHEN c.id IS NOT NULL THEN s.id END) as schools_with_classes,
+  COUNT(DISTINCT CASE WHEN sub.id IS NOT NULL THEN s.id END) as schools_with_subjects
+FROM schools s
+LEFT JOIN academic_sessions ast ON s.id = ast.school_id
+LEFT JOIN academic_terms at ON s.id = at.school_id
+LEFT JOIN streams st ON s.id = st.school_id
+LEFT JOIN classes c ON s.id = c.school_id
+LEFT JOIN subjects sub ON s.id = sub.school_id;
+```
+
+**Expected:** All counts should be EQUAL (e.g., 5 5 5 5 5 5 if you have 5 schools)
+
+**Mark:** ✅ if equal, ❌ if any are different
+
+---
+
+## TEST 2: Broadcasts Feature
+
+**Objective:** Admin sends broadcast → Staff receives message
+
+### 2.1 Test with NEW School
+
+1. **Login as School Admin** (new school registered recently)
+   - Open app: http://localhost:3000/auth/admin/login
+   - Or production URL
+   - Use credentials for a NEW school
+
+2. **Navigate to Broadcast Feature**
+   - Go to dashboard → Find "Send Broadcast" or "Broadcasts"
+   - Or click menu → "Broadcasts" or "Send Message"
+
+3. **Send Test Broadcast**
+   - Enter message: "TEST NEW SCHOOL BROADCAST"
+   - Select recipients: "All Staff" or "All Teachers"
+   - Click "Send"
+   - **Expected result:** ✅ "Broadcast sent to X recipients"
+   - **Mark:** ✅ if success, ❌ if error
+
+4. **Verify Broadcast Was Created in Database**
    ```sql
-   SELECT * FROM score_sheets 
-   WHERE student_id='{STUDENT_ID}' 
-   AND subject_id='{SUBJECT_ID}' 
-   AND term_id='{CURRENT_TERM_ID}'
+   SELECT * FROM broadcasts 
+   WHERE school_id = (SELECT id FROM schools WHERE name LIKE '%new_school_name%' LIMIT 1)
+   ORDER BY created_at DESC LIMIT 1;
    ```
-   - Expected: Record exists
-   - Expected: test1=8, test2=7, test3=9, test4=8, exam=45
-   - Expected: total=77, grade='A'
-   - Expected: test1_source='MANUAL', test2_source='MANUAL', etc.
-   - Expected: test*_cbt_source=NULL (since manual entry)
+   **Expected:** 1 row with your test message
+   **Mark:** ✅ if found, ❌ if not
 
-**Test Result:** ✅ PASS / ❌ FAIL
+5. **Staff Receives Broadcast**
+   - Logout from admin
+   - Login as teacher in SAME school
+   - Go to dashboard → "Broadcast Inbox" or "Messages"
+   - **Expected:** See the broadcast message you just sent
+   - **Mark:** ✅ if visible, ❌ if not
 
 ---
 
-### Scenario 2: CBT Score Auto-Population
+### 2.2 Test with OLD School
 
-**Goal:** Verify student's CBT submission auto-populates into `score_sheets`
+Repeat steps 2.1 but with an OLD school (registered before migrations):
 
-**Prerequisites:**
-- Create a CBT exam with:
-  - `assessment_type='CA1'` (maps to test1 column)
-  - `subject_id` = same as Scenario 1
-  - `total_marks=100`
-  - Add 5 MCQ questions with correct answers marked
+1. Login as School Admin from OLD school
+2. Send broadcast message: "TEST OLD SCHOOL BROADCAST"
+3. Check success message
+4. Verify in database
+5. Login as teacher, check inbox
 
-**Steps:**
+**Mark:** ✅ if all steps pass for old school, ❌ if any fail
 
-1. **Create CBT Exam**
-   - Navigate to teacher CBT management
-   - Create exam with assessment_type='CA1' (or CA2, CA3, CA4, EXAM)
-   - Add questions and mark correct options
-   - Make exam available to students
+---
 
-2. **Student Takes CBT**
-   - Login as student from Scenario 1
-   - Navigate to `/student/cbt`
-   - Find and start the CBT exam
-   - Answer questions (aim for 75/100 = 7.5/10 when scaled)
-   - Submit exam
-   - Expected: System auto-grades MCQ questions
-   - Expected: Calculates percentage
+## TEST 3: Lesson Notes Feature
 
-3. **Verify Auto-Population**
+**Objective:** Teacher submits lesson note → Principal reviews it
+
+### 3.1 Test with NEW School
+
+1. **Login as Teacher** (new school)
+   - Go to teacher dashboard
+
+2. **Submit Lesson Note**
+   - Click "Submit Lesson Note" or "Create Lesson"
+   - Fill form:
+     - Title: "TEST NEW SCHOOL LESSON"
+     - Content: "Test lesson content for new school"
+     - Select Subject: Any subject (e.g., Mathematics)
+     - Select Class: Any class (e.g., JSS 1A)
+   - Click "Submit"
+   - **Expected:** ✅ "Lesson note submitted successfully"
+   - **Mark:** ✅ if success, ❌ if error
+
+3. **Verify in Database**
    ```sql
-   SELECT * FROM score_sheets 
-   WHERE student_id='{STUDENT_ID}' 
-   AND subject_id='{SUBJECT_ID}' 
-   AND term_id='{CURRENT_TERM_ID}'
+   SELECT * FROM lesson_notes 
+   WHERE school_id = (SELECT id FROM schools WHERE name LIKE '%new_school_name%' LIMIT 1)
+   ORDER BY created_at DESC LIMIT 1;
    ```
-   - Expected: SAME record from Scenario 1 is UPDATED (not duplicated)
-   - Expected: test1 is NOW populated (was NULL before if this was first CA1)
-   - Expected: test1_source='CBT' (changed from MANUAL if re-taken)
-   - Expected: test1_cbt_source='{SUBMISSION_ID}' (links to cbt_submissions)
-   - Expected: total is re-calculated with new test1
+   **Expected:** 1 row with status='SUBMITTED' and your test topic
+   **Mark:** ✅ if found, ❌ if not
 
-4. **Verify Using Verification API**
-   ```
-   GET /api/cbt/verify-auto-population?submission_id={SUBMISSION_ID}
-   ```
-   - Expected: Returns success=true
-   - Expected: Shows actual test1 value populated
-   - Expected: Shows test1_source='CBT'
-
-**Test Result:** ✅ PASS / ❌ FAIL
+4. **Principal Reviews Lesson Note**
+   - Logout from teacher
+   - Login as principal in SAME school
+   - Go to dashboard → "Lesson Notes Review" or "Lesson Notes"
+   - **Expected:** See the lesson note you submitted
+   - Click note to view details
+   - Click "Approve" with feedback: "APPROVED - Test comment"
+   - **Expected:** ✅ "Lesson note approved"
+   - **Mark:** ✅ if visible and approvable, ❌ if not
 
 ---
 
-### Scenario 3: Class Teacher Aggregated View
+### 3.2 Test with OLD School
 
-**Goal:** Verify class teacher sees all subject scores aggregated (no re-entry)
+Repeat steps 3.1 with an OLD school:
 
-**Steps:**
+1. Login as teacher from old school
+2. Submit lesson note: "TEST OLD SCHOOL LESSON"
+3. Check success message
+4. Verify in database
+5. Login as principal, check review page
+6. Approve with comment
 
-1. **Login as Class Teacher**
-   - Navigate to `/teacher/results`
-   - Expected: Page loads with class information
-   - Expected: Class teacher's assigned class displays
-   - **CRITICAL:** Should NOT have class selector (only their assigned class)
-
-2. **View Student Results**
-   - Expected: Student from Scenario 1 appears in grid
-   - Expected: Shows: Name, Admission #, # Subjects (should be 3+), Avg Total, Grade
-   - Click on student card to open detail modal
-
-3. **Verify Subject Breakdown**
-   - Expected: Modal shows subject-by-subject table
-   - Expected: Rows for all subjects the student is enrolled in
-   - Row for subject from Scenarios 1-2:
-     - Test1: 8 (or CBT value) with source label (MANUAL or CBT)
-     - Test2: 7 with source label
-     - Test3: 9 with source label
-     - Test4: 8 with source label
-     - CA Total: 32
-     - Exam: 45 with source label
-     - Total: 77
-     - Grade: A
-   - Expected: Source indicators clearly show MANUAL vs CBT
-   - **CRITICAL:** No edit buttons present - class teacher CANNOT modify
-
-4. **Verify Aggregated Stats**
-   - Expected: Shows number of subjects
-   - Expected: Shows average of all subject totals
-   - Expected: Shows aggregated grade
-
-**Test Result:** ✅ PASS / ❌ FAIL
+**Mark:** ✅ if all steps pass for old school, ❌ if any fail
 
 ---
 
-### Scenario 4: Student Report Card View
+## TEST 4: Assignments Feature
 
-**Goal:** Verify student sees their complete report card from canonical source
+**Objective:** Teacher creates assignment → Student sees it
 
-**Steps:**
+### 4.1 Test with NEW School
 
-1. **Login as Student**
-   - Navigate to `/student/results`
-   - Expected: Page loads successfully
+1. **Login as Teacher** (new school)
+   - Go to teacher dashboard
 
-2. **Select Current Term**
-   - Select current term from dropdown
-   - Expected: Term loads
+2. **Create Assignment**
+   - Click "Create Assignment" or "New Assignment"
+   - Fill form:
+     - Title: "TEST NEW SCHOOL ASSIGNMENT"
+     - Description: "Test assignment for new school"
+     - Due Date: (pick date 1 week from now)
+     - Max Marks: 10
+     - Select Subject: Any subject
+     - Select Class: Any class (e.g., Primary 2A)
+   - Click "Create"
+   - **Expected:** ✅ "Assignment created successfully"
+   - **Mark:** ✅ if success, ❌ if error
 
-3. **Verify Report Card**
-   - Expected: Results table displays
-   - Subject from Scenarios 1-2:
-     - Subject Name and Code display correctly
-     - Test 1-4 scores from score_sheets
-     - Exam score from score_sheets
-     - Total: 77/100
-     - Grade: A
-   - Expected: Source is transparent (if CBT, might show in tooltip/comment)
-   - Expected: All subjects the student is enrolled in appear
-
-4. **Verify No Direct Edit**
-   - Expected: No edit buttons on student results page
-   - Expected: Scores are read-only
-
-5. **Verify API Data Source**
-   ```
-   GET /api/student/report-card?school_id={SCHOOL_ID}&student_id={STUDENT_ID}&term_id={CURRENT_TERM_ID}
-   ```
-   - Expected: Returns report_card with all score_sheets data
-   - Expected: Scores match what student sees in UI
-   - Expected: Overall stats calculated correctly
-
-**Test Result:** ✅ PASS / ❌ FAIL
-
----
-
-### Scenario 5: Data Integrity Check
-
-**Goal:** Verify only ONE source of truth exists (no duplicates)
-
-**Steps:**
-
-1. **Count Records**
+3. **Verify in Database**
    ```sql
-   -- CRITICAL: These should all be 0 (tables deleted)
-   SELECT COUNT(*) FROM result_entries;
-   SELECT COUNT(*) FROM student_subject_enrollment;
-   SELECT COUNT(*) FROM teacher_assignments;
-   
-   -- CRITICAL: This should have data for all test scenarios
-   SELECT COUNT(*) FROM score_sheets;
+   SELECT * FROM assignments 
+   WHERE school_id = (SELECT id FROM schools WHERE name LIKE '%new_school_name%' LIMIT 1)
+   ORDER BY created_at DESC LIMIT 1;
    ```
-   - Expected: result_entries count = 0
-   - Expected: student_subject_enrollment count = 0
-   - Expected: teacher_assignments count = 0
-   - Expected: score_sheets count > 0
+   **Expected:** 1 row with status='ACTIVE' and your test title
+   **Mark:** ✅ if found, ❌ if not
 
-2. **Verify Uniqueness**
+4. **Student Sees Assignment**
+   - Logout from teacher
+   - Login as student in SAME class
+   - Go to dashboard → "Assignments"
+   - **Expected:** See the assignment you created
+   - Click to view details
+   - **Mark:** ✅ if visible, ❌ if not
+
+---
+
+### 4.2 Test with OLD School
+
+Repeat steps 4.1 with an OLD school:
+
+1. Login as teacher from old school
+2. Create assignment: "TEST OLD SCHOOL ASSIGNMENT"
+3. Check success message
+4. Verify in database
+5. Login as student in that class
+6. Check assignments page
+
+**Mark:** ✅ if all steps pass for old school, ❌ if any fail
+
+---
+
+## TEST 5: CBT (Computer Based Test) Feature
+
+**Objective:** Student submits CBT → Score appears in scoresheet
+
+### 5.1 Test with NEW School
+
+1. **Login as Student** (new school)
+   - Go to student dashboard
+
+2. **Take CBT Exam**
+   - Click "Take Exam" or "CBT" or "Computer Based Test"
+   - Select an exam (create one if none exist)
+   - Answer questions (or just select answers)
+   - Click "Submit"
+   - **Expected:** ✅ "Exam submitted successfully"
+   - **Mark:** ✅ if success, ❌ if error
+
+3. **Verify in Database**
    ```sql
-   -- Check UNIQUE constraint
-   SELECT school_id, student_id, subject_id, term_id, COUNT(*) as cnt
-   FROM score_sheets
-   GROUP BY school_id, student_id, subject_id, term_id
-   HAVING COUNT(*) > 1;
+   SELECT * FROM cbt_submissions 
+   WHERE school_id = (SELECT id FROM schools WHERE name LIKE '%new_school_name%' LIMIT 1)
+   ORDER BY created_at DESC LIMIT 1;
    ```
-   - Expected: Returns 0 rows (no duplicates)
+   **Expected:** 1 row with student_id (NOT student_name) filled
+   **Mark:** ✅ if found and uses student_id, ❌ if not
 
-3. **Verify All Scores Come From score_sheets**
+4. **Check Score Appears in Scoresheet**
+   - Logout from student
+   - Login as subject teacher in SAME school
+   - Go to dashboard → "Score Sheets"
+   - Select class and subject
+   - **Expected:** Student's CBT score already filled (auto-populated)
+   - **Mark:** ✅ if visible without manual entry, ❌ if not
+
+---
+
+### 5.2 Test with OLD School
+
+Repeat steps 5.1 with an OLD school:
+
+1. Login as student from old school
+2. Submit CBT: "TEST OLD SCHOOL EXAM"
+3. Check success message
+4. Verify in database
+5. Login as subject teacher
+6. Check scoresheet shows auto-populated score
+
+**Mark:** ✅ if all steps pass for old school, ❌ if any fail
+
+---
+
+## TEST 6: API Endpoints Verification
+
+**Objective:** All APIs return success (no schema errors)
+
+### 6.1 Test Broadcast API
+
+```bash
+curl -X POST http://localhost:3000/api/broadcasts/send-to-recipients \
+  -H "Content-Type: application/json" \
+  -d '{
+    "school_id": "YOUR_SCHOOL_UUID",
+    "message": "API Test Broadcast",
+    "sender_id": "YOUR_USER_UUID",
+    "recipient_roles": ["TEACHER"]
+  }'
+```
+
+**Expected response:**
+```json
+{
+  "success": true,
+  "broadcast_id": "UUID",
+  "recipients_added": 5,
+  "message": "Broadcast sent to 5 recipients"
+}
+```
+
+**Mark:** ✅ if success=true, ❌ if error or false
+
+---
+
+### 6.2 Test Lesson Notes API
+
+```bash
+curl -X POST http://localhost:3000/api/teacher/lessons/submit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "school_id": "YOUR_SCHOOL_UUID",
+    "subject_id": "YOUR_SUBJECT_UUID",
+    "class_arm_combo_id": "YOUR_CLASS_UUID",
+    "teacher_id": "YOUR_USER_UUID",
+    "title": "API Test Lesson",
+    "content": "Test lesson content"
+  }'
+```
+
+**Expected response:**
+```json
+{
+  "success": true,
+  "lesson_note_id": "UUID",
+  "status": "SUBMITTED",
+  "message": "Lesson note submitted successfully for principal review"
+}
+```
+
+**Mark:** ✅ if success=true, ❌ if error or false
+
+---
+
+### 6.3 Test Assignments API
+
+```bash
+curl -X POST http://localhost:3000/api/teacher/assignments/create \
+  -H "Content-Type: application/json" \
+  -d '{
+    "school_id": "YOUR_SCHOOL_UUID",
+    "teacher_id": "YOUR_USER_UUID",
+    "subject_id": "YOUR_SUBJECT_UUID",
+    "class_arm_combo_id": "YOUR_CLASS_UUID",
+    "title": "API Test Assignment",
+    "description": "Test assignment",
+    "due_date": "2026-10-31",
+    "max_marks": 10
+  }'
+```
+
+**Expected response:**
+```json
+{
+  "success": true,
+  "assignment_id": "UUID",
+  "message": "Assignment created successfully"
+}
+```
+
+**Mark:** ✅ if success=true, ❌ if error or false
+
+---
+
+### 6.4 Test School Data Backfill API
+
+```bash
+curl -X POST http://localhost:3000/api/admin/ensure-complete-school-data \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+**Expected response:**
+```json
+{
+  "success": true,
+  "schools_processed": 10,
+  "sessions_created": 360,
+  "terms_created": 1080,
+  "streams_created": 40,
+  "classes_created": 140,
+  "arms_created": 420,
+  "combos_created": 420,
+  "subjects_created": 230,
+  "message": "✅ Ensured complete data for 10 school(s)"
+}
+```
+
+**Mark:** ✅ if success=true, ❌ if error or false
+
+---
+
+## TEST 7: Compare OLD vs NEW Schools
+
+**Objective:** Both old and new schools have identical feature functionality
+
+Create a comparison table:
+
+| Feature | NEW School | OLD School | Status |
+|---------|-----------|-----------|--------|
+| Send Broadcast | ✅/❌ | ✅/❌ | Same? |
+| Submit Lesson Note | ✅/❌ | ✅/❌ | Same? |
+| Principal Sees Lesson | ✅/❌ | ✅/❌ | Same? |
+| Create Assignment | ✅/❌ | ✅/❌ | Same? |
+| Student Sees Assignment | ✅/❌ | ✅/❌ | Same? |
+| Submit CBT | ✅/❌ | ✅/❌ | Same? |
+| Score in Scoresheet | ✅/❌ | ✅/❌ | Same? |
+
+**Expected:** All checkmarks in NEW and OLD columns should match (both ✅)
+
+---
+
+## Final Verification Checklist
+
+- [ ] All 7 database schema checks pass (✅)
+- [ ] Broadcasts work for NEW school (✅)
+- [ ] Broadcasts work for OLD school (✅)
+- [ ] Lesson notes work for NEW school (✅)
+- [ ] Lesson notes work for OLD school (✅)
+- [ ] Assignments work for NEW school (✅)
+- [ ] Assignments work for OLD school (✅)
+- [ ] CBT works for NEW school (✅)
+- [ ] CBT works for OLD school (✅)
+- [ ] All API endpoints return success (✅)
+- [ ] NEW and OLD schools have identical functionality (✅)
+- [ ] No API errors in logs (✅)
+- [ ] No database errors in logs (✅)
+
+**Overall Status:**
+- ✅ PASS - All checks marked ✅
+- ⚠️ PARTIAL - Some checks marked ❌
+- ❌ FAIL - Multiple checks marked ❌
+
+---
+
+## Troubleshooting
+
+### Broadcasts not appearing in staff inbox
+
+**Check:**
+1. Is `broadcast_recipients` table populated?
    ```sql
-   -- Get all subjects with scores
-   SELECT DISTINCT ss.subject_id, count(ss.id) as score_count
-   FROM score_sheets ss
-   GROUP BY ss.subject_id;
+   SELECT COUNT(*) FROM broadcast_recipients;
    ```
-   - Expected: Shows distribution of scores by subject
-   - Expected: All from score_sheets (not elsewhere)
-
-**Test Result:** ✅ PASS / ❌ FAIL
-
----
-
-### Scenario 6: Source Tracking Verification
-
-**Goal:** Verify source='MANUAL' vs 'CBT' tracking works correctly
-
-**Steps:**
-
-1. **Manual Scores Show Correct Source**
+2. Does staff user exist?
    ```sql
-   SELECT student_id, subject_id, test1, test1_source, test2_source, exam_source
-   FROM score_sheets
-   WHERE test1_source='MANUAL'
-   LIMIT 5;
+   SELECT COUNT(*) FROM users WHERE role='TEACHER' AND school_id='SCHOOL_UUID';
    ```
-   - Expected: Shows manual entries with source='MANUAL'
+3. Check API logs for errors
 
-2. **CBT Scores Show Correct Source**
+**Fix:** Re-execute Migration 127
+
+---
+
+### Lesson notes not visible to principal
+
+**Check:**
+1. Are lesson notes being inserted?
    ```sql
-   SELECT student_id, subject_id, test1, test1_source, test1_cbt_source
-   FROM score_sheets
-   WHERE test1_source='CBT'
-   LIMIT 5;
+   SELECT COUNT(*) FROM lesson_notes;
    ```
-   - Expected: Shows CBT entries with source='CBT'
-   - Expected: test1_cbt_source links to valid cbt_submissions record
+2. Does principal have `reviewed_by` permission?
+3. Check if query is using correct column names (topic, not title)
 
-3. **Verify CBT Linkage**
+**Fix:** Re-execute lesson notes API test
+
+---
+
+### Assignments not showing for students
+
+**Check:**
+1. Is assignment created?
    ```sql
-   SELECT ss.id, ss.test1, ss.test1_cbt_source, cs.id, cs.score
-   FROM score_sheets ss
-   LEFT JOIN cbt_submissions cs ON ss.test1_cbt_source = cs.id
-   WHERE ss.test1_source='CBT'
-   LIMIT 5;
+   SELECT * FROM assignments WHERE status='ACTIVE';
    ```
-   - Expected: All CBT source scores link to valid submissions
-   - Expected: Score values make sense (scaled correctly)
+2. Is student enrolled in that class?
+   ```sql
+   SELECT * FROM students WHERE class_arm_combo_id='CLASS_UUID';
+   ```
+3. Is term_id NULL or matching?
 
-**Test Result:** ✅ PASS / ❌ FAIL
-
----
-
-## ✅ Success Criteria
-
-ALL of the following must be TRUE for complete success:
-
-1. ✅ Subject teachers can enter scores and they appear in `score_sheets`
-2. ✅ CBT submissions auto-populate into `score_sheets` with correct scaling
-3. ✅ CBT scores update existing `score_sheets` entries (no duplicates)
-4. ✅ Class teachers see aggregated results (no edit capability)
-5. ✅ Students see their report cards from canonical `score_sheets` source
-6. ✅ Source tracking (MANUAL vs CBT) is correct and visible
-7. ✅ No data in deleted tables (result_entries, student_subject_enrollment, teacher_assignments)
-8. ✅ UNIQUE constraint prevents duplicate entries
-9. ✅ All three paths (manual, CBT, aggregation) read from single `score_sheets` table
-10. ✅ No data duplication across tables
+**Fix:** Verify student's class_arm_combo_id matches assignment's class_arm_combo_id
 
 ---
 
-## 📊 Test Summary Template
+### CBT score not in scoresheet
 
-| Scenario | Test | Result | Notes |
-|----------|------|--------|-------|
-| 1 | Subject Teacher Manual Entry | ✅/❌ | |
-| 2 | CBT Auto-Population | ✅/❌ | |
-| 3 | Class Teacher Aggregated View | ✅/❌ | |
-| 4 | Student Report Card | ✅/❌ | |
-| 5 | Data Integrity | ✅/❌ | |
-| 6 | Source Tracking | ✅/❌ | |
+**Check:**
+1. Was CBT submitted?
+   ```sql
+   SELECT * FROM cbt_submissions;
+   ```
+2. Is score_sheet created?
+   ```sql
+   SELECT * FROM score_sheets;
+   ```
+3. Check if auto-sync trigger executed (Migration 120)
 
-**Overall Result:** ✅ ALL PASS / ❌ SOME FAILURES
-
----
-
-## 🔍 Debugging Tips
-
-If tests fail:
-
-1. **Check Score Sheet Query**
-   - Verify term_id is correct (use `is_current=true`)
-   - Verify student_subjects enrollment exists
-   - Check subject_teacher_assignments for class filters
-
-2. **Check CBT Integration**
-   - Run: `GET /api/cbt/verify-auto-population?submission_id={ID}`
-   - Check cbt_exams.assessment_type is correctly set
-   - Verify cbt_exams.subject_id matches
-
-3. **Check API Endpoints**
-   - POST /api/subject-scores - manual entry
-   - POST /api/student/cbt/submit - CBT submission
-   - GET /api/teacher/results - class teacher view
-   - GET /api/student/report-card - student view
-
-4. **Check UI Components**
-   - Subject Teacher: src/app/teacher/subject-score-sheet/page.tsx
-   - Class Teacher: src/app/teacher/results/page.tsx
-   - Student: src/app/student/results/page.tsx
+**Fix:** Manually create score sheet or re-execute Migration 120
 
 ---
 
-## 📝 Notes
+## Success Criteria
 
-- All timestamps should use UTC
-- Grade calculation: A=70+, B=60-69, C=50-59, D=40-49, F=<40
-- Test totals are capped at 40 (test1+2+3+4)
-- Exam is capped at 60
-- Grand total is capped at 100 (40+60)
-- Source tracking enables audit trail and transparency
+✅ **PASSED** if:
+- All database schemas correct
+- NEW schools: All features work
+- OLD schools: All features work  
+- NEW and OLD schools have identical functionality
+- No API errors
+- No database errors
 
----
+❌ **FAILED** if:
+- Any feature doesn't work for either NEW or OLD schools
+- Schema mismatches
+- API returns errors
+- NEW and OLD schools have different functionality
 
-**Test Document Version:** 1.0  
-**Last Updated:** August 25, 2026  
-**Architecture:** Canonical score_sheets, Single Source of Truth
