@@ -13,8 +13,8 @@ export const dynamic = 'force-dynamic'
  *   subject_id: UUID,
  *   class_arm_combo_id: UUID,
  *   teacher_id: UUID,
- *   title: string,
- *   content: string,
+ *   title: string (maps to 'topic' in DB),
+ *   content: string (maps to 'content_summary' in DB),
  *   attachments?: Array<{url: string, name: string}>
  * }
  * 
@@ -49,19 +49,60 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Fetch current term for this school
+    let termId = null
+    try {
+      const { data: termData } = await supabase
+        .from('academic_terms')
+        .select('id')
+        .eq('school_id', school_id)
+        .eq('is_active', true)
+        .single()
+      termId = termData?.id
+    } catch (err) {
+      console.warn('Could not fetch active term, using placeholder')
+    }
+
+    // Fetch teacher name
+    let teacherName = 'Teacher'
+    try {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', teacher_id)
+        .single()
+      if (userData?.full_name) teacherName = userData.full_name
+    } catch (err) {
+      console.warn('Could not fetch teacher name, using placeholder')
+    }
+
     // Create lesson note with status = SUBMITTED
+    // NOTE: Schema from Migration 083 uses different column names:
+    // - teacher_id (not created_by)
+    // - topic (not title)
+    // - content_summary (not content)
+    // - lesson_date (not published_at)
+    // - file_path, file_name for attachments
+    
+    const fileData = attachments?.[0] ? {
+      file_path: attachments[0].url,
+      file_name: attachments[0].name,
+    } : {}
+
     const { data, error } = await supabase
       .from('lesson_notes')
       .insert({
         school_id,
         subject_id,
         class_arm_combo_id,
-        created_by: teacher_id,
-        title,
-        content,
-        attachments: attachments || [],
+        teacher_id,
+        teacher_name: teacherName,
+        term_id: termId || '00000000-0000-0000-0000-000000000000', // Use fetched term or placeholder
+        topic: title, // Map title → topic
+        content_summary: content, // Map content → content_summary
+        lesson_date: new Date().toISOString().split('T')[0], // Today's date
         status: 'SUBMITTED',
-        published_at: new Date().toISOString(),
+        ...fileData,
       })
       .select()
 
