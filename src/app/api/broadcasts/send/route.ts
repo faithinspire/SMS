@@ -81,12 +81,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Call the stored procedure to create broadcast and recipients
+    // NOTE: Stored procedure signature is: send_broadcast_to_staff(p_school_id, p_sender_id, p_message, p_broadcast_type)
+    // Do NOT send p_title or p_recipient_type - they are not parameters in the procedure
     const { data, error: procError } = await supabase.rpc('send_broadcast_to_staff', {
       p_school_id: userData.school_id,
       p_sender_id: authUser.id,
-      p_title: title,
       p_message: message,
-      p_recipient_type: recipient_type,
       p_broadcast_type: broadcast_type,
     })
 
