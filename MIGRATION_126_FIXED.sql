@@ -1,26 +1,22 @@
 -- ============================================================================
--- Migration 126: Fix CBT Results Pipeline - Ensure Scores Sync to Score Sheets
+-- Migration 126 FIXED: Fix CBT Results Pipeline
 -- ============================================================================
--- Copy this entire content and paste into Supabase SQL Editor, then click RUN
+-- FIXED: Now handles case where cbt_results table doesn't exist
+-- Run this in Supabase SQL Editor instead of previous version
 -- ============================================================================
 
 BEGIN;
 
 -- ============================================================================
--- STEP 1: Drop old broken trigger (if it exists)
+-- STEP 1: Drop old broken trigger (safely - handles missing table)
 -- ============================================================================
--- Note: cbt_results table may not exist if migration 120 wasn't run
--- This safely drops the trigger without error if table doesn't exist
 DO $$
 BEGIN
-  -- Try to drop trigger if it exists
   EXECUTE 'DROP TRIGGER IF EXISTS trigger_cbt_auto_populate_score_sheets ON cbt_results CASCADE';
 EXCEPTION WHEN OTHERS THEN
-  -- Table may not exist, that's OK
   NULL;
 END $$;
 
--- Drop function if it exists (safe if not present)
 DROP FUNCTION IF EXISTS auto_populate_score_sheets_from_cbt() CASCADE;
 
 -- ============================================================================

@@ -21,9 +21,20 @@
 BEGIN;
 
 -- ============================================================================
--- STEP 1: Drop old broken trigger
+-- STEP 1: Drop old broken trigger (if it exists)
 -- ============================================================================
-DROP TRIGGER IF EXISTS trigger_cbt_auto_populate_score_sheets ON cbt_results CASCADE;
+-- Note: cbt_results table may not exist if migration 120 wasn't run
+-- This safely drops the trigger without error if table doesn't exist
+DO $$
+BEGIN
+  -- Try to drop trigger if it exists
+  EXECUTE 'DROP TRIGGER IF EXISTS trigger_cbt_auto_populate_score_sheets ON cbt_results CASCADE';
+EXCEPTION WHEN OTHERS THEN
+  -- Table may not exist, that's OK
+  NULL;
+END $$;
+
+-- Drop function if it exists (safe if not present)
 DROP FUNCTION IF EXISTS auto_populate_score_sheets_from_cbt() CASCADE;
 
 -- ============================================================================
