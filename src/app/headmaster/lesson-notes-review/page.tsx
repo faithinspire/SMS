@@ -63,7 +63,7 @@ export default function HeadteacherLessonNotesReviewPage() {
           id, topic, content_summary, teacher_id, teacher_name, 
           subject_id, class_arm_combo_id, lesson_date, file_name, 
           file_path, status, submitted_at, reviewed_by, reviewed_at, 
-          reviewer_comments, created_at
+          reviewer_feedback, created_at
         `)
         .eq('school_id', currentUser.school_id)
         .order('submitted_at', { ascending: false })
@@ -130,7 +130,7 @@ export default function HeadteacherLessonNotesReviewPage() {
             submitted_at: note.submitted_at,
             reviewed_by: note.reviewed_by,
             reviewed_at: note.reviewed_at,
-            reviewer_comments: note.reviewer_comments,
+            reviewer_feedback: note.reviewer_feedback,
           }
         })
       )
