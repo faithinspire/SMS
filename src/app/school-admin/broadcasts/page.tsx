@@ -76,14 +76,9 @@ export default function SchoolAdminBroadcastsPage() {
         .insert([
           {
             school_id: user.school_id,
-            created_by: user.id,
-            sender_name: user.full_name,
-            title: `Notice from School Admin`,
+            sender_id: user.id,
             message: message,
             broadcast_type: 'ANNOUNCEMENT',
-            target_role: recipientRole,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
           },
         ])
         .select()
