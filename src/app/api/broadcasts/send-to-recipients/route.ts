@@ -70,6 +70,24 @@ export async function POST(request: NextRequest) {
 
     if (broadcastError) {
       console.error('[BroadcastAPI] Error creating broadcast:', broadcastError)
+      console.error('[BroadcastAPI] Details:', {
+        code: broadcastError.code,
+        message: broadcastError.message,
+        hint: (broadcastError as any).hint,
+      })
+      
+      // Check if error is RLS policy related
+      if (broadcastError.code === 'PGRST201' || broadcastError.message.includes('permission')) {
+        return NextResponse.json(
+          { 
+            error: 'Permission denied: Your role may not be authorized to send broadcasts',
+            code: 'RLS_POLICY_VIOLATION',
+            details: broadcastError.message 
+          },
+          { status: 403 }
+        )
+      }
+      
       return NextResponse.json(
         { error: 'Failed to create broadcast', details: broadcastError.message },
         { status: 500 }

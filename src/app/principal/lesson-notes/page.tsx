@@ -295,17 +295,50 @@ export default function PrincipalLessonNotesPage() {
               <div className="mb-6">
                 <h3 className="text-lg font-bold text-white mb-3">Attachments</h3>
                 <div className="space-y-2">
-                  {selectedNote.attachments.map((att, i) => (
-                    <a
-                      key={i}
-                      href={att.path}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block p-3 bg-slate-700/50 rounded-lg text-purple-300 hover:text-purple-200 transition"
-                    >
-                      📎 {att.name}
-                    </a>
-                  ))}
+                  {selectedNote.attachments.map((att, i) => {
+                    // Convert Supabase storage path to public URL
+                    // If path is already a URL, use it; otherwise construct public URL
+                    let fileUrl = att.path
+                    if (att.path && !att.path.startsWith('http')) {
+                      // Extract bucket and file path from storage URL format
+                      // Format might be: bucket_name/file_path or storage/v1/object/public/bucket_name/file_path
+                      const bucketMatch = att.path.match(/^([^\/]+)\/(.+)$/)
+                      if (bucketMatch) {
+                        const [, bucket, filePath] = bucketMatch
+                        fileUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${bucket}/${filePath}`
+                      }
+                    }
+
+                    // Determine if file is document or image
+                    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(att.name)
+                    const isDocument = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt)$/i.test(att.name)
+
+                    return (
+                      <div key={i} className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg">
+                        {isImage && (
+                          <img
+                            src={fileUrl}
+                            alt={att.name}
+                            className="w-16 h-16 object-cover rounded cursor-pointer hover:opacity-80"
+                            onClick={() => window.open(fileUrl, '_blank')}
+                            title="Click to open image"
+                            onError={(e) => {
+                              e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"%3E%3Crect fill="%23888" width="64" height="64"/%3E%3Ctext fill="white" x="32" y="32" text-anchor="middle" dy=".3em" font-size="12"%3E404%3C/text%3E%3C/svg%3E'
+                            }}
+                          />
+                        )}
+                        <a
+                          href={fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 text-purple-300 hover:text-purple-200 transition truncate"
+                          title={`Click to ${isImage ? 'view' : 'download'} ${att.name}`}
+                        >
+                          {isDocument && '📄'} {isImage && '🖼️'} {!isDocument && !isImage && '📎'} {att.name}
+                        </a>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
