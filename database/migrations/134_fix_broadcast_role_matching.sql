@@ -6,8 +6,11 @@
 -- - Missed 'STAFF' role
 -- - Principal broadcasts sent to staff but role mismatch excluded recipients
 --
--- FIX: Recreate stored procedure with correct role matching
+-- FIX: Drop and recreate stored procedure with correct role matching
 -- ============================================================================
+
+-- Drop the existing function (required because return type is changing)
+DROP FUNCTION IF EXISTS send_broadcast_to_staff(uuid, uuid, text, character varying) CASCADE;
 
 CREATE OR REPLACE FUNCTION send_broadcast_to_staff(
   p_school_id UUID,
