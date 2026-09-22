@@ -127,7 +127,8 @@ export async function GET(request: NextRequest) {
       const classData = classArm ? classMap.get(classArm.classId) : null
       const armData = classArm ? armMap.get(classArm.armId) : null
       const subject = subjectMap.get(note.subject_id)
-      const user = userMap.get(note.created_by)
+      // FIX: lesson_notes table has 'teacher_id', NOT 'created_by'
+      const user = userMap.get(note.teacher_id)
 
       return {
         id: note.id,

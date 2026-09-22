@@ -4,49 +4,54 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
-import { User } from '@/types'
+import StaffHeader from '@/components/StaffHeader'
+import toast from 'react-hot-toast'
 
 interface LessonNote {
   id: string
-  teacher_name: string
-  lesson_date: string
-  topic: string
-  subject_name: string
-  class_name: string
-  file_name: string
-  file_path: string
+  title: string
+  content: string
   status: string
-  submitted_at: string
-  reviewer_feedback?: string
-  approval_status?: string
-  content_summary?: string
+  created_at: string
+  teacher: {
+    id: string
+    full_name: string
+    email: string
+  }
+  subject: {
+    id: string
+    name: string
+    code: string
+  }
+  class_arm: {
+    class_name: string
+    arm_name: string
+  }
+  attachments: Array<{ name: string; path: string; size?: number }>
 }
 
 export default function PrincipalLessonNotesPage() {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<any>(null)
   const [school, setSchool] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [lessonNotes, setLessonNotes] = useState<LessonNote[]>([])
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'SUBMITTED' | 'UNDER_REVIEW' | 'RETURNED'>('ALL')
   const [selectedNote, setSelectedNote] = useState<LessonNote | null>(null)
-  const [filterStatus, setFilterStatus] = useState('SUBMITTED')
-  const [feedback, setFeedback] = useState('')
-  const [approvalStatus, setApprovalStatus] = useState<'APPROVED' | 'REJECTED' | 'NEEDS_REVISION'>('APPROVED')
-  const [reviewing, setReviewing] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [approvalComment, setApprovalComment] = useState('')
+  const [submittingApproval, setSubmittingApproval] = useState(false)
 
   useEffect(() => {
-    loadLessonNotes()
-  }, [filterStatus])
+    loadData()
+  }, [])
 
-  const loadLessonNotes = async () => {
+  const loadData = async () => {
     try {
       setLoading(true)
-      setError('')
-
       const currentUser = await AuthService.getCurrentUser()
-      if (!currentUser || (currentUser.role !== 'PRINCIPAL' && currentUser.role !== 'HEAD_TEACHER')) {
+
+      if (!currentUser || !['PRINCIPAL', 'HEAD_TEACHER'].includes(currentUser.role)) {
+        toast.error('Unauthorized access')
         router.push('/landing')
         return
       }
@@ -56,311 +61,291 @@ export default function PrincipalLessonNotesPage() {
       // Load school
       const { data: schoolData } = await supabase
         .from('schools')
-        .select('*')
+        .select('id, name')
         .eq('id', currentUser.school_id)
         .single()
 
       setSchool(schoolData)
 
-      // Load lesson notes with proper schema matching
-      let query = supabase
-        .from('lesson_notes')
-        .select(`
-          id, teacher_id, lesson_date, topic, file_name, file_path, status,
-          created_at, reviewed_by, reviewed_at, reviewer_comments,
-          subjects(name),
-          class_arm_combos(name),
-          users!teacher_id(full_name)
-        `)
-        .eq('school_id', currentUser.school_id)
+      // Load pending lesson notes
+      const response = await fetch(
+        `/api/principal/lessons/pending?school_id=${currentUser.school_id}&principal_id=${currentUser.id}`
+      )
 
-      if (filterStatus !== 'ALL') {
-        query = query.eq('status', filterStatus)
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to load lesson notes')
       }
 
-      const { data: notesData } = await query.order('created_at', { ascending: false })
-
-      const formattedNotes = (notesData || []).map((note: any) => ({
-        id: note.id,
-        teacher_name: note.users?.full_name || 'Unknown',
-        lesson_date: note.lesson_date,
-        topic: note.topic,
-        subject_name: note.subjects?.name || 'Unknown',
-        class_name: note.class_arm_combos?.name || 'Unknown',
-        file_name: note.file_name,
-        file_path: note.file_path,
-        status: note.status,
-        submitted_at: note.created_at,
-        reviewer_feedback: note.reviewer_comments,
-        approval_status: note.status, // Use status field instead of approval_status
-        content_summary: note.reviewer_comments, // Use reviewer_comments as summary
-      }))
-
-      setLessonNotes(formattedNotes)
-      console.log('[PrincipalLessonNotes] Loaded:', formattedNotes.length, 'notes')
-    } catch (err: any) {
-      console.error('[PrincipalLessonNotes] Error:', err)
-      setError(err.message)
+      const data = await response.json()
+      setLessonNotes(data.lesson_notes || [])
+    } catch (error) {
+      console.error('Error loading lesson notes:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to load lesson notes')
     } finally {
       setLoading(false)
     }
   }
 
-  const downloadFile = (filePath: string, fileName: string) => {
-    if (!filePath) return
-
-    // For Supabase storage, construct the public URL
-    const storageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/documents/${filePath}`
-    const link = document.createElement('a')
-    link.href = storageUrl
-    link.download = fileName || 'lesson-note'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  const handleApproveNote = async () => {
-    if (!selectedNote || !feedback.trim()) {
-      setError('❌ Please enter feedback')
-      return
-    }
-
+  const handleApprove = async (noteId: string) => {
     try {
-      setReviewing(true)
-      setError('')
+      setSubmittingApproval(true)
 
-      // Update lesson note
-      const { error: updateErr } = await supabase
-        .from('lesson_notes')
-        .update({
-          status: approvalStatus === 'APPROVED' ? 'APPROVED' : approvalStatus === 'REJECTED' ? 'SUBMITTED' : 'NEEDS_REVISION',
-          reviewer_comments: feedback,
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: user?.id,
-        })
-        .eq('id', selectedNote.id)
+      const response = await fetch(`/api/principal/lessons/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lesson_note_id: noteId,
+          principal_id: user.id,
+          school_id: user.school_id,
+          feedback: approvalComment,
+        }),
+      })
 
-      if (updateErr) throw updateErr
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to approve lesson note')
+      }
 
-      // Create approval record for audit trail
-      const { error: auditErr } = await supabase
-        .from('lesson_note_approvals')
-        .insert([
-          {
-            lesson_note_id: selectedNote.id,
-            school_id: user?.school_id,
-            reviewed_by: user?.id,
-            reviewer_name: user?.full_name,
-            reviewer_role: user?.role,
-            approval_status: approvalStatus,
-            feedback,
-            approved_at: new Date().toISOString(),
-          },
-        ])
-
-      if (auditErr) throw auditErr
-
-      setSuccess(`✅ Lesson note marked as ${approvalStatus}!`)
-      setFeedback('')
+      toast.success('Lesson note approved')
       setSelectedNote(null)
-
-      // Reload notes
-      await loadLessonNotes()
-      setTimeout(() => setSuccess(''), 3000)
-    } catch (err: any) {
-      console.error('[PrincipalLessonNotes] Approve error:', err)
-      setError(err.message)
+      setApprovalComment('')
+      loadData()
+    } catch (error) {
+      console.error('Error approving lesson note:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to approve')
     } finally {
-      setReviewing(false)
+      setSubmittingApproval(false)
     }
   }
+
+  const handleReturn = async (noteId: string) => {
+    try {
+      setSubmittingApproval(true)
+
+      const response = await fetch(`/api/principal/lessons/return`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lesson_note_id: noteId,
+          principal_id: user.id,
+          school_id: user.school_id,
+          feedback: approvalComment,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to return lesson note')
+      }
+
+      toast.success('Lesson note returned for revision')
+      setSelectedNote(null)
+      setApprovalComment('')
+      loadData()
+    } catch (error) {
+      console.error('Error returning lesson note:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to return')
+    } finally {
+      setSubmittingApproval(false)
+    }
+  }
+
+  const filtered = filterStatus === 'ALL' ? lessonNotes : lessonNotes.filter(n => n.status === filterStatus)
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-amber-600 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-gray-700">Loading lesson notes...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-500 border-t-pink-500 mx-auto mb-4"></div>
+          <p className="text-gray-300">Loading lesson notes...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 pb-24">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">📚 Lesson Notes Review</h1>
-          <p className="text-gray-600 mt-2">{school?.name}</p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800">
+      <StaffHeader
+        staffName={user?.full_name || 'Principal'}
+        schoolName={school?.name || 'School'}
+        section="Lesson Notes Review"
+      />
 
-      {/* Main Content */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-6 p-4 rounded-lg bg-green-50 border border-green-200 text-green-700">
-            {success}
-          </div>
-        )}
-
-        {/* Filter Tabs */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {['SUBMITTED', 'NEEDS_REVISION', 'APPROVED', 'ALL'].map((status) => (
+        {/* Filter Section */}
+        <div className="mb-6 flex gap-2">
+          {(['ALL', 'SUBMITTED', 'UNDER_REVIEW', 'RETURNED'] as const).map(status => (
             <button
               key={status}
               onClick={() => setFilterStatus(status)}
-              className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-all ${
+              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
                 filterStatus === status
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:border-amber-300'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
               }`}
             >
-              {status === 'SUBMITTED' && '📥 Pending'}
-              {status === 'NEEDS_REVISION' && '⚠️ Revision'}
-              {status === 'APPROVED' && '✅ Approved'}
-              {status === 'ALL' && '📋 All'}
+              {status.replace('_', ' ')}
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Lesson Notes List */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-              <div className="px-6 py-4 bg-amber-50 border-b">
-                <h2 className="text-lg font-bold text-gray-900">
-                  📬 Lesson Notes ({lessonNotes.length})
-                </h2>
-              </div>
+        {/* Lesson Notes Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.length === 0 ? (
+            <div className="col-span-full text-center py-12">
+              <p className="text-gray-400 text-lg">No pending lesson notes to review</p>
+            </div>
+          ) : (
+            filtered.map(note => (
+              <div
+                key={note.id}
+                onClick={() => setSelectedNote(note)}
+                className="bg-slate-800/80 backdrop-blur border border-slate-700/50 rounded-lg p-5 hover:border-purple-500/50 transition cursor-pointer"
+              >
+                <div className="mb-3">
+                  <h3 className="text-lg font-bold text-white mb-1">{note.title}</h3>
+                  <p className="text-sm text-gray-400">{note.teacher.full_name}</p>
+                </div>
 
-              <div className="max-h-[calc(100vh-300px)] overflow-y-auto divide-y">
-                {lessonNotes.length === 0 ? (
-                  <div className="p-8 text-center text-gray-500">
-                    No lesson notes found
+                <div className="space-y-2 mb-4">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500">Subject:</span>
+                    <span className="text-purple-300">{note.subject.name}</span>
                   </div>
-                ) : (
-                  lessonNotes.map((note) => (
-                    <div
-                      key={note.id}
-                      onClick={() => setSelectedNote(note)}
-                      className={`p-4 cursor-pointer transition-all ${
-                        selectedNote?.id === note.id
-                          ? 'bg-amber-50 border-l-4 border-amber-600'
-                          : 'hover:bg-gray-50'
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500">Class:</span>
+                    <span className="text-purple-300">
+                      {note.class_arm.class_name} {note.class_arm.arm_name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500">Status:</span>
+                    <span
+                      className={`px-2 py-1 rounded font-semibold ${
+                        note.status === 'SUBMITTED'
+                          ? 'bg-blue-900/50 text-blue-300'
+                          : note.status === 'UNDER_REVIEW'
+                          ? 'bg-yellow-900/50 text-yellow-300'
+                          : 'bg-red-900/50 text-red-300'
                       }`}
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <p className="font-bold text-gray-900">{note.topic}</p>
-                          <p className="text-sm text-gray-600">👨‍🏫 {note.teacher_name}</p>
-                        </div>
-                        <span
-                          className={`text-xs font-bold px-2 py-1 rounded ${
-                            note.status === 'APPROVED'
-                              ? 'bg-green-100 text-green-700'
-                              : note.status === 'NEEDS_REVISION'
-                              ? 'bg-orange-100 text-orange-700'
-                              : 'bg-blue-100 text-blue-700'
-                          }`}
-                        >
-                          {note.status}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 text-xs text-gray-500">
-                        <span>📖 {note.subject_name}</span>
-                        <span>🎓 {note.class_name}</span>
-                        <span>📅 {new Date(note.lesson_date).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Review Panel */}
-          {selectedNote && (
-            <div className="bg-white rounded-lg shadow-lg p-6 h-fit sticky top-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Review Note</h3>
-
-              <div className="space-y-4">
-                <div>
-                  <p className="font-bold text-gray-900">{selectedNote.topic}</p>
-                  <p className="text-sm text-gray-600">By: {selectedNote.teacher_name}</p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    📚 {selectedNote.subject_name} • 🎓 {selectedNote.class_name}
-                  </p>
-                </div>
-
-                {/* Summary */}
-                {selectedNote.content_summary && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-700 mb-1">Summary:</p>
-                    <p className="text-sm text-gray-600">{selectedNote.content_summary}</p>
+                      {note.status}
+                    </span>
                   </div>
-                )}
-
-                {/* Download File */}
-                {selectedNote.file_name && (
-                  <button
-                    onClick={() => downloadFile(selectedNote.file_path, selectedNote.file_name)}
-                    className="w-full px-4 py-2 border border-blue-500 text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-all text-sm"
-                  >
-                    📥 Download: {selectedNote.file_name}
-                  </button>
-                )}
-
-                {/* Approval Status */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Action:
-                  </label>
-                  <select
-                    value={approvalStatus}
-                    onChange={(e) => setApprovalStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value="APPROVED">✅ Approve</option>
-                    <option value="NEEDS_REVISION">⚠️ Needs Revision</option>
-                    <option value="REJECTED">❌ Reject</option>
-                  </select>
                 </div>
 
-                {/* Feedback */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Feedback:
-                  </label>
-                  <textarea
-                    value={feedback}
-                    onChange={(e) => setFeedback(e.target.value)}
-                    placeholder="Provide feedback for the teacher..."
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
+                <p className="text-sm text-gray-400 line-clamp-2 mb-3">{note.content}</p>
 
-                {/* Submit Button */}
-                <button
-                  onClick={handleApproveNote}
-                  disabled={reviewing}
-                  className="w-full px-4 py-2 bg-amber-600 text-white rounded-lg font-bold hover:bg-amber-700 disabled:opacity-50 transition-all"
-                >
-                  {reviewing ? '⏳ Submitting...' : '✓ Submit Review'}
-                </button>
+                <div className="text-xs text-gray-500">
+                  {new Date(note.created_at).toLocaleDateString()}
+                </div>
               </div>
-            </div>
+            ))
           )}
         </div>
       </div>
+
+      {/* Detail Modal */}
+      {selectedNote && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6 border border-slate-700">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-2">{selectedNote.title}</h2>
+                <p className="text-gray-400">
+                  By: <span className="text-purple-300">{selectedNote.teacher.full_name}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedNote(null)}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-6 p-4 bg-slate-700/50 rounded-lg">
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Subject</p>
+                <p className="text-white font-semibold">{selectedNote.subject.name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Class</p>
+                <p className="text-white font-semibold">
+                  {selectedNote.class_arm.class_name} {selectedNote.class_arm.arm_name}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Status</p>
+                <p className="text-white font-semibold">{selectedNote.status}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Submitted</p>
+                <p className="text-white font-semibold">{new Date(selectedNote.created_at).toLocaleDateString()}</p>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-white mb-3">Content</h3>
+              <div className="bg-slate-700/50 rounded-lg p-4 text-gray-300 whitespace-pre-wrap">{selectedNote.content}</div>
+            </div>
+
+            {selectedNote.attachments.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-lg font-bold text-white mb-3">Attachments</h3>
+                <div className="space-y-2">
+                  {selectedNote.attachments.map((att, i) => (
+                    <a
+                      key={i}
+                      href={att.path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block p-3 bg-slate-700/50 rounded-lg text-purple-300 hover:text-purple-200 transition"
+                    >
+                      📎 {att.name}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-300 mb-2">Feedback/Comments</label>
+              <textarea
+                value={approvalComment}
+                onChange={e => setApprovalComment(e.target.value)}
+                placeholder="Add feedback for the teacher (optional)"
+                rows={4}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleApprove(selectedNote.id)}
+                disabled={submittingApproval}
+                className="flex-1 px-6 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+              >
+                {submittingApproval ? '⏳ Processing...' : '✅ Approve'}
+              </button>
+              <button
+                onClick={() => handleReturn(selectedNote.id)}
+                disabled={submittingApproval}
+                className="flex-1 px-6 py-3 bg-orange-600 text-white font-bold rounded-lg hover:bg-orange-700 disabled:opacity-50 transition"
+              >
+                {submittingApproval ? '⏳ Processing...' : '↩️ Return'}
+              </button>
+              <button
+                onClick={() => setSelectedNote(null)}
+                className="px-6 py-3 bg-slate-600 text-white font-bold rounded-lg hover:bg-slate-700 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
