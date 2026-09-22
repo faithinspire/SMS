@@ -58,13 +58,13 @@ RETURNS TABLE (
   submission_id UUID,
   student_id UUID,
   cbt_exam_id UUID,
-  exam_title TEXT,
-  status TEXT,
+  exam_title VARCHAR,
+  status VARCHAR,
   score NUMERIC,
-  assessment_type TEXT,
+  assessment_type VARCHAR,
   term_id UUID,
   subject_id UUID,
-  issue TEXT
+  issue VARCHAR
 ) AS $$
 BEGIN
   RETURN QUERY
@@ -80,12 +80,12 @@ BEGIN
       cs.score,
       ce.title AS exam_title,
       CASE 
-        WHEN cs.status != 'GRADED' THEN 'Status not GRADED - won''t trigger sync'
-        WHEN cs.score IS NULL THEN 'Score is NULL - won''t trigger sync'
-        WHEN ce.assessment_type IS NULL THEN 'Exam assessment_type is NULL - trigger defaults to EXAM'
-        WHEN ce.subject_id IS NULL THEN 'Exam subject_id is NULL - trigger skips'
-        WHEN cs.term_id IS NULL THEN 'Submission term_id is NULL - trigger skips'
-        ELSE NULL
+        WHEN cs.status != 'GRADED' THEN 'Status not GRADED - won''t trigger sync'::VARCHAR
+        WHEN cs.score IS NULL THEN 'Score is NULL - won''t trigger sync'::VARCHAR
+        WHEN ce.assessment_type IS NULL THEN 'Exam assessment_type is NULL - trigger defaults to EXAM'::VARCHAR
+        WHEN ce.subject_id IS NULL THEN 'Exam subject_id is NULL - trigger skips'::VARCHAR
+        WHEN cs.term_id IS NULL THEN 'Submission term_id is NULL - trigger skips'::VARCHAR
+        ELSE NULL::VARCHAR
       END AS issue_if_exists
     FROM cbt_submissions cs
     JOIN cbt_exams ce ON ce.id = cs.cbt_exam_id
@@ -101,7 +101,7 @@ BEGIN
     cs.assessment_type,
     cs.term_id,
     cs.subject_id,
-    COALESCE(cs.issue_if_exists, 'SHOULD BE SYNCED') AS issue
+    COALESCE(cs.issue_if_exists, 'SHOULD BE SYNCED'::VARCHAR) AS issue
   FROM cbt_status cs
   WHERE 
     -- Find graded scores that:
