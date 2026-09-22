@@ -104,7 +104,8 @@ export async function POST(request: NextRequest) {
         userQuery = userQuery.in('role', rolesToQuery)
       } else if (singleRole === 'ALL') {
         // Send to all staff roles (exclude students)
-        userQuery = userQuery.in('role', ['TEACHER', 'PRINCIPAL', 'HEAD_TEACHER', 'HEADTEACHER', 'ACCOUNTANT', 'SCHOOL_ADMIN', 'OTHER_STAFF'])
+        // ✅ CRITICAL: Use correct role names matching Migration 070
+        userQuery = userQuery.in('role', ['TEACHER', 'PRINCIPAL', 'HEAD_TEACHER', 'ACCOUNTANT', 'SCHOOL_ADMIN', 'OTHER_STAFF', 'STAFF'])
       }
 
       const { data: users, error: userError } = await userQuery
