@@ -98,7 +98,7 @@ export default function PrincipalLessonNotesPage() {
           lesson_note_id: noteId,
           principal_id: user.id,
           school_id: user.school_id,
-          feedback: approvalComment,
+          comments: approvalComment,
         }),
       })
 
@@ -130,7 +130,7 @@ export default function PrincipalLessonNotesPage() {
           lesson_note_id: noteId,
           principal_id: user.id,
           school_id: user.school_id,
-          feedback: approvalComment,
+          comments: approvalComment,
         }),
       })
 

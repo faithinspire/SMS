@@ -2,13 +2,13 @@
 import { supabase } from '@/lib/supabase-client'
 export const dynamic = 'force-dynamic'
 
-
 /**
- * PUT /api/principal/lessons/[lessonId]/return
+ * POST /api/principal/lessons/return
  * Principal returns a lesson note for revision
  * 
  * REQUEST BODY:
  * {
+ *   lesson_note_id: UUID,
  *   school_id: UUID,
  *   principal_id: UUID,
  *   comments: string (required - reason for return)
@@ -22,18 +22,14 @@ export const dynamic = 'force-dynamic'
  *   message: string
  * }
  */
-export async function PUT(
-  request: NextRequest,
-  context: { params: { lessonId: string } }
-) {
+export async function POST(request: NextRequest) {
   try {
-    const { lessonId } = context.params
     const body = await request.json()
-    const { school_id, principal_id, comments } = body
+    const { lesson_note_id, school_id, principal_id, comments } = body
 
-    if (!school_id || !principal_id || !lessonId) {
+    if (!lesson_note_id || !school_id || !principal_id) {
       return NextResponse.json(
-        { error: 'Missing required fields: school_id, principal_id, lessonId' },
+        { error: 'Missing required fields: lesson_note_id, school_id, principal_id' },
         { status: 400 }
       )
     }
@@ -52,14 +48,14 @@ export async function PUT(
         status: 'RETURNED',
         reviewed_by: principal_id,
         reviewed_at: new Date().toISOString(),
-        review_comments: comments,
+        reviewer_comments: comments,
       })
-      .eq('id', lessonId)
+      .eq('id', lesson_note_id)
       .eq('school_id', school_id)
       .select()
 
     if (error) {
-      console.error('Error returning lesson note:', error)
+      console.error('[LessonReturn] Error returning lesson note:', error)
       return NextResponse.json(
         { error: 'Failed to return lesson note', details: error.message },
         { status: 500 }
@@ -73,6 +69,8 @@ export async function PUT(
       )
     }
 
+    console.log('[LessonReturn] ✅ Lesson note returned:', lesson_note_id)
+
     return NextResponse.json({
       success: true,
       lesson_note_id: data[0].id,
@@ -80,11 +78,10 @@ export async function PUT(
       message: 'Lesson note returned for revision',
     })
   } catch (error) {
-    console.error('Error in PUT /api/principal/lessons/return:', error)
+    console.error('[LessonReturn] Exception:', error)
     return NextResponse.json(
       { error: 'Internal server error', details: String(error) },
       { status: 500 }
     )
   }
 }
-
