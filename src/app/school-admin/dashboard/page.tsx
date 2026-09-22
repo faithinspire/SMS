@@ -215,7 +215,13 @@ export default function SchoolAdminDashboard() {
   }
 
   const handleSendBroadcast = async () => {
-    if (!broadcastMessage.trim() || !user?.school_id) {
+    // CRITICAL: Validate user object is fully loaded before sending
+    if (!user || !user.id || !user.school_id) {
+      setError('❌ User information not fully loaded. Please wait and try again.')
+      return
+    }
+
+    if (!broadcastMessage.trim()) {
       setError('❌ Please enter a message')
       return
     }
@@ -620,7 +626,7 @@ export default function SchoolAdminDashboard() {
                 {/* Send Button - Full Width */}
                 <button
                   onClick={handleSendBroadcast}
-                  disabled={sendingBroadcast || !broadcastMessage.trim()}
+                  disabled={sendingBroadcast || !broadcastMessage.trim() || !user || !user.id}
                   className="w-full px-4 sm:px-6 py-3 text-sm sm:text-base bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-lg font-bold hover:from-blue-600 hover:to-cyan-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {sendingBroadcast ? '⏳ Sending...' : '📤 Send Broadcast'}

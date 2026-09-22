@@ -67,6 +67,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // CRITICAL: Map exam_type + test_number to assessment_type for score_sheets trigger
+    let assessment_type = 'EXAM'
+    if (exam_type === 'TEST') {
+      // Map test_number to CA1, CA2, CA3, CA4
+      if (test_number === 1) assessment_type = 'CA1'
+      else if (test_number === 2) assessment_type = 'CA2'
+      else if (test_number === 3) assessment_type = 'CA3'
+      else if (test_number === 4) assessment_type = 'CA4'
+    } else if (exam_type === 'EXAM') {
+      assessment_type = 'EXAM'
+    }
+
     // Create exam
     const examId = await CBTManagementService.createExam({
       school_id,
@@ -78,6 +90,7 @@ export async function POST(request: NextRequest) {
       description,
       exam_type,
       test_number,
+      assessment_type, // ✅ Pass mapped assessment_type
       total_marks: total_marks || 100,
       passing_percentage: passing_percentage || 50,
       duration_minutes: duration_minutes || 60,

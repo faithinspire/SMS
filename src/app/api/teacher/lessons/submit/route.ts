@@ -49,19 +49,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch current term for this school
-    let termId = null
-    try {
-      const { data: termData } = await supabase
-        .from('academic_terms')
-        .select('id')
-        .eq('school_id', school_id)
-        .eq('is_active', true)
-        .single()
-      termId = termData?.id
-    } catch (err) {
-      console.warn('Could not fetch active term, using placeholder')
+    // Fetch current term for this school - REQUIRED, do not use placeholder
+    const { data: termData, error: termError } = await supabase
+      .from('academic_terms')
+      .select('id')
+      .eq('school_id', school_id)
+      .eq('is_active', true)
+      .single()
+
+    // CRITICAL: term_id is required and cannot be null
+    if (termError || !termData?.id) {
+      console.error('No active term found for school:', school_id)
+      return NextResponse.json(
+        { 
+          error: 'No active academic term found for this school. Please contact administration to set up academic terms.',
+          details: 'Lesson notes require an active academic term.'
+        },
+        { status: 400 }
+      )
     }
+
+    const termId = termData.id
 
     // Fetch teacher name
     let teacherName = 'Teacher'
@@ -97,7 +105,7 @@ export async function POST(request: NextRequest) {
         class_arm_combo_id,
         teacher_id,
         teacher_name: teacherName,
-        term_id: termId || '00000000-0000-0000-0000-000000000000', // Use fetched term or placeholder
+        term_id: termId, // Use validated term_id
         topic: title, // Map title → topic
         content_summary: content, // Map content → content_summary
         lesson_date: new Date().toISOString().split('T')[0], // Today's date

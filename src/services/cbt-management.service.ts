@@ -15,6 +15,7 @@ export interface CreateCBTExamInput {
   description: string
   exam_type: 'TEST' | 'EXAM'
   test_number?: 1 | 2 | 3 | 4 // for TEST type
+  assessment_type: 'CA1' | 'CA2' | 'CA3' | 'CA4' | 'EXAM' // ✅ CRITICAL for score_sheets trigger
   total_marks: number
   passing_percentage: number
   duration_minutes: number
@@ -62,6 +63,7 @@ export class CBTManagementService {
           description: input.description,
           exam_type: input.exam_type,
           test_number: input.test_number || null,
+          assessment_type: input.assessment_type, // ✅ CRITICAL: Must be set for score_sheets trigger
           total_marks: input.total_marks,
           passing_percentage: input.passing_percentage,
           duration_minutes: input.duration_minutes,
