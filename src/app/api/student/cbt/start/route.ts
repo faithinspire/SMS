@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     const { data: existingSubmission } = await supabase
       .from('cbt_submissions')
       .select('id, submitted_at, score')
-      .eq('cbt_exam_id', cbtExamId)
+      .eq('cbt_exam_id', cbt_exam_id)
       .eq('student_id', student_id)
       .single()
 
