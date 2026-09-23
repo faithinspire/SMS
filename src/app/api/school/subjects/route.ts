@@ -5,10 +5,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const dynamic = 'force-dynamic';
 
 interface SubjectFilterParams {
   schoolId: string;
@@ -20,6 +17,11 @@ interface SubjectFilterParams {
 async function getSubjects(params: SubjectFilterParams) {
   try {
     const { schoolId, level, department, assignable } = params;
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
 
     let query = supabase
       .from("subjects")

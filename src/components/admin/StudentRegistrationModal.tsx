@@ -773,3 +773,5 @@ export function StudentRegistrationModal({
     </div>
   )
 }
+
+export default StudentRegistrationModal
