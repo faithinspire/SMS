@@ -104,11 +104,33 @@ export async function POST(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('broadcast_id', data)
 
+    if (countError) {
+      console.error('[Broadcast] Error checking recipient count:', countError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to verify broadcast delivery' },
+        { status: 500 }
+      )
+    }
+
+    // ✅ FIX: Return error if no recipients found
+    if (!recipientCount || recipientCount === 0) {
+      console.warn('[Broadcast] No recipients found for broadcast:', data)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No recipients found for this school. Ensure staff/teachers exist and have correct roles.',
+          broadcast_id: data,
+          recipients_count: 0,
+        },
+        { status: 400 }
+      )
+    }
+
     return NextResponse.json({
       success: true,
       broadcast_id: data,
-      recipients_count: recipientCount || 0,
-      message: `Broadcast sent successfully to ${recipientCount || 0} recipients`,
+      recipients_count: recipientCount,
+      message: `Broadcast sent successfully to ${recipientCount} recipient${recipientCount === 1 ? '' : 's'}`,
     })
   } catch (error: any) {
     console.error('Error sending broadcast:', error)
