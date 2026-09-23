@@ -59,9 +59,9 @@ ALTER TABLE score_sheets DROP CONSTRAINT IF EXISTS score_sheets_school_id_fkey;
 ALTER TABLE score_sheets ADD CONSTRAINT score_sheets_school_id_fkey 
   FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE;
 
--- CBT cascade
-ALTER TABLE cbt_tests DROP CONSTRAINT IF EXISTS cbt_tests_school_id_fkey;
-ALTER TABLE cbt_tests ADD CONSTRAINT cbt_tests_school_id_fkey 
+-- CBT cascade (cbt_exams not cbt_tests)
+ALTER TABLE cbt_exams DROP CONSTRAINT IF EXISTS cbt_exams_school_id_fkey;
+ALTER TABLE cbt_exams ADD CONSTRAINT cbt_exams_school_id_fkey 
   FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE;
 
 ALTER TABLE cbt_questions DROP CONSTRAINT IF EXISTS cbt_questions_school_id_fkey;
@@ -104,7 +104,7 @@ ALTER TABLE subjects DISABLE ROW LEVEL SECURITY;
 ALTER TABLE subject_teacher_assignments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE student_subjects DISABLE ROW LEVEL SECURITY;
 ALTER TABLE score_sheets DISABLE ROW LEVEL SECURITY;
-ALTER TABLE cbt_tests DISABLE ROW LEVEL SECURITY;
+ALTER TABLE cbt_exams DISABLE ROW LEVEL SECURITY;
 ALTER TABLE cbt_questions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE cbt_submissions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE assignments DISABLE ROW LEVEL SECURITY;
