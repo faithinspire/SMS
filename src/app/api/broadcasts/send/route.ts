@@ -1,146 +1,174 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase-client'
-export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
+export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/broadcasts/send
- * Send a broadcast message to staff/teachers
+ * Sends a broadcast message to all staff and students in a school
  * 
- * AUTHENTICATION: Only SCHOOL_ADMIN, PRINCIPAL, HEAD_TEACHER can send
- * 
- * BODY:
+ * REQUEST BODY:
  * {
- *   title: string (required)
- *   message: string (required)
- *   recipient_type: 'STAFF' | 'TEACHERS' | 'ALL_STAFF' (required)
- *   broadcast_type: 'GENERAL' | 'URGENT' | 'HOLIDAY' (optional, default: GENERAL)
+ *   school_id: UUID (required),
+ *   message: string (required),
+ *   sender_id: UUID (required)
  * }
  * 
  * RETURNS:
  * {
- *   success: boolean
- *   broadcast_id: string
- *   recipients_count: number
+ *   success: boolean,
+ *   broadcast_id: UUID,
+ *   recipients_count: number,
  *   message: string
  * }
  */
-
 export async function POST(request: NextRequest) {
   try {
+    console.log('[Broadcasts] ===== START =====')
+    
+    // Parse request
     const body = await request.json()
-    const { title, message, recipient_type = 'STAFF', broadcast_type = 'GENERAL' } = body
+    const { school_id: schoolId, message, sender_id: senderId } = body
 
-    // Validate required fields
-    if (!title || !message || !recipient_type) {
+    // Validate input
+    if (!schoolId || !message || !senderId) {
+      console.log('[Broadcasts] ❌ Validation failed:', { schoolId: !!schoolId, message: !!message, senderId: !!senderId })
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Missing required fields: title, message, recipient_type',
-        },
+        { error: 'Missing required fields: school_id, message, sender_id' },
         { status: 400 }
       )
     }
 
-    // Get current user
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser()
+    console.log('[Broadcasts] ✅ Input validated')
+    console.log('[Broadcasts] Data:', { schoolId, messageLen: message.length, senderId })
 
-    if (authError || !authUser) {
+    // Create Supabase client
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('[Broadcasts] ❌ Missing Supabase env vars')
       return NextResponse.json(
-        { success: false, error: 'Unauthorized: Not authenticated' },
-        { status: 401 }
+        { error: 'Supabase configuration missing' },
+        { status: 500 }
       )
     }
 
-    // Get user details and verify they're admin/principal
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, school_id, role')
-      .eq('id', authUser.id)
+    const supabase = createClient(supabaseUrl, supabaseAnonKey)
+    console.log('[Broadcasts] ✅ Supabase client created')
+
+    // STEP 1: Create broadcast record
+    console.log('[Broadcasts] STEP 1: Creating broadcast record...')
+    const { data: broadcast, error: broadcastError } = await supabase
+      .from('broadcasts')
+      .insert({
+        school_id: schoolId,
+        message,
+        sender_id: senderId,
+        broadcast_type: 'GENERAL',
+      })
+      .select('id')
       .single()
 
-    if (userError || !userData) {
+    if (broadcastError) {
+      console.error('[Broadcasts] ❌ STEP 1 failed - Broadcast insert error')
+      console.error('  Error code:', broadcastError.code)
+      console.error('  Error message:', broadcastError.message)
+      console.error('  Error details:', (broadcastError as any).details)
       return NextResponse.json(
-        { success: false, error: 'User record not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify authorization
-    if (!['SCHOOL_ADMIN', 'PRINCIPAL', 'HEAD_TEACHER'].includes(userData.role)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Unauthorized: ${userData.role} cannot send broadcasts`,
-        },
-        { status: 403 }
-      )
-    }
-
-    // Call the stored procedure to create broadcast and recipients
-    // NOTE: Stored procedure signature is: send_broadcast_to_staff(p_school_id, p_sender_id, p_message, p_broadcast_type)
-    // Do NOT send p_title or p_recipient_type - they are not parameters in the procedure
-    const { data, error: procError } = await supabase.rpc('send_broadcast_to_staff', {
-      p_school_id: userData.school_id,
-      p_sender_id: authUser.id,
-      p_message: message,
-      p_broadcast_type: broadcast_type,
-    })
-
-    if (procError) {
-      console.error('Stored procedure error:', procError)
-      return NextResponse.json(
-        { success: false, error: `Failed to send broadcast: ${procError.message}` },
+        { error: 'Failed to create broadcast', details: broadcastError.message },
         { status: 500 }
       )
     }
 
-    // Get recipient count
-    const { count: recipientCount, error: countError } = await supabase
-      .from('broadcast_recipients')
-      .select('*', { count: 'exact', head: true })
-      .eq('broadcast_id', data)
+    const broadcastId = broadcast.id
+    console.log('[Broadcasts] ✅ STEP 1: Broadcast created -', broadcastId)
 
-    if (countError) {
-      console.error('[Broadcast] Error checking recipient count:', countError)
+    // STEP 2: Get all users in school (staff AND students)
+    console.log('[Broadcasts] STEP 2: Fetching all users (staff + students)...')
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('school_id', schoolId)
+
+    if (usersError) {
+      console.error('[Broadcasts] ❌ STEP 2 failed - User query error')
+      console.error('  Error:', usersError.message)
       return NextResponse.json(
-        { success: false, error: 'Failed to verify broadcast delivery' },
+        { error: 'Failed to fetch users', details: usersError.message },
         { status: 500 }
       )
     }
 
-    // ✅ FIX: Return error if no recipients found
-    if (!recipientCount || recipientCount === 0) {
-      console.warn('[Broadcast] No recipients found for broadcast:', data)
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'No recipients found for this school. Ensure staff/teachers exist and have correct roles.',
-          broadcast_id: data,
-          recipients_count: 0,
-        },
-        { status: 400 }
-      )
+    const recipientIds = (users || []).map(u => u.id)
+    console.log('[Broadcasts] ✅ STEP 2: Found', recipientIds.length, 'recipients')
+
+    if (recipientIds.length === 0) {
+      console.warn('[Broadcasts] ⚠️ No recipients found in school')
+      return NextResponse.json({
+        success: true,
+        broadcast_id: broadcastId,
+        recipients_count: 0,
+        message: 'Broadcast created but no recipients found in this school',
+      })
     }
+
+    // STEP 3: Insert recipients in batches (to avoid too large INSERT)
+    console.log('[Broadcasts] STEP 3: Adding recipients in batches...')
+    const BATCH_SIZE = 500
+    let totalInserted = 0
+
+    for (let i = 0; i < recipientIds.length; i += BATCH_SIZE) {
+      const batch = recipientIds.slice(i, i + BATCH_SIZE)
+      const recipientRecords = batch.map(userId => ({
+        broadcast_id: broadcastId,
+        user_id: userId,
+        is_read: false,
+      }))
+
+      console.log(`[Broadcasts] STEP 3: Inserting batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} records)...`)
+
+      const { error: recipientError } = await supabase
+        .from('broadcast_recipients')
+        .insert(recipientRecords)
+
+      if (recipientError) {
+        console.error('[Broadcasts] ❌ STEP 3 failed - Recipient insert error')
+        console.error('  Batch:', Math.floor(i / BATCH_SIZE) + 1)
+        console.error('  Error code:', recipientError.code)
+        console.error('  Error message:', recipientError.message)
+        console.error('  Error details:', (recipientError as any).details)
+        return NextResponse.json(
+          { error: 'Failed to add recipients', details: recipientError.message },
+          { status: 500 }
+        )
+      }
+
+      totalInserted += batch.length
+      console.log(`[Broadcasts] ✅ Batch inserted (${totalInserted}/${recipientIds.length})`)
+    }
+
+    console.log('[Broadcasts] ✅ STEP 3: All recipients added')
+    console.log('[Broadcasts] ===== SUCCESS =====')
 
     return NextResponse.json({
       success: true,
-      broadcast_id: data,
-      recipients_count: recipientCount,
-      message: `Broadcast sent successfully to ${recipientCount} recipient${recipientCount === 1 ? '' : 's'}`,
+      broadcast_id: broadcastId,
+      recipients_count: totalInserted,
+      message: `Broadcast sent to ${totalInserted} recipients`,
     })
   } catch (error: any) {
-    console.error('Error sending broadcast:', error)
+    console.error('[Broadcasts] ❌ ===== EXCEPTION =====')
+    console.error('[Broadcasts] Error type:', error.constructor.name)
+    console.error('[Broadcasts] Error message:', error.message)
+    console.error('[Broadcasts] Error stack:', error.stack)
+
     return NextResponse.json(
       {
-        success: false,
-        error: error.message || 'Failed to send broadcast',
+        error: 'Internal server error',
+        details: error.message,
       },
       { status: 500 }
     )
   }
 }
-
