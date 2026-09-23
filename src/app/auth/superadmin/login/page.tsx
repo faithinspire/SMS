@@ -151,17 +151,9 @@ export default function SuperAdminLoginPage() {
             </button>
           </form>
 
-          {/* Register Link */}
-          <p className={`text-center ${darkMode ? 'text-gray-400' : 'text-gray-600'} mt-6`}>
-            Don't have an account?{' '}
-            <Link
-              href="/auth/superadmin/register"
-              className={`font-semibold hover:underline ${
-                darkMode ? 'text-purple-300 hover:text-purple-200' : 'text-blue-600 hover:text-blue-700'
-              }`}
-            >
-              Create One
-            </Link>
+          {/* Note: Super Admin accounts are created by system administrators only */}
+          <p className={`text-center text-sm ${darkMode ? 'text-gray-500' : 'text-gray-600'} mt-6`}>
+            Super Admin access is restricted. Contact your system administrator for account creation.
           </p>
 
           {/* Back */}
