@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase-client'
 
 export const dynamic = 'force-dynamic'
-
-// Lazy-load Supabase client to avoid build-time errors
-function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
 
 /**
  * POST /api/broadcasts/send-to-recipients
@@ -38,8 +30,16 @@ function getSupabaseClient() {
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient()
+    console.log('[BroadcastAPI] === REQUEST START ===')
+    
     const body = await request.json()
+    console.log('[BroadcastAPI] Request body received:', {
+      has_school_id: !!body.school_id,
+      has_message: !!body.message,
+      has_sender_id: !!body.sender_id,
+      keys: Object.keys(body),
+    })
+
     const {
       school_id: schoolId,
       message,
@@ -51,12 +51,18 @@ export async function POST(request: NextRequest) {
     } = body
 
     if (!schoolId || !message || !senderId) {
+      console.log('[BroadcastAPI] ❌ VALIDATION FAILED', {
+        schoolId: !!schoolId,
+        message: !!message,
+        senderId: !!senderId,
+      })
       return NextResponse.json(
         { error: 'Missing required fields: school_id, message, sender_id' },
         { status: 400 }
       )
     }
 
+    console.log('[BroadcastAPI] ✅ Validation passed')
     console.log('[BroadcastAPI] Sending broadcast:', {
       schoolId,
       messageLength: message.length,
@@ -66,24 +72,34 @@ export async function POST(request: NextRequest) {
     })
 
     // STEP 1: Create the broadcast record
+    console.log('[BroadcastAPI] STEP 1: Creating broadcast record...')
+    const broadcastData = {
+      school_id: schoolId,
+      message,
+      sender_id: senderId,
+      broadcast_type: 'GENERAL',
+    }
+    console.log('[BroadcastAPI] Inserting broadcast with data:', {
+      school_id: broadcastData.school_id,
+      message_length: broadcastData.message.length,
+      sender_id: broadcastData.sender_id,
+      broadcast_type: broadcastData.broadcast_type,
+    })
+
     const { data: broadcast, error: broadcastError } = await supabase
       .from('broadcasts')
-      .insert({
-        school_id: schoolId,
-        message,
-        sender_id: senderId,
-        broadcast_type: 'GENERAL',
-      })
+      .insert(broadcastData)
       .select('id')
       .single()
 
     if (broadcastError) {
-      console.error('[BroadcastAPI] Error creating broadcast:', broadcastError)
-      console.error('[BroadcastAPI] Details:', {
-        code: broadcastError.code,
-        message: broadcastError.message,
-        hint: (broadcastError as any).hint,
-      })
+      console.error('[BroadcastAPI] ❌ STEP 1 FAILED - Broadcast insert error:')
+      console.error('  Code:', broadcastError.code)
+      console.error('  Message:', broadcastError.message)
+      console.error('  Details:', (broadcastError as any).details)
+      console.error('  Hint:', (broadcastError as any).hint)
+      console.error('  Status:', (broadcastError as any).status)
+      console.error('  Full error:', JSON.stringify(broadcastError, null, 2))
       
       // Check if error is RLS policy related
       if (broadcastError.code === 'PGRST201' || broadcastError.message.includes('permission')) {
@@ -103,13 +119,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[BroadcastAPI] Broadcast created:', broadcast.id)
+    console.log('[BroadcastAPI] ✅ STEP 1 SUCCESS - Broadcast created:', broadcast.id)
 
     // STEP 2: Determine recipient user IDs
+    console.log('[BroadcastAPI] STEP 2: Determining recipient user IDs...')
     let recipientUserIds: string[] = []
 
     if (recipientIds && recipientIds.length > 0) {
       // Direct recipient IDs provided
+      console.log('[BroadcastAPI] Using direct recipient IDs:', recipientIds.length)
       recipientUserIds = recipientIds
     } else {
       // Determine roles to query
@@ -120,6 +138,8 @@ export async function POST(request: NextRequest) {
       } else if (singleRole) {
         rolesToQuery = singleRole === 'ALL' ? [] : [singleRole]
       }
+
+      console.log('[BroadcastAPI] Querying users by role:', rolesToQuery)
 
       // Query for users matching the recipient roles
       let userQuery = supabase
@@ -132,15 +152,20 @@ export async function POST(request: NextRequest) {
       } else if (singleRole === 'ALL') {
         // Send to all staff roles (exclude students)
         // ✅ CRITICAL: Use correct role names matching Migration 070
+        console.log('[BroadcastAPI] Broadcasting to ALL staff roles')
         userQuery = userQuery.in('role', ['TEACHER', 'PRINCIPAL', 'HEAD_TEACHER', 'ACCOUNTANT', 'SCHOOL_ADMIN', 'OTHER_STAFF', 'STAFF'])
       }
 
+      console.log('[BroadcastAPI] Executing user query...')
       const { data: users, error: userError } = await userQuery
 
       if (userError) {
-        console.warn('[BroadcastAPI] Error querying users by role:', userError)
+        console.error('[BroadcastAPI] ❌ STEP 2 ERROR - User query failed:', userError)
+        console.error('  Code:', userError.code)
+        console.error('  Message:', userError.message)
       } else {
         recipientUserIds = (users || []).map(u => u.id)
+        console.log('[BroadcastAPI] ✅ User query succeeded, found:', recipientUserIds.length, 'users')
       }
     }
 
@@ -154,26 +179,36 @@ export async function POST(request: NextRequest) {
     }
 
     // STEP 3: Add broadcast recipients
+    console.log('[BroadcastAPI] STEP 3: Adding broadcast recipients...')
     const recipientRecords = recipientUserIds.map(userId => ({
       broadcast_id: broadcast.id,
       user_id: userId,
       is_read: false,
     }))
 
+    console.log('[BroadcastAPI] Inserting', recipientRecords.length, 'recipient records')
+    console.log('[BroadcastAPI] First recipient sample:', recipientRecords[0])
+
     const { error: recipientError } = await supabase
       .from('broadcast_recipients')
       .insert(recipientRecords)
 
     if (recipientError) {
-      console.error('[BroadcastAPI] Error adding recipients:', recipientError)
+      console.error('[BroadcastAPI] ❌ STEP 3 FAILED - Recipient insert error:')
+      console.error('  Code:', recipientError.code)
+      console.error('  Message:', recipientError.message)
+      console.error('  Details:', (recipientError as any).details)
+      console.error('  Hint:', (recipientError as any).hint)
+      console.error('  Full error:', JSON.stringify(recipientError, null, 2))
       return NextResponse.json(
         { error: 'Failed to add recipients', details: recipientError.message },
         { status: 500 }
       )
     }
 
-    console.log('[BroadcastAPI] ✅ Broadcast sent successfully to', recipientUserIds.length, 'recipients')
+    console.log('[BroadcastAPI] ✅ STEP 3 SUCCESS - Recipients added')
 
+    console.log('[BroadcastAPI] === REQUEST SUCCESS ===')
     return NextResponse.json({
       success: true,
       broadcast_id: broadcast.id,
@@ -181,9 +216,18 @@ export async function POST(request: NextRequest) {
       message: `Broadcast sent to ${recipientUserIds.length} recipients`,
     })
   } catch (error: any) {
-    console.error('[BroadcastAPI] Exception:', error)
+    console.error('[BroadcastAPI] === EXCEPTION CAUGHT ===')
+    console.error('[BroadcastAPI] Error type:', error.constructor.name)
+    console.error('[BroadcastAPI] Error message:', error.message)
+    console.error('[BroadcastAPI] Error stack:', error.stack)
+    console.error('[BroadcastAPI] Full error:', JSON.stringify(error, null, 2))
+    
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { 
+        error: 'Internal server error', 
+        details: error.message,
+        type: error.constructor.name,
+      },
       { status: 500 }
     )
   }
