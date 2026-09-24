@@ -230,6 +230,20 @@ export default function SchoolAdminDashboard() {
       setSendingBroadcast(true)
       setError('')
 
+      // Validate all required fields exist
+      if (!user?.id) {
+        setError('❌ Error: User ID not found. Please refresh the page.')
+        return
+      }
+      if (!user?.school_id) {
+        setError('❌ Error: School ID not found. Please refresh the page.')
+        return
+      }
+      if (!broadcastMessage.trim()) {
+        setError('❌ Error: Message cannot be empty.')
+        return
+      }
+
       const response = await fetch('/api/broadcasts/send-to-recipients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
