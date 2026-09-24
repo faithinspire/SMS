@@ -20,10 +20,12 @@ ADD COLUMN IF NOT EXISTS department VARCHAR(50);
 ALTER TABLE subjects
 ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 
--- Create index for faster queries
-CREATE INDEX IF NOT EXISTS idx_subjects_school_levels_active 
-ON subjects(school_id, is_active) 
-USING GIN(applicable_to_levels);
+-- Create indices for faster queries
+CREATE INDEX IF NOT EXISTS idx_subjects_school_active 
+ON subjects(school_id, is_active);
+
+CREATE INDEX IF NOT EXISTS idx_subjects_levels 
+ON subjects(applicable_to_levels);
 
 CREATE INDEX IF NOT EXISTS idx_subjects_department 
 ON subjects(school_id, department) 
