@@ -14,7 +14,7 @@ interface StudentRegistrationModalProps {
   onSuccess?: (studentId: string) => void
 }
 
-export function StudentRegistrationModal({
+function StudentRegistrationModal({
   isOpen,
   onClose,
   schoolId,

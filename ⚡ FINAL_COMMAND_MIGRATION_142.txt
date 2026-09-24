@@ -1,0 +1,91 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║                   FINAL COMMAND - MIGRATION 142 ONLY                         ║
+║                                                                               ║
+║     3 fixes are already LIVE. This completes the final fix.                 ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+
+WHAT'S DONE
+═══════════════════════════════════════════════════════════════════════════════
+
+ ✅ Migration 140 (subjects fix) - LIVE on production
+ ✅ New endpoint (student names) - LIVE on production
+ ✅ Build export fix - LIVE on production
+
+ ❌ Migration 142 (CBT UUID fix) - Not yet pushed
+
+
+WHAT'S LEFT
+═══════════════════════════════════════════════════════════════════════════════
+
+ 1. Push Migration 142 to GitHub (1 minute)
+ 2. Wait for Vercel rebuild (3-5 minutes)
+ 3. Execute migration in Supabase (3 minutes)
+
+ Total: ~13 minutes
+
+
+THE COMMAND
+═══════════════════════════════════════════════════════════════════════════════
+
+Open PowerShell and paste this:
+
+cd c:\Users\OLU\Desktop\SMS && git add database/migrations/142_validate_and_fix_term_uuids.sql && git commit -m "Final fix: Validate and fix all term UUIDs for CBT" && git push origin main
+
+
+WHAT HAPPENS
+═══════════════════════════════════════════════════════════════════════════════
+
+ 1. Adds Migration 142 to git
+ 2. Commits the file
+ 3. Pushes to GitHub
+ 4. Vercel automatically rebuilds
+ 5. You then execute migration in Supabase
+ 6. CBT exam creation starts working ✅
+
+
+THEN EXECUTE IN SUPABASE
+═══════════════════════════════════════════════════════════════════════════════
+
+ 1. Go to Supabase SQL Editor
+ 2. Open: database/migrations/142_validate_and_fix_term_uuids.sql
+ 3. Copy all SQL
+ 4. Paste in SQL Editor
+ 5. Click Run
+ 6. Wait for success
+
+Result: ✅ All term UUIDs validated and fixed
+
+
+VERIFY ALL FIXES WORK
+═══════════════════════════════════════════════════════════════════════════════
+
+ Test 1: Subject dropdown in registration → ✅ Should appear
+ Test 2: Student name after registration → ✅ Should show correctly
+ Test 3: CBT exam creation → ✅ Should work (no UUID error)
+
+
+TIMELINE
+═══════════════════════════════════════════════════════════════════════════════
+
+ Your command:     1 min
+ GitHub push:      < 1 min
+ Vercel rebuild:   3-5 min
+ Supabase migration: 3 min
+ ──────────────────────────
+ TOTAL TO COMPLETE: ~13 min
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+                    👉 COPY THE COMMAND ABOVE
+
+                  👉 PASTE IN POWERSHELL
+
+                      👉 PRESS ENTER
+
+                   👉 DONE (13 minutes)
+
+═══════════════════════════════════════════════════════════════════════════════

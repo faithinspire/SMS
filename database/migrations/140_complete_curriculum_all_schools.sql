@@ -29,6 +29,27 @@ BEGIN
 END $$;
 
 -- ============================================================================
+-- IMPORTANT: Populate applicable_to_levels based on level column
+-- This ensures the canonical subject service can query subjects correctly
+-- ============================================================================
+-- Helper function to populate applicable_to_levels from level
+DO $$
+BEGIN
+  -- Update existing subjects to populate applicable_to_levels based on their level
+  UPDATE subjects 
+  SET applicable_to_levels = CASE 
+    WHEN level = 0 THEN ARRAY[0]  -- PREP
+    WHEN level = 1 THEN ARRAY[1]  -- KG/NUR
+    WHEN level = 2 THEN ARRAY[2]  -- PRI1-3
+    WHEN level = 3 THEN ARRAY[3]  -- PRI4-6
+    WHEN level = 4 THEN ARRAY[4]  -- JSS
+    WHEN level = 5 THEN ARRAY[5]  -- SS
+    ELSE ARRAY[]::INT[]  -- Explicitly cast empty array to INT[]
+  END
+  WHERE level IS NOT NULL AND (applicable_to_levels IS NULL OR applicable_to_levels = '{}');
+END $$;
+
+-- ============================================================================
 -- MAIN LOGIC: For each school, populate the complete curriculum
 -- ============================================================================
 

@@ -1,0 +1,118 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    PRODUCTION FIX - COMMIT AND PUSH
+═══════════════════════════════════════════════════════════════════════════════
+
+COPY AND PASTE THESE COMMANDS IN YOUR TERMINAL (one at a time):
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 1: Change to project directory
+═══════════════════════════════════════════════════════════════════════════════
+
+cd c:\Users\OLU\Desktop\SMS
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 2: Check git status
+═══════════════════════════════════════════════════════════════════════════════
+
+git status
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 3: Stage all modified files
+═══════════════════════════════════════════════════════════════════════════════
+
+git add database/migrations/140_complete_curriculum_all_schools.sql database/migrations/142_validate_and_fix_term_uuids.sql src/app/api/admin/register-student-direct/route.ts src/components/admin/StudentRegistrationModal.tsx
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 4: Verify staged files
+═══════════════════════════════════════════════════════════════════════════════
+
+git status
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 5: Commit with message
+═══════════════════════════════════════════════════════════════════════════════
+
+git commit -m "Fix 3 critical production issues: subjects dropdown, unknown student, CBT term UUID
+
+- Migration 140: Populate applicable_to_levels array for subject queries
+- Migration 142: Validate and fix all term UUIDs (replace term-1 strings with UUIDs)
+- New API: /api/admin/register-student-direct for student creation with full_name preservation
+- Fix: StudentRegistrationModal default export"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 6: Push to GitHub
+═══════════════════════════════════════════════════════════════════════════════
+
+git push origin main
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 7: Verify push succeeded
+═══════════════════════════════════════════════════════════════════════════════
+
+git log --oneline -5
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+EXPECTED RESULTS:
+
+✅ STEP 2: Should show 4 modified files:
+   - database/migrations/140_complete_curriculum_all_schools.sql
+   - database/migrations/142_validate_and_fix_term_uuids.sql
+   - src/app/api/admin/register-student-direct/route.ts
+   - src/components/admin/StudentRegistrationModal.tsx
+
+✅ STEP 4: Should show "4 file changes" under "Changes to be committed"
+
+✅ STEP 5: Should show "[main xxxxxxx] Fix 3 critical..." message
+
+✅ STEP 6: Should show "X file(s) changed" being pushed to GitHub
+
+✅ STEP 7: Your new commit should appear at the top
+
+═══════════════════════════════════════════════════════════════════════════════
+                        AFTER PUSH COMPLETES:
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Go to https://github.com/faithinspire/SMS/commits/main
+   - Verify your commit appears at the top
+
+2. Go to https://vercel.com/dashboard
+   - Vercel will automatically start building
+   - Wait for build to complete (5-10 minutes)
+   - Check build status is "Ready" (green checkmark)
+
+3. Once Vercel deployment is ready:
+   - Go to Supabase SQL Editor
+   - Execute Migration 142 to fix term UUIDs
+   - Verify term table has no invalid IDs
+
+4. Test the fixes:
+   ✅ Register student → subjects show in dropdown
+   ✅ Register student → appears with correct name (not UNKNOWN)
+   ✅ Create CBT exam → select term works (no UUID error)
+
+═══════════════════════════════════════════════════════════════════════════════
+                           TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════════════
+
+If "git" command not found:
+  - Install Git from https://git-scm.com/download/win
+  - Restart your terminal/PowerShell
+
+If push is rejected:
+  - Run: git pull origin main
+  - Then retry: git push origin main
+
+If commit fails with "nothing to commit":
+  - Verify files were modified (check dates)
+  - Run: git add --all
+  - Then retry commit
+
+═══════════════════════════════════════════════════════════════════════════════
