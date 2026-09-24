@@ -3,6 +3,8 @@
 -- ============================================================================
 -- PURPOSE: Ensure EVERY school (old and new) has complete subject curriculum
 -- 
+-- DEPENDENCIES: Run Migration 145 first to add subject_type and department columns
+-- 
 -- WHAT THIS DOES:
 -- 1. Creates canonical subjects for all levels (PREP, KG, Nursery, Primary 1-6, JSS 1-3, SS 1-3)
 -- 2. Populates applicable_to_levels array for each subject
@@ -18,8 +20,25 @@
 BEGIN;
 
 -- ============================================================================
+-- PREREQUISITE: Ensure columns exist (run Migration 145 first if needed)
+-- ============================================================================
+
+-- Add subject_type column if missing
+ALTER TABLE subjects
+ADD COLUMN IF NOT EXISTS subject_type VARCHAR(50) DEFAULT 'CORE';
+
+-- Add department column if missing
+ALTER TABLE subjects
+ADD COLUMN IF NOT EXISTS department VARCHAR(50);
+
+-- Add is_active column if missing
+ALTER TABLE subjects
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+
+-- ============================================================================
 -- STEP 1: CREATE CANONICAL SUBJECT RECORDS (one per subject, global)
 -- ============================================================================
+-- Note: Columns subject_type, department, is_active are now available
 
 -- Helper function to safely insert/update subjects
 CREATE TEMP TABLE canonical_subjects (
@@ -27,9 +46,7 @@ CREATE TEMP TABLE canonical_subjects (
   name TEXT NOT NULL,
   levels INT[] NOT NULL,
   department VARCHAR(50),
-  is_optional BOOLEAN DEFAULT FALSE,
-  subject_type VARCHAR(50) DEFAULT 'CORE',
-  description TEXT
+  subject_type VARCHAR(50) DEFAULT 'CORE'
 );
 
 -- PREP (Level 0)
