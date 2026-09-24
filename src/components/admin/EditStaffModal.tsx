@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase-client'
 import { TeacherService } from '@/services/teacher.service'
+import { CanonicalSubjectService } from '@/services/canonical-subject.service'
 
 interface EditStaffModalProps {
   staffId: string
@@ -113,14 +114,9 @@ export default function EditStaffModal({
         setSelectedClass(classTeacher.id)
       }
 
-      // Load available subjects and classes
-      const { data: subjectsData } = await supabase
-        .from('subjects')
-        .select('id, name, code')
-        .eq('school_id', schoolId)
-        .order('name')
-
-      setSubjects(subjectsData || [])
+      // ✅ Load ALL subjects using CanonicalSubjectService (admin can assign any subject)
+      const allSubjects = await CanonicalSubjectService.getAllSubjectsForSchool(schoolId)
+      setSubjects(allSubjects)
 
       const { data: combosData } = await supabase
         .from('class_arm_combos')

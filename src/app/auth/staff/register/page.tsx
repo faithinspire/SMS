@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { TeacherService } from '@/services/teacher.service'
+import { CanonicalSubjectService } from '@/services/canonical-subject.service'
 import { supabase } from '@/lib/supabase-client'
 
 interface ClassOption {
@@ -82,18 +83,7 @@ export default function StaffRegisterPage() {
         console.log('✅ Classes fetched:', classData?.length || 0)
         setClasses(classData || [])
 
-        // Fetch subjects
-        console.log('🔄 Fetching subjects...')
-        const { data: subjectData, error: subjectError } = await supabase
-          .from('subjects')
-          .select('id, name, code')
-          .eq('school_id', formData.schoolId)
-          .limit(100)
-
-        if (subjectError) throw subjectError
-        
-        console.log('✅ Subjects fetched:', subjectData?.length || 0)
-        setSubjects(subjectData || [])
+        // NOTE: Subjects are loaded dynamically when class is selected (see useEffect for formData.classId)
       } catch (err: any) {
         console.error('❌ Error:', err)
         setError(`Failed to load data: ${err.message}`)
@@ -102,6 +92,35 @@ export default function StaffRegisterPage() {
 
     loadClassesAndSubjects()
   }, [formData.schoolId])
+
+  // Load subjects when class is selected (filtering by class level using CanonicalSubjectService)
+  useEffect(() => {
+    if (!formData.classId || !formData.schoolId) {
+      setSubjects([])
+      return
+    }
+
+    const loadSubjectsForClass = async () => {
+      try {
+        setError('')
+        console.log('🔄 Fetching subjects for class:', formData.classId)
+        
+        // Use CanonicalSubjectService to get subjects filtered by class level
+        const applicableSubjects = await CanonicalSubjectService.getSubjectsForClass(
+          formData.classId,
+          formData.schoolId
+        )
+        
+        console.log('✅ Subjects fetched with level filtering:', applicableSubjects.length)
+        setSubjects(applicableSubjects)
+      } catch (err: any) {
+        console.error('❌ Error loading subjects:', err)
+        setError(`Failed to load subjects: ${err.message}`)
+      }
+    }
+
+    loadSubjectsForClass()
+  }, [formData.classId, formData.schoolId])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target

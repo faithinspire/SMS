@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase-client'
 import { StudentService } from '@/services/student.service'
+import { CanonicalSubjectService } from '@/services/canonical-subject.service'
 
 interface EditStudentModalProps {
   studentId: string
@@ -96,16 +97,7 @@ export default function EditStudentModal({
         setSelectedSubjects(new Set(studentSubjects.map(s => s.subject_id)))
       }
 
-      // Load available subjects and classes
-      const { data: subjectsData } = await supabase
-        .from('subjects')
-        .select('id, name, code, applicable_to_levels')
-        .eq('school_id', schoolId)
-        .order('name')
-
-      setSubjects(subjectsData || [])
-
-      // Step 3: Load class_arm_combos
+      // Load available classes
       const { data: combosData } = await supabase
         .from('class_arm_combos')
         .select('id, class_id, arm_id')
@@ -141,6 +133,13 @@ export default function EditStudentModal({
           if (currentClass) {
             setClassType(currentClass.classes?.type as 'PRIMARY' | 'SECONDARY')
             setClassLevel(currentClass.classes?.level)
+            
+            // ✅ Load subjects using CanonicalSubjectService filtered by class level
+            const levelSubjects = await CanonicalSubjectService.getSubjectsForLevel(
+              schoolId,
+              currentClass.classes?.level
+            )
+            setSubjects(levelSubjects)
           }
         }
       }
