@@ -238,7 +238,7 @@ export default function SchoolAdminDashboard() {
           message: broadcastMessage,
           recipient_role: broadcastRecipientRole,
           sender_id: user.id,
-          sender_name: user.full_name,
+          sender_name: user.full_name || user.email || 'System Admin',
         }),
       })
 

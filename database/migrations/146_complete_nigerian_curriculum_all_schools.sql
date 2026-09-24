@@ -208,7 +208,7 @@ BEGIN
   RAISE NOTICE '========== STEP 2: Linking canonical subjects to all schools ==========';
   
   -- Iterate through every school
-  FOR v_school_id IN SELECT DISTINCT school_id FROM schools
+  FOR v_school_id IN SELECT id FROM schools
   LOOP
     v_school_count := v_school_count + 1;
     RAISE NOTICE 'Processing school %: %', v_school_count, v_school_id;
