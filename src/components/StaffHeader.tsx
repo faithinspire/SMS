@@ -34,9 +34,14 @@ export default function StaffHeader({ staffName, schoolName, staffPhoto, section
 
   useEffect(() => {
     loadUserAndNotifications()
-    const interval = setInterval(loadUserAndNotifications, 30000)
+    // Only poll if component is mounted and not already loading
+    const interval = setInterval(() => {
+      if (!loading) {
+        loadUserAndNotifications()
+      }
+    }, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [loading])
 
   const loadUserAndNotifications = async () => {
     try {

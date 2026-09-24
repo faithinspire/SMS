@@ -88,64 +88,69 @@ export default function SchoolAdminDashboard() {
         return
       }
 
-      // Load school details
-      if (currentUser.school_id) {
-        try {
-          console.log('🔄 Loading school...')
-          const schoolData = await SchoolService.getSchoolById(currentUser.school_id)
-          console.log('✅ School loaded:', schoolData?.name)
-          setSchool(schoolData)
-        } catch (schoolErr: any) {
-          console.error('❌ Error loading school:', schoolErr.message)
-          setError(`Failed to load school: ${schoolErr.message}`)
-        }
+      // Load all data in parallel, then batch state updates
+      const [schoolData, staffList, studentList, transactionsResult] = await Promise.allSettled([
+        currentUser.school_id ? SchoolService.getSchoolById(currentUser.school_id) : Promise.reject('No school ID'),
+        currentUser.school_id ? UserRegistrationService.getSchoolStaff(currentUser.school_id) : Promise.resolve([]),
+        currentUser.school_id ? UserRegistrationService.getSchoolStudents(currentUser.school_id) : Promise.resolve([]),
+        supabase
+          .from('transactions')
+          .select('*')
+          .eq('school_id', currentUser.school_id)
+          .order('created_at', { ascending: false })
+          .limit(200)
+      ])
 
-        // Load staff and students
-        try {
-          console.log('🔄 Loading staff...')
-          const staffList = await UserRegistrationService.getSchoolStaff(currentUser.school_id)
-          console.log('✅ Staff loaded:', staffList.length)
-          setStaffMembers(staffList)
-        } catch (staffErr: any) {
-          console.error('❌ Error loading staff:', staffErr)
-        }
+      // Handle school data
+      if (schoolData.status === 'fulfilled') {
+        console.log('✅ School loaded:', schoolData.value?.name)
+        setSchool(schoolData.value)
+      } else {
+        console.error('❌ Error loading school:', schoolData.reason?.message)
+        setError(`Failed to load school: ${schoolData.reason?.message || 'Unknown error'}`)
+      }
 
-        try {
-          console.log('🔄 Loading students...')
-          const studentList = await UserRegistrationService.getSchoolStudents(currentUser.school_id)
-          console.log('✅ Students loaded:', studentList.length)
-          setStudents(studentList)
-        } catch (studentErr: any) {
-          console.error('❌ Error loading students:', studentErr)
-        }
+      // Handle staff data
+      if (staffList.status === 'fulfilled') {
+        console.log('✅ Staff loaded:', staffList.value?.length || 0)
+        setStaffMembers(staffList.value || [])
+      } else {
+        console.error('❌ Error loading staff:', staffList.reason)
+        setStaffMembers([])
+      }
 
-        // Load transactions
-        try {
-          console.log('🔄 Loading transactions...')
-          const { data: transactionsData, error } = await supabase
-            .from('transactions')
-            .select('*')
-            .eq('school_id', currentUser.school_id)
-            .order('created_at', { ascending: false })
-            .limit(200)
-          
-          if (error) {
-            // If table doesn't exist yet, just log it and continue
-            if (error.code === 'PGRST205' || error.message?.includes('could not find the table')) {
-              console.warn('⚠️  Transactions table not created yet. Please execute migration 031_create_transactions_table.sql')
-              setTransactions([])
-            } else {
-              throw error
-            }
+      // Handle students data
+      if (studentList.status === 'fulfilled') {
+        console.log('✅ Students loaded:', studentList.value?.length || 0)
+        setStudents(studentList.value || [])
+      } else {
+        console.error('❌ Error loading students:', studentList.reason)
+        setStudents([])
+      }
+
+      // Handle transactions data
+      if (transactionsResult.status === 'fulfilled') {
+        const { data: transactionsData, error: txError } = transactionsResult.value
+        if (txError) {
+          if (txError.code === 'PGRST205' || txError.message?.includes('could not find the table')) {
+            console.warn('⚠️ Transactions table not created yet')
+            setTransactions([])
           } else {
-            console.log('✅ Transactions loaded:', transactionsData?.length || 0)
-            setTransactions(transactionsData || [])
+            console.error('❌ Error loading transactions:', txError)
+            setTransactions([])
           }
-        } catch (transErr: any) {
-          console.error('❌ Error loading transactions:', transErr)
-          // Don't crash the page - just show empty transactions
-          setTransactions([])
+        } else {
+          console.log('✅ Transactions loaded:', transactionsData?.length || 0)
+          setTransactions(transactionsData || [])
         }
+      } else {
+        console.error('❌ Error loading transactions:', transactionsResult.reason)
+        setTransactions([])
+      }
+
+      // Auto-clear success messages after 3 seconds if applicable
+      if (error.includes('✅')) {
+        setTimeout(() => setError(''), 3000)
       }
     } catch (err: any) {
       console.error('❌ Dashboard load error:', err)
