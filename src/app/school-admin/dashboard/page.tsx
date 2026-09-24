@@ -22,7 +22,7 @@ export default function SchoolAdminDashboard() {
   const [school, setSchool] = useState<any>(null)
   const [darkMode, setDarkMode] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'staff' | 'students' | 'transactions' | 'broadcast' | 'settings'>('staff')
   const [staffMembers, setStaffMembers] = useState([])
   const [students, setStudents] = useState([])
@@ -189,12 +189,13 @@ export default function SchoolAdminDashboard() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        setError(`Error: ${errorData.error || 'Failed to delete'}`)
+        setError(`❌ Error: ${typeof errorData.error === 'string' ? errorData.error : 'Failed to delete'}`)
         return
       }
 
       const result = await response.json()
-      setError(result.message || `${type} deleted successfully`)
+      const successMessage = typeof result.message === 'string' ? result.message : `${type} deleted successfully`
+      setError(`✅ ${successMessage}`)
 
       // Reload data based on type
       if (type === 'STAFF') {
@@ -352,10 +353,10 @@ export default function SchoolAdminDashboard() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 pb-24">
         {/* Error Message */}
-        {error && (
+        {error && typeof error === 'string' && (
           <div
             className={`mb-6 p-4 rounded-lg border ${
-              error.includes('successfully')
+              error.includes('successfully') || error.includes('✅')
                 ? 'bg-green-100/20 text-green-400 border-green-500/30'
                 : 'bg-red-100/20 text-red-400 border-red-500/30'
             }`}
