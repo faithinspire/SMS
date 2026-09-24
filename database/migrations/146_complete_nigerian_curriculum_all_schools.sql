@@ -206,15 +206,21 @@ BEGIN
     
     FOR v_subject_record IN SELECT * FROM canonical_subjects
     LOOP
-      INSERT INTO subjects (school_id, name, code, applicable_to_levels, is_active, department, subject_type)
-      VALUES (v_school_id, v_subject_record.name, v_subject_record.code, v_subject_record.levels, TRUE, v_subject_record.department, v_subject_record.subject_type)
-      ON CONFLICT (school_id, name) DO NOTHING;
-      
-      v_inserted_count := v_inserted_count + 1;
+      -- Check if subject already exists for this school
+      IF NOT EXISTS (
+        SELECT 1 FROM subjects 
+        WHERE school_id = v_school_id 
+        AND code = v_subject_record.code
+      ) THEN
+        INSERT INTO subjects (school_id, name, code, applicable_to_levels, is_active, department, subject_type)
+        VALUES (v_school_id, v_subject_record.name, v_subject_record.code, v_subject_record.levels, TRUE, v_subject_record.department, v_subject_record.subject_type);
+        
+        v_inserted_count := v_inserted_count + 1;
+      END IF;
     END LOOP;
   END LOOP;
   
-  RAISE NOTICE '✅ STEP 2: Processed % schools, attempted % insertions', v_school_count, v_inserted_count;
+  RAISE NOTICE '✅ STEP 2: Processed % schools, inserted % new subjects', v_school_count, v_inserted_count;
 END $$;
 
 -- ============================================================================
