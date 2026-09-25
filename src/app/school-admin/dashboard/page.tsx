@@ -748,13 +748,15 @@ export default function SchoolAdminDashboard() {
       )}
 
       {/* Generate Letter Modal */}
-      <GenerateLetterModal
-        type={letterModal.type}
-        recipientData={letterModal.recipientData}
-        schoolData={school}
-        isOpen={letterModal.isOpen}
-        onClose={() => setLetterModal({ isOpen: false, type: 'EMPLOYMENT', recipientData: null })}
-      />
+      {letterModal.isOpen && letterModal.recipientData ? (
+        <GenerateLetterModal
+          type={letterModal.type}
+          recipientData={letterModal.recipientData}
+          schoolData={school}
+          isOpen={letterModal.isOpen}
+          onClose={() => setLetterModal({ isOpen: false, type: 'EMPLOYMENT', recipientData: null })}
+        />
+      ) : null}
 
       {/* Admission Letter Modal */}
       {letterModal.type === 'ADMISSION' && letterModal.recipientData && (
