@@ -1,12 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
-// Use service role key (has full access, bypasses RLS)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
-
 export async function POST(request: Request) {
   try {
     const { school_id } = await request.json()
@@ -14,6 +8,20 @@ export async function POST(request: Request) {
     if (!school_id) {
       return NextResponse.json({ error: 'School ID required' }, { status: 400 })
     }
+
+    // Create Supabase client at RUNTIME (not build time)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('[API] Missing Supabase credentials')
+      return NextResponse.json(
+        { error: 'Server configuration error', details: 'Missing Supabase credentials' },
+        { status: 500 }
+      )
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
     console.log('[API] Dashboard data request for school:', school_id)
 
