@@ -66,76 +66,28 @@ export default function SchoolAdminDashboard() {
       console.log('[Dashboard] School data:', schoolData)
       setState(s => ({ ...s, school: schoolData }))
 
-      // DEBUG: Check what's in the database
-      console.log(`[Dashboard] ===== FETCHING DATA FOR SCHOOL_ID: ${currentUser.school_id} =====`)
+      // FETCH: Call backend API (bypasses RLS)
+      console.log('[Dashboard] Calling backend API for staff/students...')
+      const apiResponse = await fetch('/api/admin/dashboard-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ school_id: currentUser.school_id }),
+      })
 
-      // FORCE FETCH: Get ALL staff from users table
-      console.log('[Dashboard] Query 1: Fetching ALL users table records for this school...')
-      const { data: allUsers, error: allUsersError } = await supabase
-        .from('users')
-        .select('id, full_name, email, role, school_id, status')
-        .eq('school_id', currentUser.school_id)
-      
-      console.log('[Dashboard] ALL users in school:', { count: allUsers?.length, records: allUsers })
+      if (!apiResponse.ok) {
+        const error = await apiResponse.json()
+        throw new Error(error.details || error.error || 'Failed to fetch data')
+      }
 
-      // FORCE FETCH: Get staff with role filter
-      console.log('[Dashboard] Query 2: Fetching staff (TEACHER, PRINCIPAL, etc)...')
-      const { data: allStaff, error: staffError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('school_id', currentUser.school_id)
-        .in('role', ['TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'HEAD_TEACHER', 'STAFF'])
-        .order('created_at', { ascending: false })
-      
-      console.log('[Dashboard] Staff fetch:', { count: allStaff?.length, error: staffError?.message, records: allStaff })
-
-      // FORCE FETCH: Get students table
-      console.log('[Dashboard] Query 3: Fetching students table...')
-      const { data: allStudentsRaw, error: studentsRawError } = await supabase
-        .from('students')
-        .select('*')
-        .eq('school_id', currentUser.school_id)
-      
-      console.log('[Dashboard] Students table (raw):', { count: allStudentsRaw?.length, error: studentsRawError?.message, records: allStudentsRaw })
-
-      // FORCE FETCH: Get students with user join
-      console.log('[Dashboard] Query 4: Fetching students with user data...')
-      const { data: allStudents, error: studentsError } = await supabase
-        .from('students')
-        .select('id, user_id, admission_number, class_arm_combo_id, department, users(id, email, full_name, photo_url, status)')
-        .eq('school_id', currentUser.school_id)
-        .order('created_at', { ascending: false })
-
-      console.log('[Dashboard] Students with join:', { count: allStudents?.length, error: studentsError?.message, records: allStudents })
-
-      // Map students data
-      const studentsList = (allStudents || [])
-        .map((student: any) => {
-          const userData = Array.isArray(student.users) ? student.users[0] : student.users
-          return {
-            id: student.id,
-            user_id: student.user_id,
-            email: userData?.email || 'N/A',
-            full_name: userData?.full_name || 'Unknown',
-            photo_url: userData?.photo_url,
-            admission_number: student.admission_number,
-            class_arm_combo_id: student.class_arm_combo_id,
-            department: student.department,
-            status: userData?.status,
-          }
-        })
-        .filter(s => s.id)
-
-      console.log('[Dashboard] ===== FINAL RESULT =====')
-      console.log('[Dashboard] Staff count:', allStaff?.length || 0)
-      console.log('[Dashboard] Students count:', studentsList?.length || 0)
+      const { staff, students, staffCount, studentCount } = await apiResponse.json()
+      console.log('[Dashboard] API Response:', { staffCount, studentCount })
 
       setState(s => ({
         ...s,
-        staffMembers: allStaff || [],
-        students: studentsList || [],
+        staffMembers: staff || [],
+        students: students || [],
         loading: false,
-        error: allStaff?.length === 0 && studentsList?.length === 0 ? '⚠️ No staff or students found - check browser console logs' : '',
+        error: staffCount === 0 && studentCount === 0 ? '⚠️ No staff or students found' : '',
       }))
     } catch (err: any) {
       console.error('[Dashboard] FATAL ERROR:', err)
