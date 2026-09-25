@@ -469,13 +469,13 @@ export class UserRegistrationService {
   }
 
   /**
-   * Get all students for a school (with student record ID) - OPTIMIZED with JOIN
+   * Get all students for a school (with student record ID) - OPTIMIZED
    */
   static async getSchoolStudents(schoolId: string): Promise<any[]> {
     try {
       console.time('[getSchoolStudents]')
       
-      // Single query with join - much faster than N+1 queries
+      // Get students with their user data
       const { data: students, error: studentsError } = await supabase
         .from('students')
         .select(`
@@ -484,13 +484,7 @@ export class UserRegistrationService {
           admission_number,
           class_arm_combo_id,
           department,
-          users!inner (
-            id,
-            email,
-            full_name,
-            photo_url,
-            status
-          )
+          users:user_id(id, email, full_name, photo_url, status)
         `)
         .eq('school_id', schoolId)
         .eq('users.status', 'ACTIVE')
@@ -504,18 +498,23 @@ export class UserRegistrationService {
         return []
       }
 
-      // Map to response format
-      return (students || []).map((student: any) => ({
-        id: student.id,
-        user_id: student.user_id,
-        email: student.users?.email,
-        full_name: student.users?.full_name,
-        photo_url: student.users?.photo_url,
-        admission_number: student.admission_number,
-        class_arm_combo_id: student.class_arm_combo_id,
-        department: student.department,
-        status: student.users?.status,
-      }))
+      // Safely map with null checks
+      return (students || [])
+        .map((student: any) => {
+          const userData = Array.isArray(student.users) ? student.users[0] : student.users
+          return {
+            id: student.id,
+            user_id: student.user_id,
+            email: userData?.email,
+            full_name: userData?.full_name,
+            photo_url: userData?.photo_url,
+            admission_number: student.admission_number,
+            class_arm_combo_id: student.class_arm_combo_id,
+            department: student.department,
+            status: userData?.status,
+          }
+        })
+        .filter(s => s.full_name && s.id) // Only include complete records
     } catch (error: any) {
       console.error('[getSchoolStudents] Error:', error)
       return []
