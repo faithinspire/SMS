@@ -448,6 +448,8 @@ export class UserRegistrationService {
    */
   static async getSchoolStaff(schoolId: string): Promise<any[]> {
     try {
+      console.time('[getSchoolStaff]')
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -456,20 +458,24 @@ export class UserRegistrationService {
         .eq('status', 'ACTIVE')
         .order('created_at', { ascending: false })
 
+      console.timeEnd('[getSchoolStaff]')
+
       if (error) throw error
       return data || []
     } catch (error: any) {
-      console.error('Get staff error:', error)
+      console.error('[getSchoolStaff] Error:', error)
       return []
     }
   }
 
   /**
-   * Get all students for a school (with student record ID)
+   * Get all students for a school (with student record ID) - OPTIMIZED with JOIN
    */
   static async getSchoolStudents(schoolId: string): Promise<any[]> {
     try {
-      // First get all students
+      console.time('[getSchoolStudents]')
+      
+      // Single query with join - much faster than N+1 queries
       const { data: students, error: studentsError } = await supabase
         .from('students')
         .select(`
@@ -477,10 +483,20 @@ export class UserRegistrationService {
           user_id,
           admission_number,
           class_arm_combo_id,
-          department
+          department,
+          users!inner (
+            id,
+            email,
+            full_name,
+            photo_url,
+            status
+          )
         `)
         .eq('school_id', schoolId)
-        .order('id', { ascending: true })
+        .eq('users.status', 'ACTIVE')
+        .order('full_name', { ascending: true })
+
+      console.timeEnd('[getSchoolStudents]')
 
       if (studentsError) throw studentsError
 
@@ -488,45 +504,20 @@ export class UserRegistrationService {
         return []
       }
 
-      // Then get corresponding user data
-      const userIds = students.map(s => s.user_id)
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select(`
-          id,
-          email,
-          full_name,
-          photo_url,
-          status
-        `)
-        .in('id', userIds)
-        .eq('status', 'ACTIVE')
-
-      if (usersError) throw usersError
-
-      // Create a map of users for fast lookup
-      const userMap = new Map((users || []).map(u => [u.id, u]))
-
-      // Combine student and user data
-      return (students || [])
-        .map((student: any) => {
-          const user = userMap.get(student.user_id)
-          return {
-            id: student.id,  // ← Student record ID (for admission letter)
-            user_id: student.user_id,
-            email: user?.email,
-            full_name: user?.full_name,
-            photo_url: user?.photo_url,
-            admission_number: student.admission_number,
-            class_arm_combo_id: student.class_arm_combo_id,
-            department: student.department,
-            status: user?.status,
-          }
-        })
-        .filter(s => s.status === 'ACTIVE')  // Only active users
-        .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
+      // Map to response format
+      return (students || []).map((student: any) => ({
+        id: student.id,
+        user_id: student.user_id,
+        email: student.users?.email,
+        full_name: student.users?.full_name,
+        photo_url: student.users?.photo_url,
+        admission_number: student.admission_number,
+        class_arm_combo_id: student.class_arm_combo_id,
+        department: student.department,
+        status: student.users?.status,
+      }))
     } catch (error: any) {
-      console.error('Get students error:', error)
+      console.error('[getSchoolStudents] Error:', error)
       return []
     }
   }

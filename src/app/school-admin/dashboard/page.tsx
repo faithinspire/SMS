@@ -146,12 +146,26 @@ export default function SchoolAdminDashboard() {
         }
       }
 
-      // Load staff and students
-      const staffList = await UserRegistrationService.getSchoolStaff(currentUser.school_id)
-      setStaffMembers(staffList)
-
-      const studentList = await UserRegistrationService.getSchoolStudents(currentUser.school_id)
-      setStudents(studentList)
+      // Load staff and students with timeout protection
+      try {
+        const staffPromise = UserRegistrationService.getSchoolStaff(currentUser.school_id)
+        const studentPromise = UserRegistrationService.getSchoolStudents(currentUser.school_id)
+        
+        const [staffList, studentList] = await Promise.race([
+          Promise.all([staffPromise, studentPromise]),
+          new Promise<any[]>((_, reject) => 
+            setTimeout(() => reject(new Error('Staff/Student loading timeout - proceeding with empty list')), 15000)
+          )
+        ])
+        
+        setStaffMembers(staffList || [])
+        setStudents(studentList || [])
+      } catch (loadErr: any) {
+        console.warn('[Dashboard] Staff/Student load warning:', loadErr.message)
+        // Set empty arrays if loading fails
+        setStaffMembers([])
+        setStudents([])
+      }
 
       // Load transactions
       try {
