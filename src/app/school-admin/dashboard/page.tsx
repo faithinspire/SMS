@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase-client'
 import { User } from '@/types'
 import dynamic from 'next/dynamic'
 
-// Dynamically import components to avoid top-level import issues
+// Dynamically import components
 const StaffHeader = dynamic(() => import('@/components/StaffHeader'), { ssr: false })
 const TeacherRegistrationModal = dynamic(() => import('@/components/admin/TeacherRegistrationModal').then(mod => ({ default: mod.TeacherRegistrationModal })), { ssr: false })
 const StudentRegistrationModal = dynamic(() => import('@/components/admin/StudentRegistrationModal').then(mod => ({ default: mod.StudentRegistrationModal })), { ssr: false })
@@ -19,183 +19,197 @@ const EditStudentModal = dynamic(() => import('@/components/admin/EditStudentMod
 const AdmissionLetterModal = dynamic(() => import('@/components/admin/AdmissionLetterModal'), { ssr: false })
 const GenerateLetterModal = dynamic(() => import('@/components/admin/GenerateLetterModal'), { ssr: false })
 
+interface ClassWithStudents {
+  id: string
+  class_name: string
+  arm_name: string
+  student_count: number
+  students: any[]
+}
+
+interface Session {
+  id: string
+  session_year: string
+  is_active: boolean
+}
+
+interface Term {
+  id: string
+  session_id: string
+  term_name: string
+  term_number: number
+  is_active: boolean
+}
+
 export default function SchoolAdminDashboard() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [school, setSchool] = useState<any>(null)
-  const [darkMode, setDarkMode] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'staff' | 'students' | 'transactions' | 'broadcast' | 'settings'>('staff')
+  const [activeTab, setActiveTab] = useState<'overview' | 'staff' | 'students' | 'results' | 'transactions' | 'broadcast'>('overview')
+
+  // Staff & Student Management
   const [staffMembers, setStaffMembers] = useState([])
   const [students, setStudents] = useState([])
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null)
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null)
+  const [showTeacherModal, setShowTeacherModal] = useState(false)
+  const [showStudentModal, setShowStudentModal] = useState(false)
+  const [showStaffModal, setShowStaffModal] = useState(false)
+  const [letterModal, setLetterModal] = useState<{ isOpen: boolean; type: 'EMPLOYMENT' | 'ADMISSION'; recipientData: any }>({ isOpen: false, type: 'EMPLOYMENT', recipientData: null })
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; type: 'STAFF' | 'STUDENT'; id: string; name: string }>({ isOpen: false, type: 'STAFF', id: '', name: '' })
+
+  // Results Management
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [terms, setTerms] = useState<Term[]>([])
+  const [selectedSession, setSelectedSession] = useState<string | null>(null)
+  const [selectedTerm, setSelectedTerm] = useState<string | null>(null)
+  const [classes, setClasses] = useState<ClassWithStudents[]>([])
+  const [selectedClass, setSelectedClass] = useState<string | null>(null)
+  const [selectedClassData, setSelectedClassData] = useState<ClassWithStudents | null>(null)
+  const [loadingClasses, setLoadingClasses] = useState(false)
+
+  // Transactions & Broadcasts
   const [transactions, setTransactions] = useState([])
   const [broadcastMessage, setBroadcastMessage] = useState('')
   const [broadcastRecipientRole, setBroadcastRecipientRole] = useState<'TEACHER' | 'PRINCIPAL' | 'HEAD_TEACHER' | 'ACCOUNTANT' | 'OTHER_STAFF' | 'ALL'>('ALL')
   const [sendingBroadcast, setSendingBroadcast] = useState(false)
-  const [showTeacherModal, setShowTeacherModal] = useState(false)
-  const [showStudentModal, setShowStudentModal] = useState(false)
-  const [showStaffModal, setShowStaffModal] = useState(false)
-  const [editingStaffId, setEditingStaffId] = useState<string | null>(null)
-  const [editingStudentId, setEditingStudentId] = useState<string | null>(null)
-  const [letterModal, setLetterModal] = useState<{
-    isOpen: boolean
-    type: 'EMPLOYMENT' | 'ADMISSION'
-    recipientData: any
-  }>({ isOpen: false, type: 'EMPLOYMENT', recipientData: null })
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteConfirmation, setDeleteConfirmation] = useState<{
-    isOpen: boolean
-    type: 'STAFF' | 'STUDENT'
-    id: string
-    name: string
-  }>({
-    isOpen: false,
-    type: 'STAFF',
-    id: '',
-    name: '',
-  })
 
+  // Initialize
   useEffect(() => {
-    const saved = localStorage.getItem('theme-mode')
-    if (saved === 'dark') setDarkMode(true)
-    loadDashboard()
+    loadInitialData()
   }, [])
 
+  // Load terms when session changes
   useEffect(() => {
-    localStorage.setItem('theme-mode', darkMode ? 'dark' : 'light')
-  }, [darkMode])
+    if (selectedSession) {
+      const sessionTerms = terms.filter((t) => t.session_id === selectedSession)
+      if (sessionTerms.length > 0) {
+        setSelectedTerm(sessionTerms[0].id)
+      }
+    }
+  }, [selectedSession])
 
-  const loadDashboard = async () => {
+  // Load classes when term changes
+  useEffect(() => {
+    if (selectedTerm && user?.school_id && activeTab === 'results') {
+      loadClassesForTerm(user.school_id, selectedTerm)
+    }
+  }, [selectedTerm, user?.school_id, activeTab])
+
+  // Auto-select first class
+  useEffect(() => {
+    if (classes.length > 0 && !selectedClass) {
+      setSelectedClass(classes[0].id)
+      setSelectedClassData(classes[0])
+    }
+  }, [classes])
+
+  const loadInitialData = async () => {
     try {
       setLoading(true)
       setError('')
-      const currentUser = await AuthService.getCurrentUser()
 
+      const currentUser = await AuthService.getCurrentUser()
       if (!currentUser || (currentUser.role !== 'SCHOOL_ADMIN' && currentUser.role !== 'ADMIN')) {
-        console.log('❌ User role:', currentUser?.role)
         router.push('/landing')
         return
       }
 
       setUser(currentUser)
-      console.log('✅ User authenticated:', currentUser.id)
-      console.log('📍 School ID:', currentUser.school_id)
 
-      if (!currentUser.school_id || currentUser.school_id.trim() === '') {
-        setError('❌ School ID not found for this user. Please contact your administrator.')
-        console.error('❌ User has no school_id assigned:', currentUser)
-        setLoading(false)
+      if (!currentUser.school_id) {
+        setError('School ID not found')
         return
       }
 
-      if (currentUser.school_id) {
-        try {
-          console.log('🔄 Loading school...')
-          const schoolData = await SchoolService.getSchoolById(currentUser.school_id)
-          console.log('✅ School loaded:', schoolData?.name)
-          setSchool(schoolData)
-        } catch (schoolErr: any) {
-          console.error('❌ Error loading school:', schoolErr.message)
-          setError(`Failed to load school: ${typeof schoolErr.message === 'string' ? schoolErr.message : 'Unknown error'}`)
-        }
+      // Load school info
+      const schoolData = await SchoolService.getSchoolById(currentUser.school_id)
+      setSchool(schoolData)
 
-        try {
-          console.log('🔄 Loading staff...')
-          const staffList = await UserRegistrationService.getSchoolStaff(currentUser.school_id)
-          console.log('✅ Staff loaded:', staffList.length)
-          setStaffMembers(staffList)
-        } catch (staffErr: any) {
-          console.error('❌ Error loading staff:', staffErr)
-        }
+      // Ensure school data exists
+      try {
+        await fetch(`/api/results/ensure-school-data?schoolId=${currentUser.school_id}`, { method: 'POST' })
+      } catch (err) {
+        console.warn('Could not ensure school data')
+      }
 
-        try {
-          console.log('🔄 Loading students...')
-          const studentList = await UserRegistrationService.getSchoolStudents(currentUser.school_id)
-          console.log('✅ Students loaded:', studentList.length)
-          setStudents(studentList)
-        } catch (studentErr: any) {
-          console.error('❌ Error loading students:', studentErr)
-        }
-
-        try {
-          console.log('🔄 Loading transactions...')
-          const { data: transactionsData, error } = await supabase
-            .from('transactions')
-            .select('*')
-            .eq('school_id', currentUser.school_id)
-            .order('created_at', { ascending: false })
-            .limit(200)
-          
-          if (error) {
-            if (error.code === 'PGRST205' || error.message?.includes('could not find the table')) {
-              console.warn('⚠️ Transactions table not created yet.')
-              setTransactions([])
-            } else {
-              throw error
-            }
-          } else {
-            console.log('✅ Transactions loaded:', transactionsData?.length || 0)
-            setTransactions(transactionsData || [])
-          }
-        } catch (transErr: any) {
-          console.error('❌ Error loading transactions:', transErr)
-          setTransactions([])
+      // Load sessions and terms
+      const response = await fetch(`/api/results/school-sessions-and-terms?schoolId=${currentUser.school_id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setSessions(data.sessions || [])
+        setTerms(data.terms || [])
+        if (data.sessions?.length > 0) {
+          setSelectedSession(data.sessions[0].id)
         }
       }
 
-      if (typeof error === 'string' && error.includes('✅')) {
-        setTimeout(() => setError(''), 3000)
+      // Load staff and students
+      const staffList = await UserRegistrationService.getSchoolStaff(currentUser.school_id)
+      setStaffMembers(staffList)
+
+      const studentList = await UserRegistrationService.getSchoolStudents(currentUser.school_id)
+      setStudents(studentList)
+
+      // Load transactions
+      try {
+        const { data: transactionsData } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('school_id', currentUser.school_id)
+          .order('created_at', { ascending: false })
+          .limit(200)
+        setTransactions(transactionsData || [])
+      } catch (err) {
+        console.warn('Could not load transactions')
+        setTransactions([])
       }
     } catch (err: any) {
-      console.error('❌ Dashboard load error:', err)
-      setError(typeof err.message === 'string' ? err.message : 'Failed to load dashboard')
+      setError(err.message || 'Failed to load dashboard')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleLogout = async () => {
+  const loadClassesForTerm = async (schoolId: string, termId: string) => {
     try {
-      await AuthService.logout()
-      router.push('/landing')
+      setLoadingClasses(true)
+      const response = await fetch(`/api/results/school-classes-and-students?schoolId=${schoolId}&termId=${termId}&t=${Date.now()}`)
+      if (response.ok) {
+        const data = await response.json()
+        setClasses(data.classes || [])
+        setSelectedClass(null)
+        setSelectedClassData(null)
+      }
     } catch (err) {
-      console.error('Logout error:', err)
+      console.error('Error loading classes:', err)
+      setClasses([])
+    } finally {
+      setLoadingClasses(false)
     }
   }
 
   const handleDelete = async (type: 'STAFF' | 'STUDENT', id: string) => {
     try {
-      setDeletingId(id)
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      
-      if (!token) {
-        setError('Authentication required for deletion');
-        return;
-      }
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) return
 
       const endpoint = type === 'STAFF' ? `/api/school-admin/staff/${id}/delete` : `/api/school-admin/students/${id}/delete`
-
       const response = await fetch(endpoint, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        setError(`❌ Error: ${typeof errorData.error === 'string' ? errorData.error : 'Failed to delete'}`)
+        setError(`Error: ${errorData.error}`)
         return
       }
 
-      const result = await response.json()
-      const successMessage = typeof result.message === 'string' ? result.message : `${type} deleted successfully`
-      setError(`✅ ${successMessage}`)
-
+      setError(`✅ ${type} deleted successfully`)
       if (type === 'STAFF') {
         const staffList = await UserRegistrationService.getSchoolStaff(user?.school_id || '')
         setStaffMembers(staffList)
@@ -203,31 +217,21 @@ export default function SchoolAdminDashboard() {
         const studentList = await UserRegistrationService.getSchoolStudents(user?.school_id || '')
         setStudents(studentList)
       }
-
       setDeleteConfirmation({ ...deleteConfirmation, isOpen: false })
+      setTimeout(() => setError(''), 3000)
     } catch (err: any) {
-      console.error('Delete error:', err)
       setError(`Error: ${err.message}`)
-    } finally {
-      setDeletingId(null)
     }
   }
 
   const handleSendBroadcast = async () => {
-    if (!user || !user.id || !user.school_id) {
-      setError('❌ User information not fully loaded. Please wait and try again.')
-      return
-    }
-
-    if (!broadcastMessage.trim()) {
-      setError('❌ Please enter a message')
+    if (!user || !user.id || !user.school_id || !broadcastMessage.trim()) {
+      setError('Missing required information')
       return
     }
 
     try {
       setSendingBroadcast(true)
-      setError('')
-
       const response = await fetch('/api/broadcasts/send-to-recipients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -236,105 +240,149 @@ export default function SchoolAdminDashboard() {
           message: broadcastMessage,
           recipient_role: broadcastRecipientRole,
           sender_id: user.id,
-          sender_name: user.full_name || user.email || 'System Admin',
+          sender_name: user.full_name || 'System Admin',
         }),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to send broadcast')
+        throw new Error(errorData.error || 'Failed to send')
       }
 
-      setError('✅ Broadcast message sent successfully!')
+      setError('✅ Broadcast sent successfully!')
       setBroadcastMessage('')
       setTimeout(() => setError(''), 3000)
     } catch (err: any) {
-      console.error('Broadcast error:', err)
-      setError(`❌ Error: ${err.message}`)
+      setError(`Error: ${err.message}`)
     } finally {
       setSendingBroadcast(false)
     }
   }
 
-  const bgClass = darkMode
-    ? 'from-slate-950 via-purple-900 to-slate-900'
-    : 'from-blue-50 via-purple-50 to-indigo-100'
-  const cardClass = darkMode
-    ? 'bg-slate-800/80 backdrop-blur border-slate-700/50'
-    : 'bg-white/90 backdrop-blur border-purple-200/50'
-  const textClass = darkMode ? 'text-white' : 'text-gray-900'
+  const getPerformanceColor = (rating: string) => {
+    switch (rating) {
+      case 'Excellent': return 'bg-green-100 text-green-800'
+      case 'Very Good': return 'bg-blue-100 text-blue-800'
+      case 'Good': return 'bg-cyan-100 text-cyan-800'
+      case 'Fair': return 'bg-yellow-100 text-yellow-800'
+      case 'Poor': return 'bg-orange-100 text-orange-800'
+      case 'Very Poor': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
 
   if (loading) {
     return (
-      <div className={`min-h-screen bg-gradient-to-br ${bgClass} flex items-center justify-center`}>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-500 border-t-pink-500 mx-auto mb-4"></div>
-          <p className={textClass}>Loading dashboard...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-purple-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-semibold">Loading dashboard...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${bgClass} transition-all duration-300`}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <Suspense fallback={null}>
         <StaffHeader
-          staffName={user?.full_name || 'School Admin'}
+          staffName={user?.full_name || 'School Administrator'}
           schoolName={school?.name || 'School'}
-          section="Administration Dashboard"
+          section="Administration Center"
         />
       </Suspense>
 
-      <div className={`${cardClass} border-b shadow-lg sticky top-16 z-30`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
-            {['staff', 'students', 'transactions', 'broadcast'].map((tab) => (
+      {/* Navigation Tabs */}
+      <div className="sticky top-16 z-30 bg-white shadow-md border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex gap-1 overflow-x-auto">
+            {[
+              { id: 'overview', label: '📊 Overview', icon: '📊' },
+              { id: 'staff', label: '👨‍🏫 Staff', icon: '👨‍🏫' },
+              { id: 'students', label: '👨‍🎓 Students', icon: '👨‍🎓' },
+              { id: 'results', label: '📈 Results', icon: '📈' },
+              { id: 'transactions', label: '💳 Transactions', icon: '💳' },
+              { id: 'broadcast', label: '📢 Broadcast', icon: '📢' },
+            ].map((tab) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
-                className={`px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-bold transition-all whitespace-nowrap text-sm sm:text-base flex-shrink-0 ${
-                  activeTab === tab
-                    ? `bg-gradient-to-r ${darkMode ? 'from-purple-500 to-pink-500' : 'from-blue-600 to-purple-600'} text-white shadow-lg`
-                    : `${cardClass} ${textClass} hover:shadow-lg`
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-4 py-3 font-semibold whitespace-nowrap border-b-4 transition-all ${
+                  activeTab === tab.id
+                    ? 'border-blue-600 text-blue-600 bg-blue-50'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
-                {tab === 'staff' && '👨‍🏫 Staff'}
-                {tab === 'students' && '👨‍🎓 Students'}
-                {tab === 'transactions' && '💳 Transactions'}
-                {tab === 'broadcast' && '📢 Broadcasts'}
+                {tab.label}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 pb-24">
-        {error && typeof error === 'string' && (
-          <div
-            className={`mb-6 p-4 rounded-lg border ${
-              error.includes('successfully') || error.includes('✅')
-                ? 'bg-green-100/20 text-green-400 border-green-500/30'
-                : 'bg-red-100/20 text-red-400 border-red-500/30'
-            }`}
-          >
+      {/* Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <div className={`mb-6 p-4 rounded-lg border ${error.includes('✅') ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
             {error}
           </div>
         )}
 
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="bg-white rounded-lg shadow-lg p-6 border-l-4 border-blue-600">
+              <p className="text-gray-600 text-sm font-semibold">Total Staff</p>
+              <p className="text-4xl font-bold text-blue-600 mt-2">{staffMembers.length}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-lg p-6 border-l-4 border-green-600">
+              <p className="text-gray-600 text-sm font-semibold">Total Students</p>
+              <p className="text-4xl font-bold text-green-600 mt-2">{students.length}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-lg p-6 border-l-4 border-purple-600">
+              <p className="text-gray-600 text-sm font-semibold">Transactions</p>
+              <p className="text-4xl font-bold text-purple-600 mt-2">{transactions.length}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-lg p-6 border-l-4 border-orange-600">
+              <p className="text-gray-600 text-sm font-semibold">School</p>
+              <p className="text-lg font-bold text-orange-600 mt-2 truncate">{school?.name || 'N/A'}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Staff Tab */}
         {activeTab === 'staff' && (
           <div>
-            <h2 className={`text-2xl font-bold mb-6 ${textClass}`}>Staff Management</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-gray-900">Staff Management</h2>
+              <div className="flex gap-3">
+                <button onClick={() => setShowTeacherModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold">
+                  + Register Teacher
+                </button>
+                <button onClick={() => setShowStaffModal(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold">
+                  + Register Staff
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {staffMembers.length === 0 ? (
-                <div className={`${cardClass} rounded-lg shadow-lg p-8 text-center col-span-full ${textClass}`}>
-                  <p>No staff members registered yet</p>
+                <div className="col-span-full bg-white rounded-lg shadow-lg p-8 text-center text-gray-600">
+                  <p className="text-lg">No staff members registered yet</p>
                 </div>
               ) : (
                 staffMembers.map((member: any) => (
-                  <div key={member.id} className={`${cardClass} border rounded-lg shadow-lg p-4`}>
-                    <h4 className={`text-lg font-bold ${textClass}`}>{member.full_name}</h4>
-                    <p className={`text-sm ${textClass} opacity-75`}>{member.role}</p>
-                    <p className="text-sm mt-2">{member.email}</p>
+                  <div key={member.id} className="bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow p-6">
+                    <h3 className="text-lg font-bold text-gray-900">{member.full_name}</h3>
+                    <p className="text-sm text-gray-600 mt-1">{member.role}</p>
+                    <p className="text-sm text-gray-600 mt-2">{member.email}</p>
+                    <div className="flex gap-2 mt-4">
+                      <button onClick={() => setEditingStaffId(member.id)} className="flex-1 px-3 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold">
+                        ✏️ Edit
+                      </button>
+                      <button onClick={() => setDeleteConfirmation({ isOpen: true, type: 'STAFF', id: member.id, name: member.full_name })} className="flex-1 px-3 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">
+                        🗑️ Delete
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -342,20 +390,34 @@ export default function SchoolAdminDashboard() {
           </div>
         )}
 
+        {/* Students Tab */}
         {activeTab === 'students' && (
           <div>
-            <h2 className={`text-2xl font-bold mb-6 ${textClass}`}>Students Management</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-gray-900">Students Management</h2>
+              <button onClick={() => setShowStudentModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold">
+                + Register Student
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {students.length === 0 ? (
-                <div className={`${cardClass} rounded-lg shadow-lg p-8 text-center col-span-full ${textClass}`}>
-                  <p>No students registered yet</p>
+                <div className="col-span-full bg-white rounded-lg shadow-lg p-8 text-center text-gray-600">
+                  <p className="text-lg">No students registered yet</p>
                 </div>
               ) : (
                 students.map((student: any) => (
-                  <div key={student.id} className={`${cardClass} border rounded-lg shadow-lg p-4`}>
-                    <h4 className={`text-lg font-bold ${textClass}`}>{student.full_name}</h4>
-                    <p className={`text-sm ${textClass} opacity-75`}>Admission #: {student.admission_number || 'N/A'}</p>
-                    <p className="text-sm mt-2">{student.email}</p>
+                  <div key={student.id} className="bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow p-6">
+                    <h3 className="text-lg font-bold text-gray-900">{student.full_name}</h3>
+                    <p className="text-sm text-gray-600 mt-1">Admission #: {student.admission_number || 'N/A'}</p>
+                    <p className="text-sm text-gray-600 mt-2">{student.email}</p>
+                    <div className="flex gap-2 mt-4">
+                      <button onClick={() => setEditingStudentId(student.id)} className="flex-1 px-3 py-2 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold">
+                        ✏️ Edit
+                      </button>
+                      <button onClick={() => setDeleteConfirmation({ isOpen: true, type: 'STUDENT', id: student.id, name: student.full_name })} className="flex-1 px-3 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">
+                        🗑️ Delete
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -363,83 +425,254 @@ export default function SchoolAdminDashboard() {
           </div>
         )}
 
-        {activeTab === 'transactions' && (
-          <div className={`${cardClass} border rounded-lg shadow-xl p-6`}>
-            <h2 className={`text-2xl font-bold mb-6 ${textClass}`}>Transactions</h2>
-            {transactions.length === 0 ? (
-              <p className={textClass}>No transactions recorded yet</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className={`border-b ${darkMode ? 'bg-slate-700/30' : 'bg-purple-50/50'}`}>
-                      <th className={`text-left py-2 px-2 font-semibold ${textClass}`}>Date</th>
-                      <th className={`text-left py-2 px-2 font-semibold ${textClass}`}>Recipient</th>
-                      <th className={`text-left py-2 px-2 font-semibold ${textClass}`}>Amount</th>
-                      <th className={`text-left py-2 px-2 font-semibold ${textClass}`}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transactions.map((t: any) => (
-                      <tr key={t.id} className={`border-b ${darkMode ? 'hover:bg-slate-700/20' : 'hover:bg-purple-50/30'}`}>
-                        <td className="py-2 px-2">{new Date(t.created_at).toLocaleDateString()}</td>
-                        <td className="py-2 px-2">{t.recipient_name}</td>
-                        <td className="py-2 px-2">₦{t.amount.toLocaleString()}</td>
-                        <td className="py-2 px-2">{t.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        {/* Results Tab - International Standard */}
+        {activeTab === 'results' && (
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">📊 Student Results & Performance Analysis</h2>
+
+            {/* Session and Term Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="bg-white rounded-lg shadow-lg p-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Session:</label>
+                <select
+                  value={selectedSession || ''}
+                  onChange={(e) => setSelectedSession(e.target.value)}
+                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                >
+                  <option value="">-- Select Session --</option>
+                  {sessions.map((session) => (
+                    <option key={session.id} value={session.id}>
+                      {session.session_year} {session.is_active ? '(Active)' : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
+
+              <div className="bg-white rounded-lg shadow-lg p-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Term:</label>
+                <select
+                  value={selectedTerm || ''}
+                  onChange={(e) => setSelectedTerm(e.target.value)}
+                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  disabled={!selectedSession}
+                >
+                  <option value="">-- Select Term --</option>
+                  {terms.filter((t) => t.session_id === selectedSession).map((term) => (
+                    <option key={term.id} value={term.id}>
+                      {term.term_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* Classes List */}
+              <div className="lg:col-span-1">
+                <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                  <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4">
+                    <h3 className="text-lg font-bold">Classes ({classes.length})</h3>
+                  </div>
+                  {loadingClasses ? (
+                    <div className="p-6 text-center text-gray-600">Loading...</div>
+                  ) : classes.length === 0 ? (
+                    <div className="p-6 text-center text-gray-600">No classes found</div>
+                  ) : (
+                    <div className="max-h-96 overflow-y-auto">
+                      <div className="divide-y">
+                        {classes.map((cls) => (
+                          <button
+                            key={cls.id}
+                            onClick={() => {
+                              setSelectedClass(cls.id)
+                              setSelectedClassData(cls)
+                            }}
+                            className={`w-full text-left p-4 hover:bg-blue-50 transition-colors border-l-4 ${
+                              selectedClass === cls.id ? 'border-blue-600 bg-blue-50' : 'border-gray-200'
+                            }`}
+                          >
+                            <h4 className="font-bold text-gray-900">{cls.class_name} {cls.arm_name}</h4>
+                            <p className="text-xs text-gray-600 mt-1">👥 {cls.student_count} students</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Results Display */}
+              <div className="lg:col-span-3">
+                {selectedClassData ? (
+                  <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4">
+                      <h3 className="text-2xl font-bold">{selectedClassData.class_name} {selectedClassData.arm_name}</h3>
+                      <p className="text-sm text-blue-100 mt-1">📊 {selectedClassData.student_count} Students</p>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-100 border-b">
+                          <tr>
+                            <th className="px-6 py-3 text-left font-bold text-gray-900">#</th>
+                            <th className="px-6 py-3 text-left font-bold text-gray-900">Student Name</th>
+                            <th className="px-6 py-3 text-left font-bold text-gray-900">Admission #</th>
+                            <th className="px-6 py-3 text-center font-bold text-gray-900">Overall Score</th>
+                            <th className="px-6 py-3 text-left font-bold text-gray-900">Performance</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {selectedClassData.students.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-6 py-8 text-center text-gray-600">
+                                No students in this class
+                              </td>
+                            </tr>
+                          ) : (
+                            selectedClassData.students.map((student, index) => (
+                              <tr key={student.id} className="hover:bg-gray-50 transition-colors">
+                                <td className="px-6 py-4 font-bold text-gray-900">{index + 1}</td>
+                                <td className="px-6 py-4 text-gray-900 font-medium">{student.full_name}</td>
+                                <td className="px-6 py-4 text-gray-600">{student.admission_number}</td>
+                                <td className="px-6 py-4 text-center">
+                                  <span className="font-bold text-lg text-gray-900">{student.overall_score || 'N/A'}</span>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPerformanceColor(student.performance_rating || '')}`}>
+                                    {student.performance_rating || 'Not Rated'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg shadow-lg p-8 text-center text-gray-600">
+                    <p className="text-lg">👈 Select a class to view student results</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
+        {/* Transactions Tab */}
+        {activeTab === 'transactions' && (
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-4">
+              <h2 className="text-2xl font-bold">Financial Transactions ({transactions.length})</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100 border-b">
+                  <tr>
+                    <th className="px-6 py-3 text-left font-bold text-gray-900">Date</th>
+                    <th className="px-6 py-3 text-left font-bold text-gray-900">Type</th>
+                    <th className="px-6 py-3 text-left font-bold text-gray-900">Recipient</th>
+                    <th className="px-6 py-3 text-left font-bold text-gray-900">Purpose</th>
+                    <th className="px-6 py-3 text-center font-bold text-gray-900">Amount</th>
+                    <th className="px-6 py-3 text-left font-bold text-gray-900">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {transactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-600">
+                        No transactions recorded yet
+                      </td>
+                    </tr>
+                  ) : (
+                    transactions.map((t: any) => (
+                      <tr key={t.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4">{new Date(t.created_at).toLocaleDateString()}</td>
+                        <td className="px-6 py-4">{t.type}</td>
+                        <td className="px-6 py-4 font-medium text-gray-900">{t.recipient_name}</td>
+                        <td className="px-6 py-4">{t.purpose}</td>
+                        <td className="px-6 py-4 text-center font-bold text-gray-900">₦{t.amount.toLocaleString()}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${t.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                            {t.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Broadcast Tab */}
         {activeTab === 'broadcast' && (
-          <div className={`${cardClass} border rounded-lg shadow-xl p-6`}>
-            <h2 className={`text-2xl font-bold mb-6 ${textClass}`}>Send Broadcast</h2>
-            <div className="space-y-4">
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${textClass}`}>Send To:</label>
-                <select
-                  value={broadcastRecipientRole}
-                  onChange={(e) => setBroadcastRecipientRole(e.target.value as any)}
-                  className={`w-full px-4 py-2 rounded-lg border-2 ${
-                    darkMode
-                      ? 'bg-slate-700 border-slate-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">📢 Send Broadcast Message</h2>
+            <div className="max-w-2xl">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Send To (Staff Role):</label>
+                  <select
+                    value={broadcastRecipientRole}
+                    onChange={(e) => setBroadcastRecipientRole(e.target.value as any)}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  >
+                    <option value="ALL">🌐 All Staff</option>
+                    <option value="TEACHER">👨‍🏫 Teachers</option>
+                    <option value="PRINCIPAL">🎓 Principal</option>
+                    <option value="HEAD_TEACHER">📚 Head Teacher</option>
+                    <option value="ACCOUNTANT">💰 Accountant</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Message:</label>
+                  <textarea
+                    value={broadcastMessage}
+                    onChange={(e) => setBroadcastMessage(e.target.value)}
+                    placeholder="Type your broadcast message here..."
+                    rows={6}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  />
+                  <p className="text-xs text-gray-600 mt-2">Characters: {broadcastMessage.length}</p>
+                </div>
+                <button
+                  onClick={handleSendBroadcast}
+                  disabled={sendingBroadcast || !broadcastMessage.trim()}
+                  className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-bold hover:from-blue-700 hover:to-blue-800 disabled:opacity-50"
                 >
-                  <option value="ALL">All Staff</option>
-                  <option value="TEACHER">Teachers</option>
-                  <option value="PRINCIPAL">Principal</option>
-                </select>
+                  {sendingBroadcast ? '⏳ Sending...' : '📤 Send Broadcast'}
+                </button>
               </div>
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${textClass}`}>Message:</label>
-                <textarea
-                  value={broadcastMessage}
-                  onChange={(e) => setBroadcastMessage(e.target.value)}
-                  placeholder="Type your message..."
-                  rows={5}
-                  className={`w-full px-4 py-2 rounded-lg border-2 ${
-                    darkMode
-                      ? 'bg-slate-700 border-slate-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                />
-              </div>
-              <button
-                onClick={handleSendBroadcast}
-                disabled={sendingBroadcast || !broadcastMessage.trim()}
-                className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-lg font-bold hover:from-blue-600 hover:to-cyan-700 disabled:opacity-50"
-              >
-                {sendingBroadcast ? 'Sending...' : 'Send Broadcast'}
-              </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmation.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Confirm Delete</h3>
+            <p className="text-gray-600 mb-6">Are you sure you want to delete {deleteConfirmation.name}?</p>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setDeleteConfirmation({ ...deleteConfirmation, isOpen: false })}
+                className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(deleteConfirmation.type, deleteConfirmation.id)}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
