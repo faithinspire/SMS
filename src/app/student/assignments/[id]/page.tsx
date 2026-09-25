@@ -106,7 +106,7 @@ export default function StudentAssignmentPage() {
 
       // Check for existing submission
       const { data: submissionData, error: submissionError } = await supabase
-        .from('assignment_submissions')
+        .from('student_assignment_submissions')
         .select('*')
         .eq('assignment_id', assignmentId)
         .eq('student_id', studentId)
@@ -188,7 +188,7 @@ export default function StudentAssignmentPage() {
       if (submission) {
         // Update existing submission
         const { error: updateError } = await supabase
-          .from('assignment_submissions')
+          .from('student_assignment_submissions')
           .update({
             file_path: filePath,
             submitted_at: new Date().toISOString(),
@@ -203,7 +203,7 @@ export default function StudentAssignmentPage() {
       } else {
         // Create new submission
         const { error: insertError } = await supabase
-          .from('assignment_submissions')
+          .from('student_assignment_submissions')
           .insert([
             {
               assignment_id: assignmentId,

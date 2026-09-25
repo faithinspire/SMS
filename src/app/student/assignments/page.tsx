@@ -204,7 +204,7 @@ export default function StudentAssignmentsPage() {
 
       // Get student's submission for this assignment
       const { data: submissionData } = await supabase
-        .from('assignment_submissions')
+        .from('student_assignment_submissions')
         .select(`
           id, submitted_at, marks_awarded, feedback, file_name, submission_status
         `)
@@ -274,7 +274,7 @@ export default function StudentAssignmentsPage() {
 
       // Check if student already has a submission
       const { data: existingSubmission } = await supabase
-        .from('assignment_submissions')
+        .from('student_assignment_submissions')
         .select('id')
         .eq('assignment_id', selectedAssignment.id)
         .eq('student_id', studentId)
@@ -283,7 +283,7 @@ export default function StudentAssignmentsPage() {
       if (existingSubmission) {
         // Update existing submission
         const { error: updateError } = await supabase
-          .from('assignment_submissions')
+          .from('student_assignment_submissions')
           .update({
             file_path: bucketPath,
             file_name: file.name,
@@ -299,7 +299,7 @@ export default function StudentAssignmentsPage() {
       } else {
         // Create new submission
         const { error: insertError } = await supabase
-          .from('assignment_submissions')
+          .from('student_assignment_submissions')
           .insert([
             {
               assignment_id: selectedAssignment.id,
