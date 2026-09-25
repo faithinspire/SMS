@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     
     let recipientIds: string[] = []
 
-    if (recipientRole) {
+    if (recipientRole && recipientRole !== 'ALL') {
       // Get users with specific role in this school
       console.log(`[Broadcasts/Recipients] Filtering by role: ${recipientRole}`)
       
@@ -149,11 +149,11 @@ export async function POST(request: NextRequest) {
         console.log(`[Broadcasts/Recipients] ✅ STEP 2: Found ${recipientIds.length} recipients with role ${roleFilter}`)
       }
     } else {
-      // Get all users in school
-      console.log('[Broadcasts/Recipients] No role filter - getting all users in school')
+      // Get all users in school (NO status filter - send to everyone including inactive)
+      console.log('[Broadcasts/Recipients] No role filter - getting ALL users in school')
       const { data: users, error: usersError } = await supabase
         .from('users')
-        .select('id')
+        .select('id, full_name, email, role')
         .eq('school_id', schoolId)
 
       if (usersError) {
@@ -165,8 +165,9 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      console.log('[Broadcasts/Recipients] 📋 Users to broadcast to:', users?.map(u => `${u.full_name} (${u.role})`) || [])
       recipientIds = (users || []).map(u => u.id)
-      console.log('[Broadcasts/Recipients] ✅ STEP 2: Found', recipientIds.length, 'recipients (all users)')
+      console.log('[Broadcasts/Recipients] ✅ STEP 2: Found', recipientIds.length, 'total recipients (all users in school)')
     }
 
     if (recipientIds.length === 0) {

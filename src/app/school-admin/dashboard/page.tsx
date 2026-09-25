@@ -63,17 +63,53 @@ export default function SchoolAdminDashboard() {
       const schoolData = await SchoolService.getSchoolById(currentUser.school_id)
       setState(s => ({ ...s, school: schoolData }))
 
-      // Load staff and students
-      const staffList = await UserRegistrationService.getSchoolStaff(currentUser.school_id)
-      const studentList = await UserRegistrationService.getSchoolStudents(currentUser.school_id)
+      // FORCE FETCH: Get staff - NO status filter to get all staff
+      console.log('[Dashboard] Fetching staff for school:', currentUser.school_id)
+      const { data: allStaff, error: staffError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('school_id', currentUser.school_id)
+        .in('role', ['TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'HEAD_TEACHER', 'STAFF'])
+        .order('created_at', { ascending: false })
+      
+      console.log('[Dashboard] Staff fetch result:', { count: allStaff?.length, error: staffError?.message })
+
+      // FORCE FETCH: Get students - direct query
+      console.log('[Dashboard] Fetching students for school:', currentUser.school_id)
+      const { data: allStudents, error: studentsError } = await supabase
+        .from('students')
+        .select('id, user_id, admission_number, class_arm_combo_id, department, users(id, email, full_name, photo_url, status)')
+        .eq('school_id', currentUser.school_id)
+        .order('created_at', { ascending: false })
+
+      console.log('[Dashboard] Students fetch result:', { count: allStudents?.length, error: studentsError?.message })
+
+      // Map students data
+      const studentsList = (allStudents || [])
+        .map((student: any) => {
+          const userData = Array.isArray(student.users) ? student.users[0] : student.users
+          return {
+            id: student.id,
+            user_id: student.user_id,
+            email: userData?.email || 'N/A',
+            full_name: userData?.full_name || 'Unknown',
+            photo_url: userData?.photo_url,
+            admission_number: student.admission_number,
+            class_arm_combo_id: student.class_arm_combo_id,
+            department: student.department,
+            status: userData?.status,
+          }
+        })
+        .filter(s => s.id) // Only include records with IDs
 
       setState(s => ({
         ...s,
-        staffMembers: staffList || [],
-        students: studentList || [],
+        staffMembers: allStaff || [],
+        students: studentsList || [],
         loading: false,
       }))
     } catch (err: any) {
+      console.error('[Dashboard] Load error:', err)
       setState(s => ({ ...s, error: err.message || 'Failed to load', loading: false }))
     }
   }
@@ -84,7 +120,7 @@ export default function SchoolAdminDashboard() {
       return
     }
 
-    setState(s => ({ ...s, sendingBroadcast: true }))
+    setState(s => ({ ...s, sendingBroadcast: true, error: '' }))
     try {
       const response = await fetch('/api/broadcasts/send-to-recipients', {
         method: 'POST',
@@ -92,24 +128,31 @@ export default function SchoolAdminDashboard() {
         body: JSON.stringify({
           school_id: state.user.school_id,
           message: state.broadcastMessage,
-          recipient_role: 'ALL',
+          recipient_role: null,  // null = send to ALL users in school
           sender_id: state.user.id,
           sender_name: state.user.full_name || 'Admin',
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to send')
+      const result = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send broadcast')
+      }
+
+      console.log('[Broadcast] Success:', result)
 
       setState(s => ({
         ...s,
         broadcastMessage: '',
-        error: '✅ Broadcast sent!',
+        error: `✅ Broadcast sent to ${result.recipients_count} recipient(s)!`,
         sendingBroadcast: false,
       }))
 
-      setTimeout(() => setState(s => ({ ...s, error: '' })), 3000)
+      setTimeout(() => setState(s => ({ ...s, error: '' })), 4000)
     } catch (err: any) {
-      setState(s => ({ ...s, error: err.message, sendingBroadcast: false }))
+      console.error('[Broadcast] Error:', err)
+      setState(s => ({ ...s, error: `❌ ${err.message}`, sendingBroadcast: false }))
     }
   }
 
