@@ -47,6 +47,8 @@ export default function SchoolAdminDashboard() {
   const loadDashboardData = async () => {
     try {
       const currentUser = await AuthService.getCurrentUser()
+      console.log('[Dashboard] Current user:', { id: currentUser?.id, role: currentUser?.role, school_id: currentUser?.school_id })
+      
       if (!currentUser || (currentUser.role !== 'SCHOOL_ADMIN' && currentUser.role !== 'ADMIN')) {
         router.push('/landing')
         return
@@ -55,16 +57,29 @@ export default function SchoolAdminDashboard() {
       setState(s => ({ ...s, user: currentUser }))
 
       if (!currentUser.school_id) {
-        setState(s => ({ ...s, error: 'School ID not found', loading: false }))
+        setState(s => ({ ...s, error: '❌ School ID not found - contact support', loading: false }))
         return
       }
 
       // Load school
       const schoolData = await SchoolService.getSchoolById(currentUser.school_id)
+      console.log('[Dashboard] School data:', schoolData)
       setState(s => ({ ...s, school: schoolData }))
 
-      // FORCE FETCH: Get staff - NO status filter to get all staff
-      console.log('[Dashboard] Fetching staff for school:', currentUser.school_id)
+      // DEBUG: Check what's in the database
+      console.log(`[Dashboard] ===== FETCHING DATA FOR SCHOOL_ID: ${currentUser.school_id} =====`)
+
+      // FORCE FETCH: Get ALL staff from users table
+      console.log('[Dashboard] Query 1: Fetching ALL users table records for this school...')
+      const { data: allUsers, error: allUsersError } = await supabase
+        .from('users')
+        .select('id, full_name, email, role, school_id, status')
+        .eq('school_id', currentUser.school_id)
+      
+      console.log('[Dashboard] ALL users in school:', { count: allUsers?.length, records: allUsers })
+
+      // FORCE FETCH: Get staff with role filter
+      console.log('[Dashboard] Query 2: Fetching staff (TEACHER, PRINCIPAL, etc)...')
       const { data: allStaff, error: staffError } = await supabase
         .from('users')
         .select('*')
@@ -72,17 +87,26 @@ export default function SchoolAdminDashboard() {
         .in('role', ['TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'HEAD_TEACHER', 'STAFF'])
         .order('created_at', { ascending: false })
       
-      console.log('[Dashboard] Staff fetch result:', { count: allStaff?.length, error: staffError?.message })
+      console.log('[Dashboard] Staff fetch:', { count: allStaff?.length, error: staffError?.message, records: allStaff })
 
-      // FORCE FETCH: Get students - direct query
-      console.log('[Dashboard] Fetching students for school:', currentUser.school_id)
+      // FORCE FETCH: Get students table
+      console.log('[Dashboard] Query 3: Fetching students table...')
+      const { data: allStudentsRaw, error: studentsRawError } = await supabase
+        .from('students')
+        .select('*')
+        .eq('school_id', currentUser.school_id)
+      
+      console.log('[Dashboard] Students table (raw):', { count: allStudentsRaw?.length, error: studentsRawError?.message, records: allStudentsRaw })
+
+      // FORCE FETCH: Get students with user join
+      console.log('[Dashboard] Query 4: Fetching students with user data...')
       const { data: allStudents, error: studentsError } = await supabase
         .from('students')
         .select('id, user_id, admission_number, class_arm_combo_id, department, users(id, email, full_name, photo_url, status)')
         .eq('school_id', currentUser.school_id)
         .order('created_at', { ascending: false })
 
-      console.log('[Dashboard] Students fetch result:', { count: allStudents?.length, error: studentsError?.message })
+      console.log('[Dashboard] Students with join:', { count: allStudents?.length, error: studentsError?.message, records: allStudents })
 
       // Map students data
       const studentsList = (allStudents || [])
@@ -100,17 +124,22 @@ export default function SchoolAdminDashboard() {
             status: userData?.status,
           }
         })
-        .filter(s => s.id) // Only include records with IDs
+        .filter(s => s.id)
+
+      console.log('[Dashboard] ===== FINAL RESULT =====')
+      console.log('[Dashboard] Staff count:', allStaff?.length || 0)
+      console.log('[Dashboard] Students count:', studentsList?.length || 0)
 
       setState(s => ({
         ...s,
         staffMembers: allStaff || [],
         students: studentsList || [],
         loading: false,
+        error: allStaff?.length === 0 && studentsList?.length === 0 ? '⚠️ No staff or students found - check browser console logs' : '',
       }))
     } catch (err: any) {
-      console.error('[Dashboard] Load error:', err)
-      setState(s => ({ ...s, error: err.message || 'Failed to load', loading: false }))
+      console.error('[Dashboard] FATAL ERROR:', err)
+      setState(s => ({ ...s, error: `❌ ${err.message}`, loading: false }))
     }
   }
 
