@@ -7,8 +7,8 @@ import { CanonicalSubjectService } from '@/services/canonical-subject.service'
 
 interface EditStaffModalProps {
   staffId: string
-  schoolId: string
-  isOpen: boolean
+  schoolId?: string
+  isOpen?: boolean
   onClose: () => void
   onSuccess: () => void
 }
@@ -16,7 +16,7 @@ interface EditStaffModalProps {
 export default function EditStaffModal({
   staffId,
   schoolId,
-  isOpen,
+  isOpen = true,
   onClose,
   onSuccess,
 }: EditStaffModalProps) {
@@ -47,6 +47,8 @@ export default function EditStaffModal({
       loadStaffData()
     }
   }, [isOpen, staffId])
+  
+  if (!isOpen || !staffId) return null
 
   const loadStaffData = async () => {
     try {

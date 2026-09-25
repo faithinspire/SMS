@@ -715,10 +715,12 @@ export default function SchoolAdminDashboard() {
         }}
       />
 
-      {/* Edit Modals */}
-      {editingStaffId && (
+      {/* Edit Modals - Only render if IDs are set */}
+      {editingStaffId && user?.school_id && (
         <EditStaffModal
           staffId={editingStaffId}
+          schoolId={user.school_id}
+          isOpen={!!editingStaffId}
           onClose={() => setEditingStaffId(null)}
           onSuccess={() => {
             setEditingStaffId(null)
