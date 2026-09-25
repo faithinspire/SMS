@@ -11,8 +11,8 @@ import dynamic from 'next/dynamic'
 
 // Dynamically import components
 const StaffHeader = dynamic(() => import('@/components/StaffHeader'), { ssr: false })
-const TeacherRegistrationModal = dynamic(() => import('@/components/admin/TeacherRegistrationModal').then(mod => ({ default: mod.TeacherRegistrationModal })), { ssr: false })
-const StudentRegistrationModal = dynamic(() => import('@/components/admin/StudentRegistrationModal').then(mod => ({ default: mod.StudentRegistrationModal })), { ssr: false })
+const TeacherRegistrationModal = dynamic(() => import('@/components/admin/TeacherRegistrationModal').then(m => ({ default: m.TeacherRegistrationModal })), { ssr: false })
+const StudentRegistrationModal = dynamic(() => import('@/components/admin/StudentRegistrationModal').then(m => ({ default: m.StudentRegistrationModal })), { ssr: false })
 const StaffRegistrationModal = dynamic(() => import('@/components/admin/StaffRegistrationModal'), { ssr: false })
 const EditStaffModal = dynamic(() => import('@/components/admin/EditStaffModal'), { ssr: false })
 const EditStudentModal = dynamic(() => import('@/components/admin/EditStudentModal'), { ssr: false })
@@ -740,22 +740,16 @@ export default function SchoolAdminDashboard() {
         />
       )}
 
-      {/* Letter Modals */}
-      {letterModal.isOpen && (
-        <AdmissionLetterModal
+      {/* Letter Modals - Only render GenerateLetterModal */}
+      {letterModal.isOpen && letterModal.recipientData && (
+        <GenerateLetterModal
           isOpen={letterModal.isOpen}
           onClose={() => setLetterModal({ ...letterModal, isOpen: false })}
           recipientData={letterModal.recipientData}
-          letterType={letterModal.type}
+          type={letterModal.type}
+          schoolData={school}
         />
       )}
-
-      <GenerateLetterModal
-        isOpen={letterModal.isOpen}
-        onClose={() => setLetterModal({ ...letterModal, isOpen: false })}
-        recipientData={letterModal.recipientData}
-        letterType={letterModal.type}
-      />
     </div>
   )
 }

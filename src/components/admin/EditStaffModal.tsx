@@ -20,6 +20,9 @@ export default function EditStaffModal({
   onClose,
   onSuccess,
 }: EditStaffModalProps) {
+  // Early return BEFORE any hooks
+  if (!isOpen || !staffId) return null
+  
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -47,8 +50,6 @@ export default function EditStaffModal({
       loadStaffData()
     }
   }, [isOpen, staffId])
-  
-  if (!isOpen || !staffId) return null
 
   const loadStaffData = async () => {
     try {

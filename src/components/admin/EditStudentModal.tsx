@@ -27,6 +27,9 @@ export default function EditStudentModal({
   onClose,
   onSuccess,
 }: EditStudentModalProps) {
+  // Early return BEFORE any hooks
+  if (!isOpen || !studentId) return null
+  
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
