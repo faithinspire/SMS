@@ -73,7 +73,7 @@ export default function SchoolAdminDashboard() {
   // Transactions & Broadcasts
   const [transactions, setTransactions] = useState([])
   const [broadcastMessage, setBroadcastMessage] = useState('')
-  const [broadcastRecipientRole, setBroadcastRecipientRole] = useState<'TEACHER' | 'PRINCIPAL' | 'HEAD_TEACHER' | 'ACCOUNTANT' | 'OTHER_STAFF' | 'ALL'>('ALL')
+  const [broadcastRecipientRole, setBroadcastRecipientRole] = useState<'TEACHER' | 'STUDENT' | 'PRINCIPAL' | 'HEAD_TEACHER' | 'ACCOUNTANT' | 'STAFF' | 'ALL'>('ALL')
   const [sendingBroadcast, setSendingBroadcast] = useState(false)
 
   // Initialize
@@ -293,9 +293,9 @@ export default function SchoolAdminDashboard() {
       </Suspense>
 
       {/* Navigation Tabs */}
-      <div className="sticky top-16 z-30 bg-white shadow-md border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-1 overflow-x-auto">
+      <div className="sticky top-16 z-30 bg-white shadow-md border-b border-gray-200 overflow-x-auto">
+        <div className="min-w-max md:max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
+          <div className="flex gap-1">
             {[
               { id: 'overview', label: '📊 Overview', icon: '📊' },
               { id: 'staff', label: '👨‍🏫 Staff', icon: '👨‍🏫' },
@@ -307,7 +307,7 @@ export default function SchoolAdminDashboard() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-4 py-3 font-semibold whitespace-nowrap border-b-4 transition-all ${
+                className={`px-2 sm:px-4 py-3 font-semibold text-xs sm:text-sm md:text-base whitespace-nowrap border-b-4 transition-all ${
                   activeTab === tab.id
                     ? 'border-blue-600 text-blue-600 bg-blue-50'
                     : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -353,13 +353,13 @@ export default function SchoolAdminDashboard() {
         {/* Staff Tab */}
         {activeTab === 'staff' && (
           <div>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <h2 className="text-3xl font-bold text-gray-900">Staff Management</h2>
-              <div className="flex gap-3">
-                <button onClick={() => setShowTeacherModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <button onClick={() => setShowTeacherModal(true)} className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-sm sm:text-base">
                   + Register Teacher
                 </button>
-                <button onClick={() => setShowStaffModal(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold">
+                <button onClick={() => setShowStaffModal(true)} className="w-full sm:w-auto px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold text-sm sm:text-base">
                   + Register Staff
                 </button>
               </div>
@@ -393,9 +393,9 @@ export default function SchoolAdminDashboard() {
         {/* Students Tab */}
         {activeTab === 'students' && (
           <div>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <h2 className="text-3xl font-bold text-gray-900">Students Management</h2>
-              <button onClick={() => setShowStudentModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold">
+              <button onClick={() => setShowStudentModal(true)} className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-sm sm:text-base">
                 + Register Student
               </button>
             </div>
@@ -619,11 +619,13 @@ export default function SchoolAdminDashboard() {
                     onChange={(e) => setBroadcastRecipientRole(e.target.value as any)}
                     className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
                   >
-                    <option value="ALL">🌐 All Staff</option>
-                    <option value="TEACHER">👨‍🏫 Teachers</option>
+                    <option value="ALL">🌐 All School Users (Staff & Students)</option>
+                    <option value="TEACHER">👨‍🏫 Teachers Only</option>
+                    <option value="STUDENT">👨‍🎓 Students Only</option>
                     <option value="PRINCIPAL">🎓 Principal</option>
                     <option value="HEAD_TEACHER">📚 Head Teacher</option>
                     <option value="ACCOUNTANT">💰 Accountant</option>
+                    <option value="STAFF">👔 Other Staff</option>
                   </select>
                 </div>
                 <div>
@@ -673,6 +675,74 @@ export default function SchoolAdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Registration Modals */}
+      <TeacherRegistrationModal
+        isOpen={showTeacherModal}
+        onClose={() => setShowTeacherModal(false)}
+        schoolId={user?.school_id || ''}
+        onSuccess={() => {
+          loadInitialData()
+        }}
+      />
+
+      <StaffRegistrationModal
+        isOpen={showStaffModal}
+        onClose={() => setShowStaffModal(false)}
+        schoolId={user?.school_id || ''}
+        onSuccess={() => {
+          loadInitialData()
+        }}
+      />
+
+      <StudentRegistrationModal
+        isOpen={showStudentModal}
+        onClose={() => setShowStudentModal(false)}
+        schoolId={user?.school_id || ''}
+        onSuccess={() => {
+          loadInitialData()
+        }}
+      />
+
+      {/* Edit Modals */}
+      {editingStaffId && (
+        <EditStaffModal
+          staffId={editingStaffId}
+          onClose={() => setEditingStaffId(null)}
+          onSuccess={() => {
+            setEditingStaffId(null)
+            loadInitialData()
+          }}
+        />
+      )}
+
+      {editingStudentId && (
+        <EditStudentModal
+          studentId={editingStudentId}
+          onClose={() => setEditingStudentId(null)}
+          onSuccess={() => {
+            setEditingStudentId(null)
+            loadInitialData()
+          }}
+        />
+      )}
+
+      {/* Letter Modals */}
+      {letterModal.isOpen && (
+        <AdmissionLetterModal
+          isOpen={letterModal.isOpen}
+          onClose={() => setLetterModal({ ...letterModal, isOpen: false })}
+          recipientData={letterModal.recipientData}
+          letterType={letterModal.type}
+        />
+      )}
+
+      <GenerateLetterModal
+        isOpen={letterModal.isOpen}
+        onClose={() => setLetterModal({ ...letterModal, isOpen: false })}
+        recipientData={letterModal.recipientData}
+        letterType={letterModal.type}
+      />
     </div>
   )
 }

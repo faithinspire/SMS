@@ -106,23 +106,48 @@ export async function POST(request: NextRequest) {
     if (recipientRole) {
       // Get users with specific role in this school
       console.log(`[Broadcasts/Recipients] Filtering by role: ${recipientRole}`)
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('school_id', schoolId)
-        .eq('role', recipientRole)
+      
+      // Handle special roles
+      let roleFilter = recipientRole
+      
+      // If role is STUDENT, query students table and get their user_ids
+      if (recipientRole === 'STUDENT') {
+        console.log('[Broadcasts/Recipients] Special handling for STUDENT role - querying students table')
+        const { data: studentUsers, error: studentError } = await supabase
+          .from('students')
+          .select('user_id')
+          .eq('school_id', schoolId)
 
-      if (usersError) {
-        console.error('[Broadcasts/Recipients] ❌ STEP 2 failed - Role-based user query error')
-        console.error('  Error:', usersError.message)
-        return NextResponse.json(
-          { error: 'Failed to fetch users by role', details: usersError.message },
-          { status: 500 }
-        )
+        if (studentError) {
+          console.error('[Broadcasts/Recipients] ❌ Error fetching students:', studentError)
+          return NextResponse.json(
+            { error: 'Failed to fetch students', details: studentError.message },
+            { status: 500 }
+          )
+        }
+
+        recipientIds = (studentUsers || []).map(s => s.user_id).filter(Boolean)
+        console.log(`[Broadcasts/Recipients] ✅ Found ${recipientIds.length} students`)
+      } else {
+        // Regular role filtering
+        const { data: users, error: usersError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('school_id', schoolId)
+          .eq('role', roleFilter)
+
+        if (usersError) {
+          console.error('[Broadcasts/Recipients] ❌ STEP 2 failed - Role-based user query error')
+          console.error('  Error:', usersError.message)
+          return NextResponse.json(
+            { error: 'Failed to fetch users by role', details: usersError.message },
+            { status: 500 }
+          )
+        }
+
+        recipientIds = (users || []).map(u => u.id)
+        console.log(`[Broadcasts/Recipients] ✅ STEP 2: Found ${recipientIds.length} recipients with role ${roleFilter}`)
       }
-
-      recipientIds = (users || []).map(u => u.id)
-      console.log(`[Broadcasts/Recipients] ✅ STEP 2: Found ${recipientIds.length} recipients with role ${recipientRole}`)
     } else {
       // Get all users in school
       console.log('[Broadcasts/Recipients] No role filter - getting all users in school')
