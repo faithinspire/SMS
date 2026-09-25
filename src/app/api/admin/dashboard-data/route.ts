@@ -13,10 +13,26 @@ export async function POST(request: Request) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('[API] Missing Supabase credentials')
+    console.log('[API] Environment check:', {
+      urlExists: !!supabaseUrl,
+      urlLength: supabaseUrl?.length,
+      keyExists: !!supabaseKey,
+      keyLength: supabaseKey?.length,
+    })
+
+    if (!supabaseUrl) {
+      console.error('[API] NEXT_PUBLIC_SUPABASE_URL is missing')
       return NextResponse.json(
-        { error: 'Server configuration error', details: 'Missing Supabase credentials' },
+        { error: 'Missing NEXT_PUBLIC_SUPABASE_URL' },
+        { status: 500 }
+      )
+    }
+
+    if (!supabaseKey) {
+      console.error('[API] SUPABASE_SERVICE_ROLE_KEY is missing')
+      console.error('[API] Available env vars:', Object.keys(process.env).filter(k => k.includes('SUPABASE') || k.includes('supabase')))
+      return NextResponse.json(
+        { error: 'Missing SUPABASE_SERVICE_ROLE_KEY - check Vercel environment variables' },
         { status: 500 }
       )
     }
