@@ -59,121 +59,121 @@ export default function BroadcastInbox({
   const loadBroadcasts = async () => {
     try {
       setLoading(true)
-      
-      // Query broadcasts with proper recipient filtering
-      const { data, error } = await supabase
-        .from('broadcasts')
+
+      console.log('[BroadcastInbox] Loading broadcasts for user:', userId)
+
+      // CORRECT PATTERN: Query broadcast_recipients for this user first,
+      // then join to broadcasts (not the other way around)
+      const { data: recipientRecords, error: recipientError } = await supabase
+        .from('broadcast_recipients')
         .select(`
           id,
-          message,
-          sender_id,
-          created_at,
-          broadcast_recipients(id, user_id, is_read)
-        `)
-        .eq('school_id', schoolId)
-        .eq('broadcast_recipients.user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(50)
-
-      if (error) {
-        console.error('Error loading broadcasts:', error)
-        // Fallback: try without recipient filter for backward compatibility
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('broadcasts')
-          .select(`
+          is_read,
+          read_at,
+          broadcasts (
             id,
             message,
             sender_id,
-            created_at
-          `)
-          .eq('school_id', schoolId)
-          .order('created_at', { ascending: false })
-          .limit(50)
-
-        if (!fallbackError && fallbackData) {
-          setBroadcasts(
-            fallbackData.map((b: any) => ({
-              id: b.id,
-              title: 'Broadcast Message',
-              message: b.message,
-              created_by: b.sender_id,
-              created_at: b.created_at,
-              sender_name: 'Administrator',
-              is_read: false,
-            }))
+            created_at,
+            school_id
           )
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (recipientError) {
+        console.error('[BroadcastInbox] Error loading recipient records:', recipientError)
+        setLoading(false)
+        return
+      }
+
+      if (!recipientRecords || recipientRecords.length === 0) {
+        console.log('[BroadcastInbox] No broadcasts for user')
+        setBroadcasts([])
+        if (onUnreadCountChange) {
+          onUnreadCountChange(0)
         }
         setLoading(false)
         return
       }
 
-      // Map broadcasts with read status from broadcast_recipients
-      const userBroadcasts = (data || [])
-        .map((b: any) => {
-          const recipientRecord = b.broadcast_recipients?.[0]
-          return {
-            id: b.id,
-            title: 'Broadcast Message',
-            message: b.message,
-            created_by: b.sender_id,
-            created_at: b.created_at,
-            sender_name: 'Administrator',
-            is_read: recipientRecord?.is_read || false,
-          }
-        })
+      // Map recipient records to broadcast format
+      const broadcasts = (recipientRecords || [])
+        .filter((rec: any) => rec.broadcasts && rec.broadcasts.school_id === schoolId) // Ensure correct school
+        .map((rec: any) => ({
+          id: rec.broadcasts.id,
+          title: 'Broadcast Message',
+          message: rec.broadcasts.message,
+          created_by: rec.broadcasts.sender_id,
+          created_at: rec.broadcasts.created_at,
+          sender_name: 'Administrator',
+          is_read: rec.is_read || false,
+          recipient_id: rec.id, // For marking as read
+        }))
 
-      setBroadcasts(userBroadcasts)
+      console.log('[BroadcastInbox] Loaded', broadcasts.length, 'broadcasts')
+      setBroadcasts(broadcasts)
 
       // Update unread count
-      const unread = userBroadcasts.filter(b => !b.is_read).length
+      const unread = broadcasts.filter((b: any) => !b.is_read).length
       if (onUnreadCountChange) {
         onUnreadCountChange(unread)
       }
     } catch (error) {
-      console.error('Failed to load broadcasts:', error)
+      console.error('[BroadcastInbox] Exception loading broadcasts:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const markAsRead = async (broadcastId: string) => {
+  const markAsRead = async (broadcast: any) => {
     try {
-      // Find the recipient record
-      const { data: recipients, error: fetchError } = await supabase
-        .from('broadcast_recipients')
-        .select('id')
-        .eq('broadcast_id', broadcastId)
-        .eq('user_id', userId)
-        .single()
-
-      if (fetchError) {
-        console.error('Error fetching recipient:', fetchError)
+      if (!broadcast.recipient_id) {
+        console.error('[BroadcastInbox] No recipient_id for broadcast')
         return
       }
 
-      // Update read status
+      console.log('[BroadcastInbox] Marking broadcast as read:', broadcast.recipient_id)
+
+      // Update the broadcast_recipients record directly using recipient_id
       const { error: updateError } = await supabase
         .from('broadcast_recipients')
-        .update({ is_read: true })
-        .eq('id', recipients.id)
+        .update({
+          is_read: true,
+          read_at: new Date().toISOString(),
+        })
+        .eq('id', broadcast.recipient_id)
 
       if (updateError) {
-        console.error('Error marking as read:', updateError)
+        console.error('[BroadcastInbox] Error marking as read:', updateError)
         return
       }
 
-      // Reload broadcasts
-      await loadBroadcasts()
+      console.log('[BroadcastInbox] Successfully marked as read')
+
+      // Update local state
+      setBroadcasts(
+        broadcasts.map((b: any) =>
+          b.id === broadcast.id ? { ...b, is_read: true } : b
+        )
+      )
+
+      // Update unread count
+      const unread = broadcasts.filter((b: any) => !b.is_read).length - 1
+      if (onUnreadCountChange) {
+        onUnreadCountChange(Math.max(0, unread))
+      }
     } catch (error) {
-      console.error('Failed to mark as read:', error)
+      console.error('[BroadcastInbox] Exception marking as read:', error)
     }
   }
 
-  const openBroadcast = (broadcast: Broadcast) => {
+  const openBroadcast = (broadcast: any) => {
     setSelectedBroadcast(broadcast)
     setShowModal(true)
     if (!broadcast.is_read) {
-      markAsRead(broadcast.id)
+      markAsRead(broadcast)
     }
   }
 
