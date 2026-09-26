@@ -239,6 +239,43 @@ const StaffPage: React.FC = () => {
     }
   };
 
+  // Generate Appointment Letter
+  const generateAppointmentLetter = async (member: StaffMember) => {
+    try {
+      const response = await fetch('/api/school-admin/staff/appointment-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staffId: member.id,
+          staffName: member.user.full_name,
+          position: member.position || 'Staff',
+          schoolName: 'School Name',
+          duties: 'As per job description and assignment',
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to generate letter');
+
+      const { letter, filename } = await response.json();
+
+      // Download the letter
+      const blob = new Blob([letter], { type: 'text/html' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success('Appointment letter generated and downloaded!');
+    } catch (error) {
+      console.error('Error generating letter:', error);
+      toast.error('Failed to generate appointment letter');
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-2xl font-bold mb-6">Staff Management</h2>
@@ -320,6 +357,13 @@ const StaffPage: React.FC = () => {
                   </td>
                   <td className="py-3 px-4 text-center">
                     <div className="flex gap-2 justify-center flex-wrap">
+                      <button
+                        onClick={() => generateAppointmentLetter(member)}
+                        className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                        title="Generate Appointment Letter"
+                      >
+                        📄 Letter
+                      </button>
                       {member.status === 'ACTIVE' ? (
                         <button
                           onClick={() => setModal({ type: 'pause', staff: member })}

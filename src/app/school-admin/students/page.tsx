@@ -288,6 +288,44 @@ const StudentsPage: React.FC = () => {
     }
   };
 
+  // Generate Admission Letter
+  const generateAdmissionLetter = async (student: Student) => {
+    try {
+      const response = await fetch('/api/school-admin/students/admission-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: student.id,
+          studentName: student.user.full_name,
+          admissionNumber: student.admission_number,
+          className: student.class_arm_combo?.class?.name || 'Class',
+          schoolName: 'School Name',
+          parentName: 'Parent/Guardian',
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to generate letter');
+
+      const { letter, filename } = await response.json();
+
+      // Download the letter
+      const blob = new Blob([letter], { type: 'text/html' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success('Admission letter generated and downloaded!');
+    } catch (error) {
+      console.error('Error generating letter:', error);
+      toast.error('Failed to generate admission letter');
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-2xl font-bold mb-6">Students Management</h2>
@@ -394,6 +432,13 @@ const StudentsPage: React.FC = () => {
                           Activate
                         </button>
                       ) : null}
+                      <button
+                        onClick={() => generateAdmissionLetter(student)}
+                        className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                        title="Generate Admission Letter"
+                      >
+                        📄 Letter
+                      </button>
                       <button
                         onClick={() => setModal({ type: 'delete', student })}
                         className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
