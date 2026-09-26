@@ -23,28 +23,28 @@ export default function SchoolAdminBottomNav() {
   ]
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
-      <div className="max-w-7xl mx-auto px-0">
-        <nav className="flex overflow-x-auto">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-300 shadow-2xl z-50">
+      <div className="w-full px-0">
+        <div className="flex overflow-x-auto">
           {navItems.map((item) => {
             const active = isActive(item.path)
             return (
               <Link
                 key={item.path}
                 href={item.path}
-                className={`flex-1 min-w-max md:min-w-0 px-3 md:px-6 py-3 text-center font-semibold text-xs md:text-sm border-b-4 transition-all whitespace-nowrap ${
+                className={`flex-1 min-w-max md:min-w-0 px-2 md:px-6 py-4 text-center font-bold text-xs md:text-sm border-b-4 transition-all duration-200 whitespace-nowrap ${
                   active
                     ? 'border-blue-600 text-blue-600 bg-blue-50'
-                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    : 'border-transparent text-gray-700 hover:text-blue-600 hover:bg-gray-100'
                 }`}
               >
-                <span className="hidden md:inline">{item.label}</span>
-                <span className="md:hidden">{item.icon}</span>
+                <span className="block md:hidden text-lg">{item.icon}</span>
+                <span className="hidden md:block">{item.label}</span>
               </Link>
             )
           })}
-        </nav>
+        </div>
       </div>
-    </div>
+    </nav>
   )
 }
