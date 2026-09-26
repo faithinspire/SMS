@@ -56,10 +56,10 @@ export async function POST(request: Request) {
 
     console.log('[API] Staff count:', staffData?.length || 0)
 
-    // STEP 2: Get all students
+    // STEP 2: Get all students - WITHOUT the join, get just student data first
     const { data: studentData, error: studentError } = await supabase
       .from('students')
-      .select('id, user_id, admission_number, class_arm_combo_id, department, users(id, email, full_name, photo_url, status)')
+      .select('id, user_id, admission_number, class_arm_combo_id, department, school_id')
       .eq('school_id', school_id)
       .order('created_at', { ascending: false })
 
@@ -68,10 +68,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch students', details: studentError.message }, { status: 500 })
     }
 
-    // Map students
+    console.log('[API] Students base count:', studentData?.length || 0)
+
+    // Get user data for these students separately
+    const userIds = (studentData || []).map(s => s.user_id).filter(Boolean)
+    
+    let studentUsers: any[] = []
+    if (userIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, email, full_name, photo_url, status')
+        .in('id', userIds)
+
+      if (usersError) {
+        console.error('[API] Users lookup error:', usersError)
+        // Continue anyway - return students without user data
+        studentUsers = []
+      } else {
+        studentUsers = users || []
+      }
+    }
+
+    console.log('[API] Associated users found:', studentUsers?.length || 0)
+
+    // Map students with user data
     const students = (studentData || [])
       .map((student: any) => {
-        const userData = Array.isArray(student.users) ? student.users[0] : student.users
+        const userData = studentUsers.find(u => u.id === student.user_id)
         return {
           id: student.id,
           user_id: student.user_id,
@@ -86,7 +109,7 @@ export async function POST(request: Request) {
       })
       .filter(s => s.id)
 
-    console.log('[API] Students count:', students?.length || 0)
+    console.log('[API] Final students count:', students?.length || 0)
 
     return NextResponse.json({
       success: true,
