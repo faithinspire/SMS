@@ -13,11 +13,14 @@ interface DashboardState {
   school: any
   loading: boolean
   error: string
-  activeTab: 'overview' | 'staff' | 'students' | 'results' | 'transactions' | 'broadcast'
+  activeTab: 'overview' | 'staff' | 'students' | 'results' | 'transactions' | 'broadcast' | 'fees' | 'academic'
   staffMembers: any[]
   students: any[]
   results: any[]
   transactions: any[]
+  sessions: any[]
+  terms: any[]
+  classes: any[]
   broadcastMessage: string
   sendingBroadcast: boolean
 }
@@ -35,6 +38,9 @@ export default function SchoolAdminDashboard() {
     students: [],
     results: [],
     transactions: [],
+    sessions: [],
+    terms: [],
+    classes: [],
     broadcastMessage: '',
     sendingBroadcast: false,
   })
@@ -82,12 +88,34 @@ export default function SchoolAdminDashboard() {
       const { staff, students, staffCount, studentCount, results, transactions } = await apiResponse.json()
       console.log('[Dashboard] API Response:', { staffCount, studentCount, results: results?.length, transactions: transactions?.length })
 
+      // Load academic data
+      const { data: sessionsData } = await supabase
+        .from('academic_sessions')
+        .select('*')
+        .eq('school_id', currentUser.school_id)
+        .order('session_year', { ascending: false })
+
+      const { data: termsData } = await supabase
+        .from('terms')
+        .select('*')
+        .eq('school_id', currentUser.school_id)
+        .order('term_number', { ascending: true })
+
+      const { data: classesData } = await supabase
+        .from('class_arm_combos')
+        .select('*')
+        .eq('school_id', currentUser.school_id)
+        .order('class_name', { ascending: true })
+
       setState(s => ({
         ...s,
         staffMembers: staff || [],
         students: students || [],
         results: results || [],
         transactions: transactions || [],
+        sessions: sessionsData || [],
+        terms: termsData || [],
+        classes: classesData || [],
         loading: false,
         error: staffCount === 0 && studentCount === 0 ? '⚠️ No staff or students found' : '',
       }))
@@ -152,7 +180,7 @@ export default function SchoolAdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pb-32">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <StaffHeader
         staffName={state.user?.full_name || 'School Administrator'}
         schoolName={state.school?.name || 'School'}
@@ -168,7 +196,8 @@ export default function SchoolAdminDashboard() {
               { id: 'staff', label: '👨‍🏫 Staff' },
               { id: 'students', label: '👨‍🎓 Students' },
               { id: 'results', label: '📈 Results' },
-              { id: 'transactions', label: '💰 Transactions' },
+              { id: 'transactions', label: '💰 Fees' },
+              { id: 'academic', label: '📚 Academic' },
               { id: 'broadcast', label: '📢 Broadcast' },
             ].map((tab) => (
               <button
@@ -234,6 +263,7 @@ export default function SchoolAdminDashboard() {
                       <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Email</th>
                       <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Role</th>
                       <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Status</th>
+                      <th className="px-6 py-3 text-center text-sm font-bold text-gray-700">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -252,6 +282,11 @@ export default function SchoolAdminDashboard() {
                           }`}>
                             {member.status}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 font-semibold">
+                            📄 Letter
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -279,6 +314,7 @@ export default function SchoolAdminDashboard() {
                       <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Admission #</th>
                       <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Email</th>
                       <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Department</th>
+                      <th className="px-6 py-3 text-center text-sm font-bold text-gray-700">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -288,6 +324,11 @@ export default function SchoolAdminDashboard() {
                         <td className="px-6 py-4 text-sm text-gray-600">{student.admission_number || 'N/A'}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">{student.email}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">{student.department || 'N/A'}</td>
+                        <td className="px-6 py-4 text-center">
+                          <button className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 font-semibold">
+                            📄 Letter
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -300,90 +341,41 @@ export default function SchoolAdminDashboard() {
         {/* Results Tab */}
         {state.activeTab === 'results' && (
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-6">📈 Academic Results ({state.results.length})</h2>
-            {state.results.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-lg p-8 text-center text-gray-600">
-                <p className="text-lg">No results recorded yet</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-                <table className="w-full">
-                  <thead className="bg-gray-100 border-b">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Student ID</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Subject</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Score</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Grade</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {state.results.map((result: any) => (
-                      <tr key={result.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm text-gray-600">{result.student_id}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900 font-semibold">{result.subject}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{result.score || 'N/A'}</td>
-                        <td className="px-6 py-4 text-sm">
-                          <span className="inline-block px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
-                            {result.grade || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {result.created_at ? new Date(result.created_at).toLocaleDateString() : 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">📈 Academic Results</h2>
+            <div className="bg-blue-50 p-8 rounded-lg text-center text-gray-600">
+              <p className="text-lg">Results page - View academic results by class and student</p>
+            </div>
           </div>
         )}
 
-        {/* Transactions Tab */}
+        {/* Fees Tab */}
         {state.activeTab === 'transactions' && (
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-6">💰 Transactions ({state.transactions.length})</h2>
-            {state.transactions.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-lg p-8 text-center text-gray-600">
-                <p className="text-lg">No transactions recorded yet</p>
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">💰 School Fees</h2>
+            <div className="bg-white rounded-lg shadow-lg p-8 text-center text-gray-600">
+              <p className="text-lg">Payment records and transaction history</p>
+            </div>
+          </div>
+        )}
+
+        {/* Academic Tab */}
+        {state.activeTab === 'academic' && (
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">📚 Academic Management</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow-lg">
+                <p className="text-gray-600 font-semibold mb-2">Active Sessions</p>
+                <p className="text-3xl font-bold text-purple-600">{state.sessions.length}</p>
               </div>
-            ) : (
-              <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-                <table className="w-full">
-                  <thead className="bg-gray-100 border-b">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Student ID</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Type</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Amount</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Status</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {state.transactions.map((txn: any) => (
-                      <tr key={txn.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm text-gray-600">{txn.student_id}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900 font-semibold">{txn.type || 'Payment'}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900 font-bold">₦{txn.amount?.toLocaleString() || '0'}</td>
-                        <td className="px-6 py-4 text-sm">
-                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                            txn.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                            txn.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700'
-                          }`}>
-                            {txn.status || 'PENDING'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {txn.created_at ? new Date(txn.created_at).toLocaleDateString() : 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="bg-white p-6 rounded-lg shadow-lg">
+                <p className="text-gray-600 font-semibold mb-2">Total Terms</p>
+                <p className="text-3xl font-bold text-indigo-600">{state.terms.length}</p>
               </div>
-            )}
+              <div className="bg-white p-6 rounded-lg shadow-lg">
+                <p className="text-gray-600 font-semibold mb-2">Total Classes</p>
+                <p className="text-3xl font-bold text-blue-600">{state.classes.length}</p>
+              </div>
+            </div>
           </div>
         )}
 
