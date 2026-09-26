@@ -147,7 +147,7 @@ export default function SchoolAdminSchoolFeesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 pb-32">
       <StaffHeader
         staffName={user?.full_name || 'School Admin'}
         schoolName={school?.name || 'School'}

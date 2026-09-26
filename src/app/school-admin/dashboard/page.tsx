@@ -152,7 +152,7 @@ export default function SchoolAdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pb-32">
       <StaffHeader
         staffName={state.user?.full_name || 'School Administrator'}
         schoolName={state.school?.name || 'School'}

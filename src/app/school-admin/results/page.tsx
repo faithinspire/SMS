@@ -215,7 +215,7 @@ export default function SchoolAdminResultsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 pb-32">
       <StaffHeader
         staffName={user?.full_name || 'School Admin'}
         schoolName={school?.name || 'School'}
