@@ -85,12 +85,48 @@ export async function POST(request: Request) {
     const studentCount = students.length
     console.log(`[API] Loaded ${studentCount} students with user data`)
 
+    // ==== RESULTS QUERY ====
+    const { data: resultsData, error: resultsError } = await supabase
+      .from('results')
+      .select('id, student_id, subject, score, grade, created_at')
+      .eq('school_id', school_id)
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (resultsError) {
+      console.error('[API] Results query error:', resultsError.message)
+      // Continue - results are optional
+    }
+
+    const resultsCount = (resultsData || []).length
+    console.log(`[API] Loaded ${resultsCount} results`)
+
+    // ==== TRANSACTIONS QUERY ====
+    const { data: transactionsData, error: transactionsError } = await supabase
+      .from('transactions')
+      .select('id, student_id, type, amount, status, created_at')
+      .eq('school_id', school_id)
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (transactionsError) {
+      console.error('[API] Transactions query error:', transactionsError.message)
+      // Continue - transactions are optional
+    }
+
+    const transactionsCount = (transactionsData || []).length
+    console.log(`[API] Loaded ${transactionsCount} transactions`)
+
     return NextResponse.json({
       success: true,
       staff: staffData || [],
       students: students,
+      results: resultsData || [],
+      transactions: transactionsData || [],
       staffCount: staffCount,
       studentCount: studentCount,
+      resultsCount: resultsCount,
+      transactionsCount: transactionsCount,
     })
   } catch (error: any) {
     console.error('[API] Fatal exception:', error.message)
