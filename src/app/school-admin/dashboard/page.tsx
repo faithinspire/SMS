@@ -29,6 +29,10 @@ interface DashboardState {
   selectedClassData: any | null
   loadingResults: boolean
   resultsClasses: any[]
+  editingStaff: any | null
+  editingStudent: any | null
+  editingName: string
+  editingEmail: string
 }
 
 export default function SchoolAdminDashboard() {
@@ -55,22 +59,62 @@ export default function SchoolAdminDashboard() {
     selectedClassData: null,
     loadingResults: false,
     resultsClasses: [],
+    editingStaff: null,
+    editingStudent: null,
+    editingName: '',
+    editingEmail: '',
   })
 
-  // Load data only once
+  // FIXED: Add real-time subscription for transactions
   useEffect(() => {
-    loadDashboardData()
-  }, [])
+    if (!state.user?.school_id) return
 
-  // When session changes, load its terms
+    const subscription = supabase
+      .channel(`transactions:${state.user.school_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions',
+          filter: `school_id=eq.${state.user.school_id}`,
+        },
+        (payload) => {
+          console.log('[Realtime] Transaction update:', payload)
+          // Reload transactions
+          loadDashboardData()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(subscription)
+    }
+  }, [state.user?.school_id])
+
+  // When session changes, load its terms - FIXED: Better error handling
   useEffect(() => {
-    if (state.selectedSession) {
+    if (state.selectedSession && state.terms.length > 0) {
       const sessionTerms = state.terms.filter((t) => t.session_id === state.selectedSession)
+      console.log('[Results] Terms for session:', { session: state.selectedSession, found: sessionTerms.length })
       if (sessionTerms.length > 0) {
-        setState(s => ({ ...s, selectedTerm: sessionTerms[0].id }))
+        setState(s => ({ 
+          ...s, 
+          selectedTerm: sessionTerms[0].id,
+          selectedClass: null,
+          selectedClassData: null,
+        }))
+      } else {
+        setState(s => ({ 
+          ...s, 
+          selectedTerm: null,
+          error: '⚠️ No terms found for this session',
+          selectedClass: null,
+          selectedClassData: null,
+        }))
       }
     }
-  }, [state.selectedSession])
+  }, [state.selectedSession, state.terms])
 
   // When term changes, load classes
   useEffect(() => {
@@ -123,22 +167,22 @@ export default function SchoolAdminDashboard() {
 
       const { staff, students, results, transactions } = await apiResponse.json()
 
-      // Load academic data
+      // Load academic data - FIXED: Ensure we get session_id for terms
       const { data: sessionsData } = await supabase
         .from('academic_sessions')
-        .select('*')
+        .select('id, session_year, is_active')
         .eq('school_id', currentUser.school_id)
         .order('session_year', { ascending: false })
 
       const { data: termsData } = await supabase
         .from('terms')
-        .select('*')
+        .select('id, session_id, term_name, term_number, is_active')
         .eq('school_id', currentUser.school_id)
         .order('term_number', { ascending: true })
 
       const { data: classesData } = await supabase
         .from('class_arm_combos')
-        .select('*')
+        .select('id, class_name, arm_name, class_id, arm_id')
         .eq('school_id', currentUser.school_id)
         .order('class_name', { ascending: true })
 
@@ -164,49 +208,67 @@ export default function SchoolAdminDashboard() {
     try {
       setState(s => ({ ...s, loadingResults: true }))
 
-      const response = await fetch('/api/results/school-classes-and-students', {
-        method: 'POST',
+      // FIXED: Change from POST with body to GET with query params
+      const response = await fetch(`/api/results/school-classes-and-students?schoolId=${schoolId}&termId=${termId}`, {
+        method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ school_id: schoolId, term_id: termId }),
       })
 
-      if (!response.ok) throw new Error('Failed to load classes')
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to load classes')
+      }
 
       const { classes } = await response.json()
       setState(s => ({
         ...s,
         resultsClasses: classes || [],
         loadingResults: false,
+        selectedClass: classes && classes.length > 0 ? classes[0].id : null,
+        selectedClassData: classes && classes.length > 0 ? classes[0] : null,
       }))
     } catch (err: any) {
       console.error('[Results] Error:', err)
-      setState(s => ({ ...s, loadingResults: false }))
+      setState(s => ({ ...s, loadingResults: false, error: `❌ Failed to load classes: ${err.message}` }))
     }
   }
 
   const generateLetterForStaff = async (member: any) => {
     try {
       if (!state.user?.school_id) return
+      
+      // FIXED: Send full staff details instead of just IDs
       const response = await fetch('/api/school-admin/staff/appointment-letter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staff_id: member.id,
-          school_id: state.user.school_id,
+          staffId: member.id,
+          staffName: member.full_name,
+          position: member.role || 'Staff',
+          schoolName: state.school?.name || 'School',
+          appointmentDate: new Date().toLocaleDateString(),
+          salary: 'As per agreement',
+          duties: 'As per job description',
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to generate letter')
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to generate letter')
+      }
 
-      const { html } = await response.json()
-      const blob = new Blob([html], { type: 'text/html' })
+      const { letter } = await response.json()
+      const blob = new Blob([letter], { type: 'text/html' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `${member.full_name}_appointment_letter.html`
       a.click()
       URL.revokeObjectURL(url)
+      setState(s => ({ ...s, error: '✅ Letter generated successfully!' }))
+      setTimeout(() => setState(s => ({ ...s, error: '' })), 3000)
     } catch (err: any) {
+      console.error('[Letter] Error:', err)
       setState(s => ({ ...s, error: `❌ ${err.message}` }))
     }
   }
@@ -214,71 +276,197 @@ export default function SchoolAdminDashboard() {
   const generateLetterForStudent = async (student: any) => {
     try {
       if (!state.user?.school_id) return
+      
+      // FIXED: Send full student details instead of just IDs
       const response = await fetch('/api/school-admin/students/admission-letter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          student_id: student.id,
-          school_id: state.user.school_id,
+          studentId: student.id,
+          studentName: student.full_name,
+          admissionNumber: student.admission_number || 'ADM-000',
+          className: student.department || 'Class',
+          schoolName: state.school?.name || 'School',
+          admissionDate: new Date().toLocaleDateString(),
+          parentName: 'Parent/Guardian',
+          tuitionFee: 'As per fee schedule',
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to generate letter')
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to generate letter')
+      }
 
-      const { html } = await response.json()
-      const blob = new Blob([html], { type: 'text/html' })
+      const { letter } = await response.json()
+      const blob = new Blob([letter], { type: 'text/html' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `${student.full_name}_admission_letter.html`
       a.click()
       URL.revokeObjectURL(url)
+      setState(s => ({ ...s, error: '✅ Letter generated successfully!' }))
+      setTimeout(() => setState(s => ({ ...s, error: '' })), 3000)
+    } catch (err: any) {
+      console.error('[Letter] Error:', err)
+      setState(s => ({ ...s, error: `❌ ${err.message}` }))
+    }
+  }
+
+  const editStaff = async (member: any) => {
+    setState(s => ({ 
+      ...s, 
+      editingStaff: member,
+      editingName: member.full_name,
+      editingEmail: member.email,
+    }))
+  }
+
+  const saveStaffEdit = async () => {
+    try {
+      if (!state.editingStaff) return
+      setState(s => ({ ...s, error: '⏳ Saving...' }))
+
+      const { error } = await supabase
+        .from('users')
+        .update({ full_name: state.editingName, email: state.editingEmail })
+        .eq('id', state.editingStaff.id)
+        .eq('school_id', state.user?.school_id)
+
+      if (error) throw error
+
+      // Update local state
+      setState(s => ({
+        ...s,
+        staffMembers: s.staffMembers.map(m => 
+          m.id === state.editingStaff.id 
+            ? { ...m, full_name: state.editingName, email: state.editingEmail }
+            : m
+        ),
+        editingStaff: null,
+        error: '✅ Staff member updated',
+      }))
+      setTimeout(() => setState(s => ({ ...s, error: '' })), 3000)
     } catch (err: any) {
       setState(s => ({ ...s, error: `❌ ${err.message}` }))
     }
   }
 
-  const deleteStaff = async (staffId: string) => {
-    if (!confirm('Are you sure you want to delete this staff member?')) return
+  const editStudent = async (student: any) => {
+    setState(s => ({ 
+      ...s, 
+      editingStudent: student,
+      editingName: student.full_name,
+      editingEmail: student.email,
+    }))
+  }
 
+  const saveStudentEdit = async () => {
     try {
+      if (!state.editingStudent) return
+      setState(s => ({ ...s, error: '⏳ Saving...' }))
+
       const { error } = await supabase
         .from('users')
-        .delete()
-        .eq('id', staffId)
+        .update({ full_name: state.editingName, email: state.editingEmail })
+        .eq('id', state.editingStudent.id)
+        .eq('school_id', state.user?.school_id)
 
       if (error) throw error
 
+      // Update local state
       setState(s => ({
         ...s,
-        staffMembers: s.staffMembers.filter(m => m.id !== staffId),
-        error: '✅ Staff member deleted',
+        students: s.students.map(st => 
+          st.id === state.editingStudent.id 
+            ? { ...st, full_name: state.editingName, email: state.editingEmail }
+            : st
+        ),
+        editingStudent: null,
+        error: '✅ Student updated',
       }))
       setTimeout(() => setState(s => ({ ...s, error: '' })), 3000)
     } catch (err: any) {
       setState(s => ({ ...s, error: `❌ ${err.message}` }))
+    }
+  }
+    if (!confirm('Are you sure you want to permanently delete this staff member? This action cannot be undone.')) return
+
+    try {
+      setState(s => ({ ...s, error: '⏳ Deleting...' }))
+      
+      // FIXED: Cascade delete from related tables
+      // 1. Delete from broadcasts
+      await supabase.from('broadcasts').delete().eq('sender_id', staffId)
+      
+      // 2. Delete from lesson_notes
+      await supabase.from('lesson_notes').delete().eq('created_by', staffId)
+      
+      // 3. Delete from assignments  
+      await supabase.from('assignments').delete().eq('created_by', staffId)
+      
+      // 4. Delete from users (main record)
+      const { error: deleteError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', staffId)
+        .eq('school_id', state.user?.school_id)
+
+      if (deleteError) throw deleteError
+
+      // Update local state
+      setState(s => ({
+        ...s,
+        staffMembers: s.staffMembers.filter(m => m.id !== staffId),
+        error: '✅ Staff member permanently deleted',
+      }))
+      setTimeout(() => setState(s => ({ ...s, error: '' })), 3000)
+    } catch (err: any) {
+      console.error('[Delete Staff] Error:', err)
+      setState(s => ({ ...s, error: `❌ Delete failed: ${err.message}` }))
     }
   }
 
   const deleteStudent = async (studentId: string) => {
-    if (!confirm('Are you sure you want to delete this student?')) return
+    if (!confirm('Are you sure you want to permanently delete this student? This action cannot be undone.')) return
 
     try {
-      const { error } = await supabase
+      setState(s => ({ ...s, error: '⏳ Deleting...' }))
+      
+      // FIXED: Cascade delete from related tables
+      // 1. Delete from results/scores
+      await supabase.from('score_sheets').delete().eq('student_id', studentId)
+      await supabase.from('results').delete().eq('student_id', studentId)
+      
+      // 2. Delete from transactions
+      await supabase.from('transactions').delete().eq('student_id', studentId)
+      
+      // 3. Delete from broadcasts
+      await supabase.from('broadcasts').delete().eq('sender_id', studentId)
+      
+      // 4. Delete from students table
+      await supabase.from('students').delete().eq('id', studentId)
+      
+      // 5. Delete from users (main record)
+      const { error: deleteError } = await supabase
         .from('users')
         .delete()
         .eq('id', studentId)
+        .eq('school_id', state.user?.school_id)
 
-      if (error) throw error
+      if (deleteError) throw deleteError
 
+      // Update local state
       setState(s => ({
         ...s,
         students: s.students.filter(st => st.id !== studentId),
-        error: '✅ Student deleted',
+        error: '✅ Student permanently deleted',
       }))
       setTimeout(() => setState(s => ({ ...s, error: '' })), 3000)
     } catch (err: any) {
-      setState(s => ({ ...s, error: `❌ ${err.message}` }))
+      console.error('[Delete Student] Error:', err)
+      setState(s => ({ ...s, error: `❌ Delete failed: ${err.message}` }))
     }
   }
 
@@ -378,6 +566,92 @@ export default function SchoolAdminDashboard() {
           </div>
         )}
 
+        {/* EDIT STAFF MODAL */}
+        {state.editingStaff && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-8 max-w-md w-full">
+              <h3 className="text-2xl font-bold mb-4">Edit Staff Member</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Name</label>
+                  <input
+                    type="text"
+                    value={state.editingName}
+                    onChange={(e) => setState(s => ({ ...s, editingName: e.target.value }))}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={state.editingEmail}
+                    onChange={(e) => setState(s => ({ ...s, editingEmail: e.target.value }))}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setState(s => ({ ...s, editingStaff: null }))}
+                  className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveStaffEdit}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* EDIT STUDENT MODAL */}
+        {state.editingStudent && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-8 max-w-md w-full">
+              <h3 className="text-2xl font-bold mb-4">Edit Student</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Name</label>
+                  <input
+                    type="text"
+                    value={state.editingName}
+                    onChange={(e) => setState(s => ({ ...s, editingName: e.target.value }))}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={state.editingEmail}
+                    onChange={(e) => setState(s => ({ ...s, editingEmail: e.target.value }))}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setState(s => ({ ...s, editingStudent: null }))}
+                  className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveStudentEdit}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Overview Tab */}
         {state.activeTab === 'overview' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -445,7 +719,7 @@ export default function SchoolAdminDashboard() {
                             📄 Letter
                           </button>
                           <button
-                            onClick={() => alert('Edit feature coming soon')}
+                            onClick={() => editStaff(member)}
                             className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 font-semibold inline-block"
                           >
                             ✏️ Edit
@@ -501,7 +775,7 @@ export default function SchoolAdminDashboard() {
                             📄 Letter
                           </button>
                           <button
-                            onClick={() => alert('Edit feature coming soon')}
+                            onClick={() => editStudent(student)}
                             className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 font-semibold inline-block"
                           >
                             ✏️ Edit
@@ -736,11 +1010,11 @@ export default function SchoolAdminDashboard() {
               </div>
             </div>
 
-            {/* Sessions List */}
+            {/* Sessions Section */}
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">Academic Sessions</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">📋 Academic Sessions</h3>
               {state.sessions.length === 0 ? (
-                <p className="text-gray-600">No sessions found</p>
+                <p className="text-gray-600 text-center py-4">No sessions found</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -751,14 +1025,14 @@ export default function SchoolAdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {state.sessions.map((session) => (
+                      {state.sessions.map((session: any) => (
                         <tr key={session.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 text-sm text-gray-900 font-semibold">{session.session_year}</td>
                           <td className="px-6 py-4 text-sm">
                             <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
                               session.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                             }`}>
-                              {session.is_active ? 'Active' : 'Inactive'}
+                              {session.is_active ? '✓ Active' : 'Inactive'}
                             </span>
                           </td>
                         </tr>
@@ -769,33 +1043,45 @@ export default function SchoolAdminDashboard() {
               )}
             </div>
 
-            {/* Terms List */}
+            {/* Terms Section */}
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">Terms</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">📅 Terms</h3>
               {state.terms.length === 0 ? (
-                <p className="text-gray-600">No terms found</p>
+                <p className="text-gray-600 text-center py-4">No terms found</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {state.terms.map((term) => (
-                    <div key={term.id} className="border-2 border-gray-200 rounded-lg p-4 hover:border-blue-600 hover:shadow-lg transition-all">
-                      <p className="text-lg font-bold text-gray-900">{term.term_name}</p>
-                      <p className="text-sm text-gray-600">Term {term.term_number}</p>
-                      <p className={`text-xs font-semibold mt-2 inline-block px-2 py-1 rounded ${
-                        term.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {term.is_active ? '✓ Active' : 'Inactive'}
-                      </p>
-                    </div>
-                  ))}
+                  {state.terms.map((term: any) => {
+                    const session = state.sessions.find(s => s.id === term.session_id)
+                    return (
+                      <div key={term.id} className="border-2 border-gray-200 rounded-lg p-4 hover:border-blue-600 hover:shadow-lg transition-all">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="text-lg font-bold text-gray-900">{term.term_name}</p>
+                            <p className="text-sm text-gray-600">Term {term.term_number}</p>
+                          </div>
+                          <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                            term.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {term.is_active ? '✓' : '○'}
+                          </span>
+                        </div>
+                        {session && (
+                          <p className="text-xs text-gray-500 mt-3 pt-3 border-t">
+                            Session: {session.session_year}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
 
-            {/* Classes List */}
+            {/* Classes Section */}
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">Classes</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">👥 Classes</h3>
               {state.classes.length === 0 ? (
-                <p className="text-gray-600">No classes found</p>
+                <p className="text-gray-600 text-center py-4">No classes found</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -806,7 +1092,7 @@ export default function SchoolAdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {state.classes.map((cls) => (
+                      {state.classes.map((cls: any) => (
                         <tr key={cls.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 text-sm text-gray-900 font-semibold">{cls.class_name}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{cls.arm_name || 'N/A'}</td>
