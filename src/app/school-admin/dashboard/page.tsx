@@ -65,6 +65,11 @@ export default function SchoolAdminDashboard() {
     editingEmail: '',
   })
 
+  // CRITICAL FIX: Load dashboard data on component mount
+  useEffect(() => {
+    loadDashboardData()
+  }, [])
+
   // FIXED: Add real-time subscription for transactions
   useEffect(() => {
     if (!state.user?.school_id) return
@@ -136,81 +141,87 @@ export default function SchoolAdminDashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const currentUser = await AuthService.getCurrentUser()
-      
-      if (!currentUser || (currentUser.role !== 'SCHOOL_ADMIN' && currentUser.role !== 'ADMIN')) {
-        router.push('/landing')
-        return
-      }
+      // Set a timeout - if data doesn't load in 15 seconds, show error
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Data loading timeout - please refresh')), 15000)
+      )
 
-      setState(s => ({ ...s, user: currentUser }))
+      const loadPromise = (async () => {
+        const currentUser = await AuthService.getCurrentUser()
+        
+        if (!currentUser || (currentUser.role !== 'SCHOOL_ADMIN' && currentUser.role !== 'ADMIN')) {
+          router.push('/landing')
+          return
+        }
 
-      if (!currentUser.school_id) {
-        setState(s => ({ ...s, error: '❌ School ID not found - contact support', loading: false }))
-        return
-      }
+        setState(s => ({ ...s, user: currentUser }))
 
-      const schoolData = await SchoolService.getSchoolById(currentUser.school_id)
-      setState(s => ({ ...s, school: schoolData }))
+        if (!currentUser.school_id) {
+          setState(s => ({ ...s, error: '❌ School ID not found - contact support', loading: false }))
+          return
+        }
 
-      // Fetch all data directly from Supabase (API endpoint doesn't exist, fetch directly)
-      const { data: staffData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('school_id', currentUser.school_id)
-        .eq('role', 'STAFF')
+        const schoolData = await SchoolService.getSchoolById(currentUser.school_id)
+        setState(s => ({ ...s, school: schoolData }))
 
-      const { data: studentsData } = await supabase
-        .from('students')
-        .select('*')
-        .eq('school_id', currentUser.school_id)
+        // Fetch all data directly from Supabase with timeout
+        const [staffData, studentsData, resultsData, transactionsData, sessionsData, termsData, classesData] = await Promise.all([
+          supabase
+            .from('users')
+            .select('*')
+            .eq('school_id', currentUser.school_id)
+            .eq('role', 'STAFF')
+            .then(r => r.data || []),
+          supabase
+            .from('students')
+            .select('*')
+            .eq('school_id', currentUser.school_id)
+            .then(r => r.data || []),
+          supabase
+            .from('results')
+            .select('*')
+            .eq('school_id', currentUser.school_id)
+            .then(r => r.data || []),
+          supabase
+            .from('transactions')
+            .select('*')
+            .eq('school_id', currentUser.school_id)
+            .then(r => r.data || []),
+          supabase
+            .from('academic_sessions')
+            .select('id, session_year, is_active')
+            .eq('school_id', currentUser.school_id)
+            .order('session_year', { ascending: false })
+            .then(r => r.data || []),
+          supabase
+            .from('terms')
+            .select('id, session_id, term_name, term_number, is_active')
+            .eq('school_id', currentUser.school_id)
+            .order('term_number', { ascending: true })
+            .then(r => r.data || []),
+          supabase
+            .from('class_arm_combos')
+            .select('id, class_name, arm_name, class_id, arm_id')
+            .eq('school_id', currentUser.school_id)
+            .order('class_name', { ascending: true })
+            .then(r => r.data || []),
+        ])
 
-      const { data: resultsData } = await supabase
-        .from('results')
-        .select('*')
-        .eq('school_id', currentUser.school_id)
+        setState(s => ({
+          ...s,
+          staffMembers: staffData,
+          students: studentsData,
+          results: resultsData,
+          transactions: transactionsData,
+          sessions: sessionsData,
+          terms: termsData,
+          classes: classesData,
+          loading: false,
+          selectedSession: sessionsData && sessionsData.length > 0 ? sessionsData[0].id : null,
+        }))
+      })()
 
-      const { data: transactionsData } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('school_id', currentUser.school_id)
-
-      const staff = staffData || []
-      const students = studentsData || []
-      const results = resultsData || []
-      const transactions = transactionsData || []
-
-      // Load academic data - FIXED: Ensure we get session_id for terms
-      const { data: sessionsData } = await supabase
-        .from('academic_sessions')
-        .select('id, session_year, is_active')
-        .eq('school_id', currentUser.school_id)
-        .order('session_year', { ascending: false })
-
-      const { data: termsData } = await supabase
-        .from('terms')
-        .select('id, session_id, term_name, term_number, is_active')
-        .eq('school_id', currentUser.school_id)
-        .order('term_number', { ascending: true })
-
-      const { data: classesData } = await supabase
-        .from('class_arm_combos')
-        .select('id, class_name, arm_name, class_id, arm_id')
-        .eq('school_id', currentUser.school_id)
-        .order('class_name', { ascending: true })
-
-      setState(s => ({
-        ...s,
-        staffMembers: staff || [],
-        students: students || [],
-        results: results || [],
-        transactions: transactions || [],
-        sessions: sessionsData || [],
-        terms: termsData || [],
-        classes: classesData || [],
-        loading: false,
-        selectedSession: sessionsData && sessionsData.length > 0 ? sessionsData[0].id : null,
-      }))
+      await Promise.race([loadPromise, timeoutPromise])
     } catch (err: any) {
       console.error('[Dashboard] Error:', err)
       setState(s => ({ ...s, error: `❌ ${err.message}`, loading: false }))

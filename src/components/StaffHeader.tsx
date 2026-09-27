@@ -33,10 +33,44 @@ export default function StaffHeader({ staffName, schoolName, staffPhoto, section
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Initial load
     loadUserAndNotifications()
-    // Poll every 30 seconds
-    const interval = setInterval(loadUserAndNotifications, 30000)
-    return () => clearInterval(interval)
+    
+    // Set up real-time subscription for broadcasts
+    const subscriptionSetup = async () => {
+      const currentUser = await AuthService.getCurrentUser()
+      if (!currentUser) return
+
+      const subscription = supabase
+        .channel(`broadcasts:${currentUser.school_id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'broadcast_recipients',
+            filter: `user_id=eq.${currentUser.id}`,
+          },
+          (payload) => {
+            console.log('[StaffHeader] Real-time broadcast update:', payload)
+            loadUserAndNotifications()
+          }
+        )
+        .subscribe()
+
+      return subscription
+    }
+
+    let subscription: any = null
+    subscriptionSetup().then(sub => {
+      subscription = sub
+    })
+
+    return () => {
+      if (subscription) {
+        supabase.removeChannel(subscription)
+      }
+    }
   }, [])
 
   const loadUserAndNotifications = async () => {
@@ -79,27 +113,24 @@ export default function StaffHeader({ staffName, schoolName, staffPhoto, section
       // Filter broadcasts where current user is a recipient
       const userBroadcasts = (data || [])
         .map((broadcast: any) => {
-          const recipientRecord = broadcast.broadcast_recipients?.find(
-            (r: any) => r.user_id  // Match current user
+          // Check if user is in the broadcast_recipients list
+          const isRecipient = broadcast.broadcast_recipients?.some(
+            (r: any) => r.user_id === currentUser.id
           )
-          return {
+          const recipientRecord = broadcast.broadcast_recipients?.find(
+            (r: any) => r.user_id === currentUser.id
+          )
+          return isRecipient ? {
             id: broadcast.id,
             broadcast_id: broadcast.id,
-            title: broadcast.message,  // Use message as title
+            title: broadcast.message,
             message: broadcast.message,
             sender_name: 'Administrator',
             is_read: recipientRecord?.is_read || false,
             created_at: broadcast.created_at,
-          }
+          } : null
         })
-        .filter((b: any) => {
-          // Only show broadcasts where user is a recipient
-          return (data || []).some((broadcast: any) =>
-            broadcast.broadcast_recipients?.some(
-              (r: any) => r.user_id
-            )
-          )
-        })
+        .filter((b: any) => b !== null)
 
       setNotifications(userBroadcasts)
       setUnreadCount(
