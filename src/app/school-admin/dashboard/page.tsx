@@ -391,6 +391,8 @@ export default function SchoolAdminDashboard() {
       setState(s => ({ ...s, error: `❌ ${err.message}` }))
     }
   }
+
+  const deleteStaff = async (staffId: string) => {
     if (!confirm('Are you sure you want to permanently delete this staff member? This action cannot be undone.')) return
 
     try {
