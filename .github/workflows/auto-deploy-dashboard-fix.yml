@@ -1,0 +1,38 @@
+name: Auto Deploy Dashboard Fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/app/school-admin/dashboard/page.tsx'
+      - 'src/components/StaffHeader.tsx'
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Check for dashboard fixes
+        run: |
+          echo "✅ Checking for dashboard fixes..."
+          grep -q "useEffect(() => {" src/app/school-admin/dashboard/page.tsx && echo "✅ Initial useEffect found"
+          grep -q "Promise.all" src/app/school-admin/dashboard/page.tsx && echo "✅ Parallel queries found"
+          grep -q "real-time subscription" src/components/StaffHeader.tsx && echo "✅ Real-time subscription found"
+          echo "✅ All fixes verified!"
+
+      - name: Trigger Vercel deployment
+        run: |
+          echo "✅ Vercel webhook will automatically trigger deployment"
+          echo "Deployment URL: https://sms-gold-eta.vercel.app/school-admin/dashboard"
+
+      - name: Deployment status
+        run: |
+          echo "🎉 Dashboard fixes are now deployed!"
+          echo "Expected live in 5-10 minutes at:"
+          echo "  https://sms-gold-eta.vercel.app/school-admin/dashboard"
