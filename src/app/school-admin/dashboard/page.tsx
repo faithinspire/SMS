@@ -153,19 +153,32 @@ export default function SchoolAdminDashboard() {
       const schoolData = await SchoolService.getSchoolById(currentUser.school_id)
       setState(s => ({ ...s, school: schoolData }))
 
-      // Fetch all data from backend
-      const apiResponse = await fetch('/api/admin/dashboard-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ school_id: currentUser.school_id }),
-      })
+      // Fetch all data directly from Supabase (API endpoint doesn't exist, fetch directly)
+      const { data: staffData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('school_id', currentUser.school_id)
+        .eq('role', 'STAFF')
 
-      if (!apiResponse.ok) {
-        const error = await apiResponse.json()
-        throw new Error(error.details || error.error || 'Failed to fetch data')
-      }
+      const { data: studentsData } = await supabase
+        .from('students')
+        .select('*')
+        .eq('school_id', currentUser.school_id)
 
-      const { staff, students, results, transactions } = await apiResponse.json()
+      const { data: resultsData } = await supabase
+        .from('results')
+        .select('*')
+        .eq('school_id', currentUser.school_id)
+
+      const { data: transactionsData } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('school_id', currentUser.school_id)
+
+      const staff = staffData || []
+      const students = studentsData || []
+      const results = resultsData || []
+      const transactions = transactionsData || []
 
       // Load academic data - FIXED: Ensure we get session_id for terms
       const { data: sessionsData } = await supabase
