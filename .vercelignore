@@ -1,36 +1,11 @@
-# Development files
+node_modules
+.next
+build
+dist
 .env.local
-.env*.local
+.env.*.local
+*.log
+.DS_Store
 .git
 .gitignore
-.npmrc
-*.log
-node_modules
-.next.bak
-$null
-
-# Documentation
-*.md
-docs/
-database/
-
-# Testing
-coverage/
-.jest/
-__tests__/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Build artifacts (these are created during build)
-.next/
-dist/
-build/
+README.md
