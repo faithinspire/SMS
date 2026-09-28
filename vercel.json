@@ -2,7 +2,7 @@
   "version": 2,
   "buildCommand": "npm run build",
   "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_key"
+    "NEXT_PUBLIC_SUPABASE_URL": "https://egdreueuspmuxhezdpqm.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnZHJldWV1c3BtdXhoZXpkcHFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5NjA0MzksImV4cCI6MjA5NzUzNjQzOX0.egM1RzKJ6ThUy6xrz_Os3OYsy_p5Oyyr0RxL9N1tbGI"
   }
 }
