@@ -65,7 +65,7 @@ export default function SchoolAdminDashboard() {
     editingEmail: '',
   })
 
-  // CRITICAL FIX: Load dashboard data on component mount
+  // CRITICAL FIX: Load dashboard data on component mount - AUTO-DEPLOY TRIGGERED
   useEffect(() => {
     loadDashboardData()
   }, [])

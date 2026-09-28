@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Auto-Deploy Dashboard Fix",
+      "trigger": "PostFileSave",
+      "description": "Automatically commits and pushes dashboard fixes when files are saved, triggering Vercel deployment",
+      "matcher": "dashboard|StaffHeader",
+      "action": {
+        "type": "command",
+        "command": "cd \"c:\\Users\\OLU\\Desktop\\SMS\" && git add -A && git commit -m \"🔥 NUCLEAR: Dashboard + Navbar auto-deploy\" && git push origin main",
+        "timeout": 120
+      }
+    }
+  ]
+}
