@@ -7,3 +7,4 @@ Results Filters: FIXED
 Classes: FIXED
 Academic Tab: FIXED
 Real-time Fees: FIXED
+"VERCEL_FORCE_REBUILD=$(date +%%s)"  
