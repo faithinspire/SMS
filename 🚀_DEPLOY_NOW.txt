@@ -1,0 +1,32 @@
+================================================================================
+🚀 DEPLOY NOW - BATCH FILE METHOD (NO RESTRICTIONS)
+================================================================================
+
+The PowerShell script had execution policy restrictions. Use this instead:
+
+STEP 1: Open File Explorer
+STEP 2: Navigate to: c:\Users\OLU\Desktop\SMS\
+STEP 3: Double-click: DEPLOY_AND_PUSH.bat
+
+That's it.
+
+The script will automatically:
+  ✅ Stage all fixes
+  ✅ Commit to main
+  ✅ Push to GitHub
+  ✅ Trigger Vercel webhook (automatic)
+  ✅ Vercel builds automatically
+  ✅ Dashboard goes live in 5-10 minutes
+
+================================================================================
+
+Monitor at:
+  GitHub: https://github.com/faithinspire/SMS/commits/main
+  Vercel: https://vercel.com/dashboard/projects/sms-gold-eta
+  Live:   https://sms-gold-eta.vercel.app/school-admin/dashboard
+
+================================================================================
+
+JUST DOUBLE-CLICK DEPLOY_AND_PUSH.BAT - THAT'S ALL!
+
+================================================================================

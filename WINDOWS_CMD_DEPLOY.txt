@@ -1,0 +1,39 @@
+================================================================================
+WINDOWS COMMAND PROMPT - CORRECT DEPLOY COMMAND
+================================================================================
+
+STEP 1: Open Command Prompt
+- Press: Win+R
+- Type: cmd
+- Press: Enter
+
+STEP 2: Copy THIS command (NOT the previous one):
+
+c: && cd Users\OLU\Desktop\SMS && git add -A && git commit -m "🔥 DEPLOY" && git push origin main
+
+STEP 3: Right-click in command prompt and paste
+
+STEP 4: Press Enter
+
+================================================================================
+
+EXPLANATION:
+
+WRONG (what I gave before):
+  cd /d c:\Users\OLU\Desktop\SMS
+
+RIGHT (for Windows CMD):
+  c: && cd Users\OLU\Desktop\SMS
+
+The difference:
+- c: = change to C: drive first
+- cd Users\OLU\Desktop\SMS = then navigate to the folder
+- && = chain commands together
+
+================================================================================
+
+COMPLETE WORKING COMMAND FOR WINDOWS CMD:
+
+c: && cd Users\OLU\Desktop\SMS && git add -A && git commit -m "🔥 DEPLOY" && git push origin main
+
+================================================================================
