@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
+import { LetterGenerationService } from '@/services/letter-generation.service';
 
 let supabase: any = null;
 
@@ -252,37 +253,49 @@ const StaffPage: React.FC = () => {
   // Generate Appointment Letter
   const generateAppointmentLetter = async (member: StaffMember) => {
     try {
-      const response = await fetch('/api/school-admin/staff/appointment-letter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          staffId: member.id,
-          staffName: member.user.full_name,
-          position: member.position || 'Staff',
-          schoolName: 'School Name',
-          duties: 'As per job description and assignment',
-        }),
-      });
+      toast.loading('Generating appointment letter...', { id: 'letter' })
 
-      if (!response.ok) throw new Error('Failed to generate letter');
+      // Get school data
+      const { data: schoolData } = await getSupabaseClient()
+        .from('schools')
+        .select('*')
+        .eq('id', schoolId)
+        .single()
 
-      const { letter, filename } = await response.json();
+      if (!schoolData) {
+        toast.error('School information not found')
+        return
+      }
 
-      // Download the letter
-      const blob = new Blob([letter], { type: 'text/html' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      // Generate the letter HTML
+      const letterHTML = await LetterGenerationService.generateAppointmentLetter(
+        {
+          id: member.id,
+          full_name: member.user.full_name,
+          email: member.user.email,
+          position: member.position || 'Staff Member',
+          department: 'Department',
+          salary: 0,
+          employment_date: member.employment_date,
+          qualification: 'Qualification',
+        },
+        {
+          id: schoolData.id,
+          name: schoolData.name,
+          email: schoolData.email,
+          phone: schoolData.phone,
+          address: schoolData.address,
+          logo_url: schoolData.logo_url,
+        }
+      )
 
-      toast.success('Appointment letter generated and downloaded!');
+      // Open in new window for preview and printing
+      await LetterGenerationService.previewLetter(letterHTML)
+
+      toast.success('Appointment letter generated!', { id: 'letter' })
     } catch (error) {
-      console.error('Error generating letter:', error);
-      toast.error('Failed to generate appointment letter');
+      console.error('Error generating letter:', error)
+      toast.error('Failed to generate appointment letter', { id: 'letter' })
     }
   };
 

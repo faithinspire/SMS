@@ -1,443 +1,397 @@
-'use client'
+/**
+ * Professional Letter Generation Service
+ * Generates appointment letters and admission letters with real school branding and data
+ */
 
-import { supabase } from '@/lib/supabase-client'
+import { createClient } from '@/lib/supabase-client'
 
-export interface EmploymentLetterData {
-  teacherName: string
-  teacherId: string
-  schoolName: string
-  position: string
-  salary: number
-  startDate: string
-  employmentTerms?: string
-  schoolLogoUrl?: string
-}
-
-// Enhanced employment letter with full position details
-export interface EnhancedEmploymentLetterData extends EmploymentLetterData {
-  jobDescription?: string
-  qualifications?: string
-  reportingManager?: string
-  benefits?: string[]
-  contractDuration?: string
-  workingHours?: string
-  leavePolicy?: string
-  schoolMotto?: string
-}
-
-export interface AdmissionLetterData {
-  studentName: string
-  studentId: string
-  admissionNumber: string
-  schoolName: string
-  className: string
-  department?: string
-  startDate: string
-  schoolLogoUrl?: string
-}
-
-// Enhanced admission letter with full student and school details
-export interface EnhancedAdmissionLetterData extends AdmissionLetterData {
-  classTeacherName?: string
-  classTeacherEmail?: string
-  codeOfConductUrl?: string
-  codeOfConductText?: string
-  registrationDeadline?: string
-  orientationDate?: string
-  schoolCode?: string
-  stream?: string
-  guardianNames?: string[]
-  schoolMotto?: string
-  schoolVision?: string
-  schoolMission?: string
-}
-
-interface GeneratedLetter {
+interface StaffData {
   id: string
-  type: 'EMPLOYMENT' | 'ADMISSION'
-  recipientId: string
-  recipientEmail: string
-  recipientName: string
-  content: string
-  html: string
-  createdAt: string
-  schoolId: string
+  full_name: string
+  email: string
+  position: string
+  department?: string
+  salary?: number
+  bank_name?: string
+  account_number?: string
+  employment_date?: string
+  qualification?: string
 }
 
-class LetterGenerationService {
+interface SchoolData {
+  id: string
+  name: string
+  email?: string
+  phone?: string
+  address?: string
+  logo_url?: string
+  type?: string
+}
+
+export class LetterGenerationService {
+  private static supabase = createClient()
+
   /**
-   * Generate an employment letter for a teacher (standard version)
+   * Generate a professional appointment letter for a staff member
    */
-  static generateEmploymentLetter(data: EmploymentLetterData | EnhancedEmploymentLetterData): string {
-    const enhanced = data as EnhancedEmploymentLetterData
-    
+  static async generateAppointmentLetter(staffData: StaffData, schoolData: SchoolData): Promise<string> {
+    const today = new Date()
+    const formattedDate = today.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+
+    const letterDate = today.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+
     const letterContent = `
-EMPLOYMENT LETTER
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appointment Letter</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Arial', sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+        .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #003366; padding-bottom: 20px; }
+        .logo-section { display: flex; align-items: center; justify-content: center; gap: 20px; margin-bottom: 15px; }
+        .school-logo { width: 80px; height: 80px; object-fit: contain; }
+        .school-info h1 { color: #003366; font-size: 24px; font-weight: bold; margin: 0; }
+        .school-info p { color: #666; margin: 5px 0; font-size: 12px; }
+        .letter-date { text-align: right; margin-bottom: 30px; font-size: 14px; }
+        .recipient { margin-bottom: 30px; }
+        .recipient p { margin: 5px 0; }
+        .recipient .name { font-weight: bold; }
+        .content { margin: 30px 0; text-align: justify; }
+        .content p { margin: 15px 0; }
+        .details-table { width: 100%; margin: 20px 0; border-collapse: collapse; }
+        .details-table td { padding: 10px; border-bottom: 1px solid #ddd; }
+        .details-table .label { font-weight: bold; width: 40%; background-color: #f5f5f5; }
+        .signature-section { margin-top: 40px; }
+        .signature-line { margin-top: 50px; border-top: 1px solid #333; padding-top: 5px; width: 200px; }
+        .footer { text-align: center; margin-top: 50px; font-size: 12px; color: #999; border-top: 1px solid #ddd; padding-top: 20px; }
+        @media print { body { background: white; } .container { padding: 0; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header with School Info -->
+        <div class="header">
+            <div class="logo-section">
+                ${schoolData.logo_url ? `<img src="${schoolData.logo_url}" alt="School Logo" class="school-logo" />` : ''}
+                <div class="school-info">
+                    <h1>${schoolData.name}</h1>
+                    ${schoolData.address ? `<p>${schoolData.address}</p>` : ''}
+                    ${schoolData.phone ? `<p>Tel: ${schoolData.phone}</p>` : ''}
+                    ${schoolData.email ? `<p>Email: ${schoolData.email}</p>` : ''}
+                </div>
+            </div>
+        </div>
 
-Date: ${new Date().toLocaleDateString('en-GB')}
+        <!-- Letter Date -->
+        <div class="letter-date">
+            <strong>${formattedDate}</strong>
+        </div>
 
-To: ${data.teacherName}
+        <!-- Recipient -->
+        <div class="recipient">
+            <p class="name">${staffData.full_name}</p>
+            <p>${staffData.email}</p>
+        </div>
 
-Dear ${data.teacherName},
+        <!-- Salutation -->
+        <div class="content">
+            <p>Dear ${staffData.full_name.split(' ')[0]},</p>
 
-RE: LETTER OF EMPLOYMENT - ${data.position.toUpperCase()}
+            <!-- Letter Body -->
+            <p style="margin-top: 20px;">
+                We are pleased to formally offer you a position of <strong>${staffData.position || 'Staff Member'}</strong> in our esteemed institution, <strong>${schoolData.name}</strong>. This letter serves as your official appointment notification.
+            </p>
 
-We are pleased to inform you that you have been offered employment with ${data.schoolName} in the position of ${data.position}.
+            <!-- Employment Details Table -->
+            <table class="details-table">
+                <tr>
+                    <td class="label">Position:</td>
+                    <td>${staffData.position || 'Not specified'}</td>
+                </tr>
+                ${staffData.department ? `
+                <tr>
+                    <td class="label">Department:</td>
+                    <td>${staffData.department}</td>
+                </tr>
+                ` : ''}
+                ${staffData.employment_date ? `
+                <tr>
+                    <td class="label">Date of Commencement:</td>
+                    <td>${new Date(staffData.employment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                </tr>
+                ` : ''}
+                ${staffData.salary ? `
+                <tr>
+                    <td class="label">Salary:</td>
+                    <td>₦${(staffData.salary).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                </tr>
+                ` : ''}
+                ${staffData.qualification ? `
+                <tr>
+                    <td class="label">Qualification:</td>
+                    <td>${staffData.qualification}</td>
+                </tr>
+                ` : ''}
+            </table>
 
-${enhanced.schoolMotto ? `${enhanced.schoolMotto}\n` : ''}
+            <!-- Terms and Conditions -->
+            <p style="margin-top: 20px;">
+                Your appointment is subject to the following terms and conditions:
+            </p>
+            <ul style="margin-left: 20px;">
+                <li>Satisfactory completion of all pre-employment requirements and background checks</li>
+                <li>Compliance with the school's policies and procedures</li>
+                <li>Professional conduct and adherence to ethical standards</li>
+                <li>Willingness to participate in staff development and training programs</li>
+                <li>Availability for the required working hours and school activities</li>
+            </ul>
 
-EMPLOYMENT TERMS & CONDITIONS:
+            <!-- Closing -->
+            <p style="margin-top: 20px;">
+                We are confident that you will be a valuable addition to our team and contribute significantly to the academic excellence and growth of our institution. Should you have any questions or require clarification on any matter, please do not hesitate to contact our Human Resources department.
+            </p>
 
-1. Position: ${data.position}
-${enhanced.jobDescription ? `2. Role Description: ${enhanced.jobDescription}\n` : ''}${enhanced.jobDescription ? '3. ' : '2. '}School: ${data.schoolName}
-${enhanced.jobDescription ? '4. ' : '3. '}Start Date: ${new Date(data.startDate).toLocaleDateString('en-GB')}
-${enhanced.jobDescription ? '5. ' : '4. '}Monthly Remuneration: ₦${this.formatCurrency(data.salary)}
-${enhanced.jobDescription ? '6. ' : '5. '}Duration: ${enhanced.contractDuration || 'Renewable annually subject to satisfactory performance'}
-${enhanced.workingHours ? `7. Working Hours: ${enhanced.workingHours}\n` : ''}${enhanced.reportingManager ? `8. Reporting Manager: ${enhanced.reportingManager}\n` : ''}
+            <p style="margin-top: 15px;">
+                We look forward to welcoming you aboard.
+            </p>
 
-${enhanced.qualifications ? `REQUIRED QUALIFICATIONS:
-${enhanced.qualifications}
+            <!-- Closing Salutation -->
+            <p style="margin-top: 20px;">
+                Yours faithfully,
+            </p>
 
-` : ''}RESPONSIBILITIES:
-- Execute assigned ${data.position.toLowerCase()} duties with utmost professionalism
-- Maintain comprehensive lesson records and documentation
-- Participate actively in school activities and programs
-- Adhere to school policies, regulations and code of conduct
-- Maintain confidentiality of school and student matters
-- Support the school's vision and mission
-${enhanced.jobDescription ? `- ${enhanced.jobDescription.split('\n').join('\n- ')}\n` : ''}
+            <!-- Signature Area -->
+            <div class="signature-section">
+                <div class="signature-line"></div>
+                <p style="margin-top: 5px; font-weight: bold;">
+                    ${schoolData.name}<br />
+                    School Principal/Head
+                </p>
+            </div>
+        </div>
 
-TERMS OF EMPLOYMENT:
-- This is a renewable annual contract
-- Performance shall be reviewed at the end of each academic session
-- Absence without permission for more than 3 days may result in automatic termination
-- All duties must be performed in accordance with Nigerian education standards
-- Compliance with school rules and regulations is mandatory
-- Professional conduct and ethical behavior are expected at all times
-
-LEAVE AND ALLOWANCES:
-${enhanced.leavePolicy ? enhanced.leavePolicy : `- Annual leave: 21 working days
-- Public holidays: As declared by the Federal Government
-- Health insurance benefits (as applicable)
-- Professional development opportunities`}
-
-${enhanced.benefits ? `
-ADDITIONAL BENEFITS:
-${enhanced.benefits.map(benefit => `- ${benefit}`).join('\n')}
-
-` : ''}Your prompt confirmation of acceptance of this offer is required by return of mail.
-
-This letter is to confirm the commencement of your employment with our institution.
-
-We welcome you to our team and look forward to a productive and collaborative working relationship.
-
-Yours Faithfully,
-
-_________________________
-SCHOOL PRINCIPAL
-${data.schoolName}
-
-Ref: ${data.teacherId}
-Date: ${new Date().toLocaleDateString('en-GB')}
-    `.trim()
-
-    return letterContent
-  }
-
-  /**
-   * Generate an admission letter for a student (enhanced version with full details)
-   */
-  static generateAdmissionLetter(data: AdmissionLetterData | EnhancedAdmissionLetterData): string {
-    const enhanced = data as EnhancedAdmissionLetterData
-    
-    const letterContent = `
-ADMISSION LETTER
-
-Date: ${new Date().toLocaleDateString('en-GB')}
-
-To: ${data.studentName}
-
-CONGRATULATIONS ON YOUR ADMISSION!
-
-Dear ${data.studentName},
-
-We are delighted to inform you that you have been successfully admitted to ${data.schoolName} for the ${new Date().getFullYear()}/${new Date().getFullYear() + 1} academic session.
-
-${enhanced.schoolMotto ? `SCHOOL MOTTO: "${enhanced.schoolMotto}"\n` : ''}
-${enhanced.schoolVision ? `SCHOOL VISION: ${enhanced.schoolVision}\n` : ''}
-${enhanced.schoolMission ? `SCHOOL MISSION: ${enhanced.schoolMission}\n` : ''}
-
-ADMISSION DETAILS:
-
-1. Student Name: ${data.studentName}
-2. Admission Number: ${data.admissionNumber}
-${enhanced.schoolCode ? `3. School Code: ${enhanced.schoolCode}\n` : ''}3. School: ${data.schoolName}
-4. Class/Level: ${data.className}
-${data.department ? `5. Department: ${data.department}\n` : ''}${enhanced.classTeacherName ? `5. Class Teacher: ${enhanced.classTeacherName}${enhanced.classTeacherEmail ? ` (${enhanced.classTeacherEmail})` : ''}\n` : ''}${data.department ? '6. ' : enhanced.classTeacherName ? '6. ' : '5. '}Session Start Date: ${new Date(data.startDate).toLocaleDateString('en-GB')}
-${enhanced.registrationDeadline ? `7. Registration Deadline: ${enhanced.registrationDeadline}\n` : ''}${enhanced.orientationDate ? `8. Orientation Programme: ${enhanced.orientationDate}\n` : ''}
-
-IMPORTANT INFORMATION:
-
-1. REGISTRATION
-   - All students must report on or before the school opening date
-   - Late registration may incur an additional fee
-   - Complete all registration requirements within the first week
-   - Bring this admission letter to school on the opening day
-
-2. SCHOOL FEES
-   - Fees are due within the first two weeks of resumption
-   - Payment should be made through authorized channels only
-   - Failure to pay may result in denial of examination privileges
-   - Fees structure: Contact the school office for detailed breakdown
-
-3. SCHOOL UNIFORM & MATERIALS
-   - Complete school uniform is compulsory from day one
-   - Obtain required textbooks and materials from the approved vendor only
-   - All items must be clearly labeled with the student's name and admission number
-   - PE kit and house uniform required for all students
-
-4. CONDUCT & DISCIPLINE
-   - Students are expected to maintain the highest standards of conduct
-   - Adherence to school rules is mandatory for all students
-   - Academic integrity is essential; any form of cheating is prohibited
-   ${enhanced.codeOfConductUrl || enhanced.codeOfConductText ? `- School Code of Conduct: Please review carefully before resumption\n` : ''}
-
-${enhanced.codeOfConductText ? `SCHOOL CODE OF CONDUCT HIGHLIGHTS:
-${enhanced.codeOfConductText}
-
-` : ''}5. ATTENDANCE
-   - Regular attendance is compulsory (minimum 80% attendance required)
-   - Absence requires a written explanation from parents/guardians
-   - Poor attendance may affect academic progress and promotion
-   - Medical excuses must be submitted within 3 days of return
-
-6. HEALTH & SAFETY
-   - Medical examinations may be required at the beginning of the session
-   - All immunizations should be up-to-date
-   - Report any health issues to the school medical unit immediately
-   - Keep emergency contact numbers updated with the school
-
-7. ACADEMIC EXCELLENCE
-   - Students are encouraged to maintain high academic standards
-   - Participate actively in co-curricular activities
-   - Seek assistance from your class teacher when facing academic challenges
-   ${enhanced.classTeacherName ? `- Your class teacher ${enhanced.classTeacherName} is here to support your learning\n` : ''}
-
-8. EXAMINATION & ASSESSMENT
-   - All students must sit for termly and final examinations
-   - Practical assessment is a requirement for science and technical subjects
-   - Report cards are issued at the end of each term
-   - Poor performance may require remedial classes or parent conference
-
-ORIENTATION PROGRAMME
-An orientation programme will be held for all new students to familiarize you with the school environment, facilities, staff, and expectations. This is a crucial introduction to our school community.
-${enhanced.orientationDate ? `Scheduled Date: ${enhanced.orientationDate}` : 'Date to be announced at registration'}
-
-PARENT/GUARDIAN SUPPORT
-We encourage close collaboration between home and school. Regular communication through parent-teacher meetings, school reports, and WhatsApp updates ensures optimal student development. ${enhanced.guardianNames ? `Please ensure that ${enhanced.guardianNames.join(' and ')} sign and return the parent consent form at registration.` : 'Parent consent forms must be completed at registration.'}
-
-ADDITIONAL NOTES
-- This letter should be retained by the student and produced on the school opening date
-- Admission is conditional upon satisfactory conduct and academic performance
-- Students are expected to abide by all school policies and regulations
-- In case of any misconduct, disciplinary actions will be taken
-${enhanced.codeOfConductUrl ? `- Full Code of Conduct available at: ${enhanced.codeOfConductUrl}` : ''}
-
-Should you require any further information, please do not hesitate to contact the school office.
-
-We look forward to welcoming you to ${data.schoolName}. We are committed to your academic success and personal development.
-
-Yours Faithfully,
-
-_________________________
-SCHOOL PRINCIPAL
-${data.schoolName}
-
-Admission No: ${data.admissionNumber}
-Date: ${new Date().toLocaleDateString('en-GB')}
-
----
-NOTE: This letter should be retained by the student and must be produced on the school opening date.
-Parent/Guardian Signature: _________________ Date: __________
-    `.trim()
-
-    return letterContent
-  }
-
-  /**
-   * Generate HTML version of employment letter with school logo
-   */
-  static generateEmploymentLetterHTML(data: EmploymentLetterData | EnhancedEmploymentLetterData): string {
-    const letterContent = this.generateEmploymentLetter(data)
-    return this.convertToHTML(letterContent, data.schoolLogoUrl)
-  }
-
-  /**
-   * Generate HTML version of admission letter with school logo
-   */
-  static generateAdmissionLetterHTML(data: AdmissionLetterData | EnhancedAdmissionLetterData): string {
-    const letterContent = this.generateAdmissionLetter(data)
-    return this.convertToHTML(letterContent, data.schoolLogoUrl)
-  }
-
-  /**
-   * Convert plain text letter to HTML with school logo support
-   */
-  private static convertToHTML(text: string, schoolLogoUrl?: string): string {
-    const lines = text.split('\n')
-    let html = `<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 900px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; background: white;">
-    
-    <!-- School Logo Header -->
-    ${schoolLogoUrl ? `
-    <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px;">
-      <img src="${schoolLogoUrl}" alt="School Logo" style="max-height: 80px; max-width: 150px; object-fit: contain;" />
+        <!-- Footer -->
+        <div class="footer">
+            <p>This letter has been generated electronically and is valid without a physical signature.<br />
+            Appointment Letter - ${schoolData.name} - Date: ${formattedDate}</p>
+        </div>
     </div>
-    ` : ''}
-    
-    <div style="margin-top: 20px;">`
+</body>
+</html>
+    `.trim()
 
-    for (const line of lines) {
-      if (line.trim() === '') {
-        html += '<br />'
-      } else if (line.match(/^[A-Z]+[\s\w&]+[!:.]?$/)) {
-        // Heading
-        html += `<h3 style="margin-top: 20px; margin-bottom: 10px; font-weight: bold; color: #333;">${this.escapeHtml(line)}</h3>`
-      } else if (line.match(/^\d+\./)) {
-        // Numbered list
-        html += `<p style="margin-left: 20px; margin-top: 5px; margin-bottom: 5px;">${this.escapeHtml(line)}</p>`
-      } else if (line.match(/^_+$/)) {
-        // Signature line
-        html += '<div style="margin-top: 30px; height: 50px; border-top: 1px solid #333; margin-bottom: 5px;"></div>'
-      } else {
-        html += `<p style="margin-top: 8px; margin-bottom: 8px;">${this.escapeHtml(line)}</p>`
-      }
-    }
-
-    html += '</div></div>'
-    return html
+    return letterContent
   }
 
   /**
-   * Escape HTML special characters
+   * Generate a professional admission letter for a student
    */
-  private static escapeHtml(text: string): string {
-    const map: { [key: string]: string } = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#039;',
-    }
-    return text.replace(/[&<>"']/g, (char) => map[char])
+  static async generateAdmissionLetter(
+    studentData: any,
+    schoolData: SchoolData,
+    classInfo?: any
+  ): Promise<string> {
+    const today = new Date()
+    const formattedDate = today.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+
+    const letterContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admission Letter</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Arial', sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+        .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #003366; padding-bottom: 20px; }
+        .logo-section { display: flex; align-items: center; justify-content: center; gap: 20px; margin-bottom: 15px; }
+        .school-logo { width: 80px; height: 80px; object-fit: contain; }
+        .school-info h1 { color: #003366; font-size: 24px; font-weight: bold; margin: 0; }
+        .school-info p { color: #666; margin: 5px 0; font-size: 12px; }
+        .letter-date { text-align: right; margin-bottom: 30px; font-size: 14px; }
+        .recipient { margin-bottom: 30px; }
+        .recipient p { margin: 5px 0; }
+        .recipient .name { font-weight: bold; }
+        .content { margin: 30px 0; text-align: justify; }
+        .content p { margin: 15px 0; }
+        .details-table { width: 100%; margin: 20px 0; border-collapse: collapse; }
+        .details-table td { padding: 10px; border-bottom: 1px solid #ddd; }
+        .details-table .label { font-weight: bold; width: 40%; background-color: #f5f5f5; }
+        .signature-section { margin-top: 40px; }
+        .signature-line { margin-top: 50px; border-top: 1px solid #333; padding-top: 5px; width: 200px; }
+        .footer { text-align: center; margin-top: 50px; font-size: 12px; color: #999; border-top: 1px solid #ddd; padding-top: 20px; }
+        @media print { body { background: white; } .container { padding: 0; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header with School Info -->
+        <div class="header">
+            <div class="logo-section">
+                ${schoolData.logo_url ? `<img src="${schoolData.logo_url}" alt="School Logo" class="school-logo" />` : ''}
+                <div class="school-info">
+                    <h1>${schoolData.name}</h1>
+                    ${schoolData.address ? `<p>${schoolData.address}</p>` : ''}
+                    ${schoolData.phone ? `<p>Tel: ${schoolData.phone}</p>` : ''}
+                    ${schoolData.email ? `<p>Email: ${schoolData.email}</p>` : ''}
+                </div>
+            </div>
+        </div>
+
+        <!-- Letter Date -->
+        <div class="letter-date">
+            <strong>${formattedDate}</strong>
+        </div>
+
+        <!-- Recipient (Parent/Guardian) -->
+        <div class="recipient">
+            <p>To: The Parent/Guardian</p>
+            <p class="name">${studentData.parent_name || 'Parent/Guardian'}</p>
+        </div>
+
+        <!-- Salutation -->
+        <div class="content">
+            <p>Dear Sir/Madam,</p>
+
+            <!-- Letter Body -->
+            <p style="margin-top: 20px;">
+                We are delighted to inform you that <strong>${studentData.full_name}</strong> has been successfully admitted to <strong>${schoolData.name}</strong> for the ${studentData.session || 'current'} academic session.
+            </p>
+
+            <p>
+                This letter confirms the acceptance of your ward for admission into the school. We are confident that your child will benefit immensely from our high-quality educational programs and supportive learning environment.
+            </p>
+
+            <!-- Admission Details Table -->
+            <table class="details-table">
+                <tr>
+                    <td class="label">Student Name:</td>
+                    <td>${studentData.full_name}</td>
+                </tr>
+                <tr>
+                    <td class="label">Admission Number:</td>
+                    <td>${studentData.admission_number || 'TBD'}</td>
+                </tr>
+                ${classInfo ? `
+                <tr>
+                    <td class="label">Class Assigned:</td>
+                    <td>${classInfo.name || 'To be determined'}</td>
+                </tr>
+                ` : ''}
+                ${studentData.session ? `
+                <tr>
+                    <td class="label">Academic Session:</td>
+                    <td>${studentData.session}</td>
+                </tr>
+                ` : ''}
+                ${studentData.date_of_birth ? `
+                <tr>
+                    <td class="label">Date of Birth:</td>
+                    <td>${new Date(studentData.date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                </tr>
+                ` : ''}
+            </table>
+
+            <!-- Next Steps -->
+            <p style="margin-top: 20px;">
+                <strong>Next Steps:</strong>
+            </p>
+            <ul style="margin-left: 20px;">
+                <li>Complete all admission formalities by the specified deadline</li>
+                <li>Pay the required school fees as per the fee structure</li>
+                <li>Provide all necessary documents (birth certificate, immunization records, etc.)</li>
+                <li>Attend the orientation program scheduled for new students</li>
+                <li>Obtain school uniform and materials as per the requirements list</li>
+            </ul>
+
+            <!-- Important Information -->
+            <p style="margin-top: 20px;">
+                <strong>School Information:</strong>
+            </p>
+            <p>
+                ${schoolData.name} is committed to providing an excellent education that develops the academic, social, and personal growth of every student. We maintain high standards of discipline, professionalism, and ethical conduct.
+            </p>
+
+            <!-- Closing -->
+            <p style="margin-top: 20px;">
+                Should you have any questions or require additional information, please do not hesitate to contact our admissions office.
+            </p>
+
+            <p style="margin-top: 15px;">
+                We look forward to welcoming ${studentData.full_name} to our school community.
+            </p>
+
+            <!-- Closing Salutation -->
+            <p style="margin-top: 20px;">
+                Yours faithfully,
+            </p>
+
+            <!-- Signature Area -->
+            <div class="signature-section">
+                <div class="signature-line"></div>
+                <p style="margin-top: 5px; font-weight: bold;">
+                    ${schoolData.name}<br />
+                    Principal/Head of School
+                </p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>This letter has been generated electronically and is valid without a physical signature.<br />
+            Admission Letter - ${schoolData.name} - Date: ${formattedDate}</p>
+        </div>
+    </div>
+</body>
+</html>
+    `.trim()
+
+    return letterContent
   }
 
   /**
-   * Format currency
+   * Convert HTML letter to PDF (client-side using html2pdf library)
    */
-  private static formatCurrency(amount: number): string {
-    return amount.toLocaleString('en-NG', { style: 'currency', currency: 'NGN' })
+  static async downloadLetterAsPDF(htmlContent: string, filename: string): Promise<void> {
+    // This requires html2pdf library to be installed
+    // For now, we'll provide the HTML as is
+    const blob = new Blob([htmlContent], { type: 'text/html' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${filename}.html`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
   }
 
   /**
-   * Save generated letter to database
+   * Open letter in a new window for preview and printing
    */
-  static async saveGeneratedLetter(
-    letter: Omit<GeneratedLetter, 'id' | 'createdAt'> & { createdAt?: string }
-  ): Promise<GeneratedLetter | null> {
-    try {
-      const { data, error } = await supabase
-        .from('generated_letters')
-        .insert({
-          ...letter,
-          created_at: new Date().toISOString(),
-        })
-        .select()
-
-      if (error) throw error
-      return data?.[0] || null
-    } catch (err) {
-      console.error('Error saving letter:', err)
-      return null
-    }
-  }
-
-  /**
-   * Get generated letters for a school
-   */
-  static async getSchoolLetters(schoolId: string): Promise<GeneratedLetter[]> {
-    try {
-      const { data, error } = await supabase
-        .from('generated_letters')
-        .select('*')
-        .eq('school_id', schoolId)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      return data || []
-    } catch (err) {
-      console.error('Error fetching letters:', err)
-      return []
-    }
-  }
-
-  /**
-   * Get letters for a specific recipient
-   */
-  static async getRecipientLetters(recipientId: string): Promise<GeneratedLetter[]> {
-    try {
-      const { data, error } = await supabase
-        .from('generated_letters')
-        .select('*')
-        .eq('recipient_id', recipientId)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      return data || []
-    } catch (err) {
-      console.error('Error fetching recipient letters:', err)
-      return []
-    }
-  }
-
-  /**
-   * Download letter as text file
-   */
-  static downloadLetter(letterContent: string, fileName: string) {
-    const element = document.createElement('a')
-    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(letterContent))
-    element.setAttribute('download', fileName)
-    element.style.display = 'none'
-    document.body.appendChild(element)
-    element.click()
-    document.body.removeChild(element)
-  }
-
-  /**
-   * Copy letter to clipboard
-   */
-  static async copyToClipboard(letterContent: string): Promise<boolean> {
-    try {
-      await navigator.clipboard.writeText(letterContent)
-      return true
-    } catch (err) {
-      console.error('Error copying to clipboard:', err)
-      return false
-    }
-  }
-
-  /**
-   * Print letter
-   */
-  static printLetter(letterContent: string) {
-    const printWindow = window.open('', '', 'height=600,width=800')
-    if (printWindow) {
-      printWindow.document.write('<pre style="font-family: Arial; padding: 20px;">')
-      printWindow.document.write(this.escapeHtml(letterContent))
-      printWindow.document.write('</pre>')
-      printWindow.document.close()
-      printWindow.print()
+  static async previewLetter(htmlContent: string): Promise<void> {
+    const newWindow = window.open()
+    if (newWindow) {
+      newWindow.document.write(htmlContent)
+      newWindow.document.close()
     }
   }
 }
-
-export { LetterGenerationService }
