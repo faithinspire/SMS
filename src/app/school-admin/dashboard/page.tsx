@@ -390,35 +390,6 @@ export default function SchoolAdminDashboard() {
     }))
   }
 
-  const saveStudentEdit = async () => {
-    try {
-      if (!state.editingStudent) return
-      setState(s => ({ ...s, error: '⏳ Saving...' }))
-
-      const { error } = await supabase
-        .from('users')
-        .update({ full_name: state.editingName, email: state.editingEmail })
-        .eq('id', state.editingStudent.id)
-        .eq('school_id', state.user?.school_id)
-
-      if (error) throw error
-
-      // Update local state
-      setState(s => ({
-        ...s,
-        students: s.students.map(st => 
-          st.id === state.editingStudent.id 
-            ? { ...st, full_name: state.editingName, email: state.editingEmail }
-            : st
-        ),
-        editingStudent: null,
-        error: '✅ Student updated',
-      }))
-      setTimeout(() => setState(s => ({ ...s, error: '' })), 3000)
-    } catch (err: any) {
-      setState(s => ({ ...s, error: `❌ ${err.message}` }))
-    }
-  }
 
   const deleteStaff = async (staffId: string) => {
     if (!confirm('Are you sure you want to permanently delete this staff member? This action cannot be undone.')) return
