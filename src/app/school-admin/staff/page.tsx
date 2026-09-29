@@ -147,14 +147,22 @@ const StaffPage: React.FC = () => {
             status
           )
         `)
-        .eq('school_id', schoolId)
-        .order('user.full_name', { ascending: true });
+        .eq('school_id', schoolId);
 
-      if (error) throw error;
-      setStaff(data || []);
+      if (error) {
+        console.error('Supabase Error:', error);
+        throw error;
+      }
+      
+      // Sort in application layer (avoids Supabase ordering issues)
+      const sortedData = (data || []).sort((a, b) => 
+        (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
+      );
+      
+      setStaff(sortedData);
     } catch (error) {
       console.error('Error fetching staff:', error);
-      toast.error('Failed to load staff');
+      toast.error('Failed to load staff: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsLoading(false);
     }
