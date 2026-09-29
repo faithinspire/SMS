@@ -6,6 +6,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
@@ -88,6 +89,7 @@ const ConfirmationModal: React.FC<{
 );
 
 const StaffPage: React.FC = () => {
+  const router = useRouter();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -366,8 +368,15 @@ const StaffPage: React.FC = () => {
                   <td className="py-3 px-4 text-center">
                     <div className="flex gap-2 justify-center flex-wrap">
                       <button
-                        onClick={() => generateAppointmentLetter(member)}
+                        onClick={() => router.push(`/school-admin/staff/${member.id}`)}
                         className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                        title="Edit Staff Profile"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => generateAppointmentLetter(member)}
+                        className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
                         title="Generate Appointment Letter"
                       >
                         📄 Letter
@@ -382,7 +391,7 @@ const StaffPage: React.FC = () => {
                       ) : member.status !== 'SUSPENDED' ? (
                         <button
                           onClick={() => setModal({ type: 'activate', staff: member })}
-                          className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                          className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
                         >
                           Activate
                         </button>
