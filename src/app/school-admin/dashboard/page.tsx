@@ -176,40 +176,82 @@ export default function SchoolAdminDashboard() {
             .select('*')
             .eq('school_id', currentUser.school_id)
             .eq('role', 'STAFF')
-            .then(r => r.data || []),
+            .then(r => {
+              if (r.error) {
+                console.error('[Staff Query Error]', r.error)
+                return []
+              }
+              return r.data || []
+            }),
           supabase
             .from('students')
             .select('*')
             .eq('school_id', currentUser.school_id)
-            .then(r => r.data || []),
+            .then(r => {
+              if (r.error) {
+                console.error('[Students Query Error]', r.error)
+                return []
+              }
+              return r.data || []
+            }),
           supabase
             .from('results')
             .select('*')
             .eq('school_id', currentUser.school_id)
-            .then(r => r.data || []),
+            .then(r => {
+              if (r.error) {
+                console.error('[Results Query Error]', r.error)
+                return []
+              }
+              return r.data || []
+            }),
           supabase
             .from('transactions')
             .select('*')
             .eq('school_id', currentUser.school_id)
-            .then(r => r.data || []),
+            .then(r => {
+              if (r.error) {
+                console.error('[Transactions Query Error]', r.error)
+                return []
+              }
+              return r.data || []
+            }),
           supabase
             .from('academic_sessions')
             .select('id, session_year, is_active')
             .eq('school_id', currentUser.school_id)
             .order('session_year', { ascending: false })
-            .then(r => r.data || []),
+            .then(r => {
+              if (r.error) {
+                console.error('[Sessions Query Error]', r.error)
+                return []
+              }
+              return r.data || []
+            }),
           supabase
             .from('terms')
             .select('id, session_id, term_name, term_number, is_active')
             .eq('school_id', currentUser.school_id)
             .order('term_number', { ascending: true })
-            .then(r => r.data || []),
+            .then(r => {
+              if (r.error) {
+                console.error('[Terms Query Error]', r.error)
+                return []
+              }
+              return r.data || []
+            }),
           supabase
             .from('class_arm_combos')
             .select('id, class_name, arm_name, class_id, arm_id')
             .eq('school_id', currentUser.school_id)
             .order('class_name', { ascending: true })
-            .then(r => r.data || []),
+            .then(r => {
+              if (r.error) {
+                console.error('[Classes Query Error]', r.error)
+                return []
+              }
+              return r.data || []
+            }),
         ])
 
         setState(s => ({
