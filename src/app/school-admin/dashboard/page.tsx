@@ -34,6 +34,8 @@ interface DashboardState {
   editingStudent: any | null
   editingName: string
   editingEmail: string
+  studentProfileEditOpen: boolean
+  studentProfileEditId: string | null
 }
 
 export default function SchoolAdminDashboard() {
