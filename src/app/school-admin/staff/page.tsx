@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
 import { LetterGenerationService } from '@/services/letter-generation.service';
+import { LetterPreviewModal } from '@/components/admin/LetterPreviewModal';
 
 let supabase: any = null;
 
@@ -101,6 +102,10 @@ const StaffPage: React.FC = () => {
     staff?: StaffMember;
   }>({ type: null });
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [letterModal, setLetterModal] = useState<{
+    isOpen: boolean;
+    staffId?: string;
+  }>({ isOpen: false });
 
   // Get current user's school
   useEffect(() => {
@@ -280,53 +285,12 @@ const StaffPage: React.FC = () => {
     }
   };
 
-  // Generate Appointment Letter
-  const generateAppointmentLetter = async (member: StaffMember) => {
-    try {
-      toast.loading('Generating appointment letter...', { id: 'letter' })
-
-      // Get school data
-      const { data: schoolData } = await getSupabaseClient()
-        .from('schools')
-        .select('*')
-        .eq('id', schoolId)
-        .single()
-
-      if (!schoolData) {
-        toast.error('School information not found')
-        return
-      }
-
-      // Generate the letter HTML
-      const letterHTML = await LetterGenerationService.generateAppointmentLetter(
-        {
-          id: member.id,
-          full_name: member.user.full_name,
-          email: member.user.email,
-          position: member.position || 'Staff Member',
-          department: 'Department',
-          salary: 0,
-          employment_date: member.employment_date,
-          qualification: 'Qualification',
-        },
-        {
-          id: schoolData.id,
-          name: schoolData.name,
-          email: schoolData.email,
-          phone: schoolData.phone,
-          address: schoolData.address,
-          logo_url: schoolData.logo_url,
-        }
-      )
-
-      // Open in new window for preview and printing
-      await LetterGenerationService.previewLetter(letterHTML)
-
-      toast.success('Appointment letter generated!', { id: 'letter' })
-    } catch (error) {
-      console.error('Error generating letter:', error)
-      toast.error('Failed to generate appointment letter', { id: 'letter' })
-    }
+  // Generate Appointment Letter - Open in modal
+  const generateAppointmentLetter = (member: StaffMember) => {
+    setLetterModal({
+      isOpen: true,
+      staffId: member.id,
+    })
   };
 
   return (
@@ -483,6 +447,19 @@ const StaffPage: React.FC = () => {
           onCancel={() => setModal({ type: null })}
           isLoading={isActionLoading}
           isDangerous
+        />
+      )}
+
+      {/* Letter Preview Modal */}
+      {letterModal.isOpen && letterModal.staffId && (
+        <LetterPreviewModal
+          isOpen={letterModal.isOpen}
+          onClose={() => setLetterModal({ isOpen: false })}
+          letterType="appointment"
+          recipientId={letterModal.staffId}
+          schoolId={schoolId}
+          recipientEmail={staff.find((s) => s.id === letterModal.staffId)?.user?.email}
+          recipientPhone={staff.find((s) => s.id === letterModal.staffId)?.user?.phone || ''}
         />
       )}
     </div>

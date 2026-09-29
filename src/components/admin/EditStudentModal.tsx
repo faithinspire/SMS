@@ -20,6 +20,17 @@ const DEPARTMENTS = [
   { id: 'TECHNICAL', name: 'Technical', description: 'Technical Drawing, Woodwork' },
 ]
 
+const RELATIONSHIPS = [
+  'Father',
+  'Mother',
+  'Guardian',
+  'Uncle',
+  'Aunt',
+  'Grandfather',
+  'Grandmother',
+  'Other'
+]
+
 export default function EditStudentModal({
   studentId,
   schoolId,
@@ -34,12 +45,35 @@ export default function EditStudentModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [activeTab, setActiveTab] = useState<'personal' | 'academic' | 'guardian'>('personal')
 
   const [studentData, setStudentData] = useState({
     full_name: '',
     email: '',
+    phone: '',
+    date_of_birth: '',
     admission_number: '',
     department: '',
+    gender: '',
+    address: '',
+    state: '',
+    lga: '',
+  })
+
+  const [guardians, setGuardians] = useState<Array<{
+    id: string
+    full_name: string
+    relationship: string
+    phone: string
+    email: string
+  }>>([])
+
+  const [editingGuardianId, setEditingGuardianId] = useState<string | null>(null)
+  const [guardianForm, setGuardianForm] = useState({
+    full_name: '',
+    relationship: '',
+    phone: '',
+    email: '',
   })
 
   const [selectedClass, setSelectedClass] = useState('')

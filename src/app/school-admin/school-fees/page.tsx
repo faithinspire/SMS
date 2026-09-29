@@ -67,8 +67,9 @@ export default function SchoolAdminSchoolFeesPage() {
 
       setSchool(schoolData)
 
-      // Load all student payment transactions from the transactions table
-      let query = getSupabaseClient()
+      // Load all student payment transactions with proper JOIN
+      // Fetch transactions and join with student data
+      const { data: transactionsData, error: txError } = await getSupabaseClient()
         .from('transactions')
         .select(`
           id,
@@ -82,12 +83,7 @@ export default function SchoolAdminSchoolFeesPage() {
         `)
         .eq('school_id', currentUser.school_id)
         .eq('type', 'STUDENT_PAYMENT')
-
-      if (filterStatus !== 'ALL') {
-        query = query.eq('status', filterStatus)
-      }
-
-      const { data: transactionsData, error: txError } = await query.order('created_at', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (txError) {
         console.error('Error fetching transactions:', txError)
@@ -96,62 +92,54 @@ export default function SchoolAdminSchoolFeesPage() {
         return
       }
 
-      // For each transaction, fetch the student record to get admission number and class
-      const enrichedRecords: StudentFeeRecord[] = []
+      // Now fetch all students in one query to avoid N+1
+      const { data: allStudents, error: studentsError } = await getSupabaseClient()
+        .from('students')
+        .select(`
+          id,
+          admission_number,
+          class_arm_combo:class_arm_combo_id (
+            class:class_id (name),
+            arm:arm_id (name)
+          ),
+          user:user_id (full_name)
+        `)
+        .eq('school_id', currentUser.school_id)
 
-      for (const tx of transactionsData || []) {
-        try {
-          // Fetch student details using recipient_id
-          const { data: studentData } = await getSupabaseClient()
-            .from('students')
-            .select(`
-              id,
-              admission_number,
-              class_arm_combo:class_arm_combo_id (
-                class:class_id (
-                  name
-                ),
-                arm:arm_id (
-                  name
-                )
-              ),
-              user:user_id (
-                full_name
-              )
-            `)
-            .eq('id', tx.recipient_id)
-            .single()
+      if (studentsError) {
+        console.error('Error fetching students:', studentsError)
+        setFeeRecords([])
+        setLoading(false)
+        return
+      }
 
-          const className = studentData?.class_arm_combo
-            ? `${studentData.class_arm_combo.class?.name} ${studentData.class_arm_combo.arm?.name}`
+      // Create a map for quick student lookup
+      const studentMap = new Map()
+      ;(allStudents || []).forEach(student => {
+        studentMap.set(student.id, student)
+      })
+
+      // Build enriched records from the joined data
+      const enrichedRecords: StudentFeeRecord[] = (transactionsData || [])
+        .filter(tx => filterStatus === 'ALL' || tx.status === filterStatus)
+        .map(tx => {
+          const student = studentMap.get(tx.recipient_id)
+          const className = student?.class_arm_combo
+            ? `${student.class_arm_combo.class?.name} ${student.class_arm_combo.arm?.name}`
             : 'N/A'
 
-          enrichedRecords.push({
+          return {
             id: tx.id,
             student_id: tx.recipient_id,
-            student_name: studentData?.user?.full_name || tx.recipient_name || 'Unknown',
-            admission_number: studentData?.admission_number || 'N/A',
+            student_name: student?.user?.full_name || tx.recipient_name || 'Unknown',
+            admission_number: student?.admission_number || 'N/A',
             class_name: className,
             amount_paid: tx.amount || 0,
             payment_status: tx.status === 'COMPLETED' ? 'PAID' : tx.status === 'PENDING' ? 'PENDING' : 'PARTIAL',
             payment_date: tx.created_at,
             payment_method: tx.payment_method || 'N/A',
-          })
-        } catch (err) {
-          console.warn('Error enriching transaction record:', err)
-          enrichedRecords.push({
-            id: tx.id,
-            student_id: tx.recipient_id,
-            student_name: tx.recipient_name || 'Unknown',
-            admission_number: 'N/A',
-            class_name: 'N/A',
-            amount_paid: tx.amount || 0,
-            payment_status: tx.status || 'PENDING',
-            payment_date: tx.created_at,
-            payment_method: tx.payment_method || 'N/A',
-          })
-        }
-      }
+          }
+        })
 
       setFeeRecords(enrichedRecords)
     } catch (error) {

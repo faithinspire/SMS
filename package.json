@@ -12,7 +12,11 @@
     "test:coverage": "jest --coverage",
     "generate:icons": "node scripts/generate-icons.js",
     "auto-push": "node auto-hard-push.js",
-    "hard-deploy": "npm run auto-push"
+    "hard-deploy": "npm run auto-push",
+    "deploy": "vercel --prod",
+    "deploy:preview": "vercel --target preview",
+    "deploy:logs": "vercel logs --prod",
+    "deploy:list": "vercel list"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.8.7",
@@ -21,11 +25,13 @@
     "bcrypt": "^5.1.0",
     "html2pdf.js": "^0.10.1",
     "jsonwebtoken": "^9.0.0",
+    "lucide-react": "^0.292.0",
     "next": "^14.0.0",
     "next-pwa": "^5.6.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.6.0",
+    "resend": "^2.0.0",
     "sharp": "^0.35.3",
     "zod": "^3.22.0"
   },

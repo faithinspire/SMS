@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
+import { AcademicService } from '@/services/academic.service'
 import { supabase } from '@/lib/supabase-client'
 import StaffHeader from '@/components/StaffHeader'
 
@@ -111,34 +112,11 @@ export default function SchoolAdminResultsPage() {
       setSchool(schoolData)
       console.log('[SchoolAdmin] School loaded:', schoolData?.name)
 
-      // Load sessions and terms directly from Supabase
-      console.log('[SchoolAdmin] Loading sessions and terms from Supabase...')
+      // Load sessions and terms using centralized service
+      console.log('[SchoolAdmin] Loading sessions and terms from AcademicService...')
       
-      // Fetch academic sessions
-      const { data: sessionsData, error: sessionsError } = await supabase
-        .from('academic_sessions')
-        .select('id, session_year, is_active')
-        .eq('school_id', currentUser.school_id)
-        .order('session_year', { ascending: false })
-
-      if (sessionsError) {
-        console.error('[SchoolAdmin] Error loading sessions:', sessionsError)
-        setSessions([])
-        return
-      }
-
-      // Fetch academic terms
-      const { data: termsData, error: termsError } = await supabase
-        .from('academic_terms')
-        .select('id, session_id, term_name, term_number, is_active')
-        .eq('school_id', currentUser.school_id)
-        .order('term_number', { ascending: true })
-
-      if (termsError) {
-        console.error('[SchoolAdmin] Error loading terms:', termsError)
-        setTerms([])
-        return
-      }
+      const sessionsData = await AcademicService.getSessions(currentUser.school_id)
+      const termsData = await AcademicService.getTerms(currentUser.school_id)
 
       console.log('[SchoolAdmin] Sessions and terms loaded:', {
         sessions: sessionsData?.length || 0,
@@ -166,83 +144,22 @@ export default function SchoolAdminResultsPage() {
       setLoadingClasses(true)
       console.log('[SchoolAdmin] Loading classes for term:', termId)
 
-      // Fetch class_arm_combos for the school
-      const { data: classArms, error: classArmsError } = await supabase
-        .from('class_arm_combos')
-        .select(`
-          id,
-          class_id,
-          arm_id,
-          classes(name),
-          arms(name)
-        `)
-        .eq('school_id', schoolId)
-        .order('class_id', { ascending: true })
+      // Get students with scores for all classes in the term
+      const classArms = await AcademicService.getClassArmCombos(schoolId)
 
-      if (classArmsError) {
-        console.error('[SchoolAdmin] Error loading class_arm_combos:', classArmsError)
-        setClasses([])
-        setSelectedClass(null)
-        setSelectedClassData(null)
-        setLoadingClasses(false)
-        return
-      }
-
-      // For each class_arm_combo, fetch students and their scores
       const classesWithStudents: ClassWithStudents[] = []
 
       for (const classArm of classArms || []) {
-        // Fetch students in this class
-        const { data: studentsData, error: studentsError } = await supabase
-          .from('students')
-          .select(`
-            id,
-            user_id,
-            admission_number,
-            users(full_name)
-          `)
-          .eq('school_id', schoolId)
-          .eq('class_arm_combo_id', classArm.id)
-          .eq('status', 'ACTIVE')
-
-        if (studentsError) {
-          console.error('[SchoolAdmin] Error loading students:', studentsError)
-          continue
-        }
-
-        // For each student, fetch their score sheet for this term
-        const studentsWithScores: StudentResult[] = []
-
-        for (const student of studentsData || []) {
-          const { data: scoreSheet, error: scoreError } = await supabase
-            .from('score_sheets')
-            .select('id, overall_score, performance_rating')
-            .eq('student_id', student.id)
-            .eq('term_id', termId)
-            .maybeSingle()
-
-          if (scoreError && scoreError.code !== 'PGRST116') {
-            console.error('[SchoolAdmin] Error loading score sheet:', scoreError)
-            continue
-          }
-
-          studentsWithScores.push({
-            id: student.id,
-            full_name: (student.users as any)?.full_name || 'Unknown',
-            admission_number: student.admission_number,
-            overall_score: scoreSheet?.overall_score || 0,
-            performance_rating: scoreSheet?.performance_rating || 'Not Graded',
-          })
-        }
-
-        // Build class name and arm name
-        const className = (classArm.classes as any)?.name || 'Class'
-        const armName = (classArm.arms as any)?.name || ''
+        const studentsWithScores = await AcademicService.getStudentsWithScores(
+          schoolId,
+          classArm.id,
+          termId
+        )
 
         classesWithStudents.push({
           id: classArm.id,
-          class_name: className,
-          arm_name: armName,
+          class_name: classArm.class?.name || 'Unknown',
+          arm_name: classArm.arm?.name || 'N/A',
           student_count: studentsWithScores.length,
           students: studentsWithScores,
         })

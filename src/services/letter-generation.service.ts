@@ -32,6 +32,152 @@ export class LetterGenerationService {
   private static supabase = createClient()
 
   /**
+   * Fetch complete staff data with all relationships from Supabase
+   */
+  static async fetchStaffData(staffId: string, schoolId: string): Promise<StaffData | null> {
+    try {
+      const { data, error } = await this.supabase
+        .from('staff')
+        .select(`
+          id,
+          user_id,
+          position,
+          department,
+          employment_date,
+          salary,
+          bank_name,
+          account_number,
+          account_name,
+          users (
+            id,
+            full_name,
+            email,
+            phone,
+            gender
+          )
+        `)
+        .eq('id', staffId)
+        .eq('school_id', schoolId)
+        .single()
+
+      if (error) throw error
+
+      return {
+        id: data.id,
+        full_name: data.users?.full_name || '',
+        email: data.users?.email || '',
+        phone: data.users?.phone || '',
+        position: data.position,
+        department: data.department,
+        employment_date: data.employment_date,
+        salary: data.salary,
+        bank_name: data.bank_name,
+        account_number: data.account_number,
+        account_name: data.account_name,
+      }
+    } catch (error) {
+      console.error('Error fetching staff data:', error)
+      return null
+    }
+  }
+
+  /**
+   * Fetch complete student data with guardians from Supabase
+   */
+  static async fetchStudentData(
+    studentId: string,
+    schoolId: string
+  ): Promise<{
+    student: any
+    guardians: any[]
+    class?: any
+  } | null> {
+    try {
+      const { data: student, error: studentError } = await this.supabase
+        .from('students')
+        .select(`
+          id,
+          admission_number,
+          date_of_birth,
+          status,
+          user_id,
+          class_arm_combo_id,
+          users (
+            id,
+            full_name,
+            email,
+            phone,
+            gender
+          ),
+          class_arm_combos (
+            id,
+            class_id,
+            arm_id,
+            classes (
+              id,
+              name,
+              level
+            ),
+            arms (
+              id,
+              name
+            )
+          )
+        `)
+        .eq('id', studentId)
+        .eq('school_id', schoolId)
+        .single()
+
+      if (studentError) throw studentError
+
+      const { data: guardians, error: guardiansError } = await this.supabase
+        .from('guardians')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('school_id', schoolId)
+
+      if (guardiansError) throw guardiansError
+
+      return {
+        student,
+        guardians: guardians || [],
+        class: student.class_arm_combos,
+      }
+    } catch (error) {
+      console.error('Error fetching student data:', error)
+      return null
+    }
+  }
+
+  /**
+   * Fetch school data for letter header
+   */
+  static async fetchSchoolData(schoolId: string): Promise<SchoolData | null> {
+    try {
+      const { data, error } = await this.supabase
+        .from('schools')
+        .select('id, name, email, phone, address, logo_url, school_type')
+        .eq('id', schoolId)
+        .single()
+
+      if (error) throw error
+
+      return {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        logo_url: data.logo_url,
+        type: data.school_type,
+      }
+    } catch (error) {
+      console.error('Error fetching school data:', error)
+      return null
+    }
+  }
+
+  /**
    * Generate a professional appointment letter for a staff member
    */
   static async generateAppointmentLetter(staffData: StaffData, schoolData: SchoolData): Promise<string> {

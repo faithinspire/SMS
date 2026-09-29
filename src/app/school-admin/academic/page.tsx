@@ -72,7 +72,7 @@ export default function SchoolAdminAcademicPage() {
         // Load sessions
         const { data: sessionsData } = await supabase
           .from('academic_sessions')
-          .select('*')
+          .select('id, session_year, is_active, created_at')
           .eq('school_id', currentUser.school_id)
           .order('session_year', { ascending: false })
 
@@ -80,21 +80,59 @@ export default function SchoolAdminAcademicPage() {
 
         // Load terms
         const { data: termsData } = await supabase
-          .from('terms')
-          .select('*')
+          .from('academic_terms')
+          .select('id, session_id, term_name, term_number, is_active')
           .eq('school_id', currentUser.school_id)
           .order('term_number', { ascending: true })
 
         setTerms(termsData || [])
 
-        // Load classes
-        const { data: classesData } = await supabase
+        // Load classes with proper relationships
+        const { data: classArmsData } = await supabase
           .from('class_arm_combos')
-          .select('*')
+          .select(`
+            id,
+            class:class_id (id, name),
+            arm:arm_id (id, name),
+            class_teacher_id,
+            school_id
+          `)
           .eq('school_id', currentUser.school_id)
-          .order('class_name', { ascending: true })
+          .order('created_at', { ascending: true })
 
-        setClasses(classesData || [])
+        // For each class/arm combo, count students
+        const classesWithCounts = await Promise.all(
+          (classArmsData || []).map(async (combo) => {
+            const { count } = await supabase
+              .from('students')
+              .select('id', { count: 'exact', head: true })
+              .eq('class_arm_combo_id', combo.id)
+              .eq('status', 'ACTIVE')
+
+            // Fetch class teacher name if assigned
+            let formMasterName = 'Unassigned'
+            if (combo.class_teacher_id) {
+              const { data: teacher } = await supabase
+                .from('users')
+                .select('full_name')
+                .eq('id', combo.class_teacher_id)
+                .single()
+              if (teacher) {
+                formMasterName = teacher.full_name
+              }
+            }
+
+            return {
+              id: combo.id,
+              class_name: combo.class?.name || 'Unknown',
+              arm_name: combo.arm?.name || 'N/A',
+              student_count: count || 0,
+              form_master: formMasterName,
+            }
+          })
+        )
+
+        setClasses(classesWithCounts)
       }
     } catch (error) {
       console.error('Load error:', error)
