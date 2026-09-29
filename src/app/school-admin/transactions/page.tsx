@@ -56,44 +56,10 @@ const TypeBadge: React.FC<{ type: TransactionType }> = ({ type }) => {
 
   return (
     <span className={`px-3 py-1 rounded-full text-sm font-semibold ${variants[type]}`}>
-      {type === 'STAFF_SALARY' ? 'Staff Salary' : 'Student Payment'}
+      {type === 'STAFF_SALARY' ? '💼 Salary' : '📚 Payment'}
     </span>
   )
 }
-
-const ConfirmationModal: React.FC<{
-  title: string
-  message: string
-  onConfirm: () => void
-  onCancel: () => void
-  isLoading?: boolean
-  isDangerous?: boolean
-}> = ({ title, message, onConfirm, onCancel, isLoading = false, isDangerous = false }) => (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
-      <h3 className="text-lg font-bold mb-2">{title}</h3>
-      <p className="text-gray-600 mb-6">{message}</p>
-      <div className="flex gap-3 justify-end">
-        <button
-          onClick={onCancel}
-          disabled={isLoading}
-          className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onConfirm}
-          disabled={isLoading}
-          className={`px-4 py-2 text-white rounded ${
-            isDangerous ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
-          } disabled:opacity-50`}
-        >
-          {isLoading ? 'Processing...' : 'Confirm'}
-        </button>
-      </div>
-    </div>
-  </div>
-)
 
 const TransactionsPage: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -102,12 +68,6 @@ const TransactionsPage: React.FC = () => {
   const [filterType, setFilterType] = useState<TransactionType | 'ALL'>('ALL')
   const [filterStatus, setFilterStatus] = useState<StatusType | 'ALL'>('ALL')
   const [schoolId, setSchoolId] = useState<string>('')
-  const [modal, setModal] = useState<{
-    type: 'update' | 'delete' | null
-    transaction?: Transaction
-  }>({ type: null })
-  const [isActionLoading, setIsActionLoading] = useState(false)
-  const [newStatus, setNewStatus] = useState<StatusType>('PENDING')
 
   // Get current user's school
   useEffect(() => {
@@ -133,24 +93,31 @@ const TransactionsPage: React.FC = () => {
     getCurrentSchool()
   }, [])
 
-  // Fetch transactions
+  // Fetch transactions with real-time updates
   const fetchTransactions = useCallback(async () => {
     if (!schoolId) return
 
     try {
       setIsLoading(true)
+      console.log('[Transactions] Fetching for school:', schoolId)
+
       const { data, error } = await getSupabaseClient()
         .from('transactions')
         .select('*')
         .eq('school_id', schoolId)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error('[Transactions] Query error:', error)
+        throw error
+      }
 
+      console.log('[Transactions] Found:', data?.length)
       setTransactions(data || [])
     } catch (error) {
       console.error('Error fetching transactions:', error)
       toast.error('Failed to load transactions')
+      setTransactions([])
     } finally {
       setIsLoading(false)
     }
@@ -159,6 +126,28 @@ const TransactionsPage: React.FC = () => {
   useEffect(() => {
     if (schoolId) {
       fetchTransactions()
+
+      // Set up real-time subscription
+      const channel = getSupabaseClient()
+        .channel(`transactions:${schoolId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'transactions',
+            filter: `school_id=eq.${schoolId}`,
+          },
+          () => {
+            console.log('[Transactions] Real-time update received')
+            fetchTransactions()
+          }
+        )
+        .subscribe()
+
+      return () => {
+        getSupabaseClient().removeChannel(channel)
+      }
     }
   }, [schoolId, fetchTransactions])
 
@@ -173,52 +162,6 @@ const TransactionsPage: React.FC = () => {
     return matchesSearch && matchesType && matchesStatus
   })
 
-  // Update transaction status
-  const handleStatusUpdate = async (transactionId: string, status: StatusType) => {
-    try {
-      setIsActionLoading(true)
-      const { error } = await getSupabaseClient()
-        .from('transactions')
-        .update({ status })
-        .eq('id', transactionId)
-
-      if (error) throw error
-
-      setTransactions(transactions.map((t) =>
-        t.id === transactionId ? { ...t, status } : t
-      ))
-      toast.success(`Transaction status updated to ${status}`)
-      setModal({ type: null })
-    } catch (error) {
-      console.error('Error updating transaction:', error)
-      toast.error('Failed to update transaction status')
-    } finally {
-      setIsActionLoading(false)
-    }
-  }
-
-  // Delete transaction
-  const handleDelete = async (transactionId: string) => {
-    try {
-      setIsActionLoading(true)
-      const { error } = await getSupabaseClient()
-        .from('transactions')
-        .delete()
-        .eq('id', transactionId)
-
-      if (error) throw error
-
-      setTransactions(transactions.filter((t) => t.id !== transactionId))
-      toast.success('Transaction deleted successfully')
-      setModal({ type: null })
-    } catch (error) {
-      console.error('Error deleting transaction:', error)
-      toast.error('Failed to delete transaction')
-    } finally {
-      setIsActionLoading(false)
-    }
-  }
-
   // Calculate totals
   const totalAmount = filteredTransactions.reduce((sum, t) => sum + t.amount, 0)
   const completedAmount = filteredTransactions
@@ -227,33 +170,52 @@ const TransactionsPage: React.FC = () => {
   const pendingAmount = filteredTransactions
     .filter((t) => t.status === 'PENDING')
     .reduce((sum, t) => sum + t.amount, 0)
+  const salaryAmount = filteredTransactions
+    .filter((t) => t.type === 'STAFF_SALARY')
+    .reduce((sum, t) => sum + t.amount, 0)
+  const paymentAmount = filteredTransactions
+    .filter((t) => t.type === 'STUDENT_PAYMENT')
+    .reduce((sum, t) => sum + t.amount, 0)
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-bold mb-6">Transactions</h2>
+      <h2 className="text-2xl font-bold mb-6">💳 Transactions Management</h2>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-gray-600 mb-1">Total Transactions</p>
-          <p className="text-2xl font-bold text-blue-600">₦{totalAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
+          <p className="text-sm text-gray-600 mb-1">Total</p>
+          <p className="text-2xl font-bold text-blue-600">
+            ₦{totalAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+          </p>
           <p className="text-xs text-gray-500 mt-1">{filteredTransactions.length} transactions</p>
         </div>
+
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
           <p className="text-sm text-gray-600 mb-1">Completed</p>
-          <p className="text-2xl font-bold text-green-600">₦{completedAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
+          <p className="text-2xl font-bold text-green-600">
+            ₦{completedAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+          </p>
         </div>
+
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <p className="text-sm text-gray-600 mb-1">Pending</p>
-          <p className="text-2xl font-bold text-yellow-600">₦{pendingAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
+          <p className="text-2xl font-bold text-yellow-600">
+            ₦{pendingAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+          </p>
         </div>
+
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-          <p className="text-sm text-gray-600 mb-1">Staff Salary</p>
+          <p className="text-sm text-gray-600 mb-1">Staff Salaries</p>
           <p className="text-2xl font-bold text-purple-600">
-            ₦{filteredTransactions
-              .filter((t) => t.type === 'STAFF_SALARY')
-              .reduce((sum, t) => sum + t.amount, 0)
-              .toLocaleString('en-US', { maximumFractionDigits: 2 })}
+            ₦{salaryAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+          </p>
+        </div>
+
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+          <p className="text-sm text-gray-600 mb-1">Student Payments</p>
+          <p className="text-2xl font-bold text-indigo-600">
+            ₦{paymentAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
           </p>
         </div>
       </div>
@@ -287,7 +249,7 @@ const TransactionsPage: React.FC = () => {
           <option value="FAILED">Failed</option>
         </select>
         <div className="text-sm text-gray-600 flex items-center">
-          Total: {filteredTransactions.length} transactions
+          {filteredTransactions.length} transactions
         </div>
       </div>
 
@@ -308,13 +270,12 @@ const TransactionsPage: React.FC = () => {
               <tr className="border-b-2 border-gray-200">
                 <th className="text-left py-3 px-4">Type</th>
                 <th className="text-left py-3 px-4">Recipient</th>
-                <th className="text-left py-3 px-4">Invoice</th>
+                <th className="text-left py-3 px-4">Contact</th>
                 <th className="text-left py-3 px-4">Purpose</th>
                 <th className="text-right py-3 px-4">Amount</th>
                 <th className="text-left py-3 px-4">Method</th>
                 <th className="text-left py-3 px-4">Status</th>
                 <th className="text-left py-3 px-4">Date</th>
-                <th className="text-center py-3 px-4">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -324,13 +285,13 @@ const TransactionsPage: React.FC = () => {
                     <TypeBadge type={transaction.type} />
                   </td>
                   <td className="py-3 px-4">
-                    <div>
-                      <p className="font-semibold">{transaction.recipient_name}</p>
-                      <p className="text-sm text-gray-500">{transaction.recipient_email}</p>
-                    </div>
+                    <p className="font-semibold text-gray-900">{transaction.recipient_name}</p>
                   </td>
-                  <td className="py-3 px-4 text-sm">{transaction.invoice_number || 'N/A'}</td>
-                  <td className="py-3 px-4 text-sm">{transaction.purpose}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">
+                    <p>{transaction.recipient_email}</p>
+                    <p>{transaction.recipient_phone}</p>
+                  </td>
+                  <td className="py-3 px-4 text-sm text-gray-600">{transaction.purpose}</td>
                   <td className="py-3 px-4 text-right font-semibold">
                     ₦{transaction.amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </td>
@@ -338,70 +299,14 @@ const TransactionsPage: React.FC = () => {
                   <td className="py-3 px-4">
                     <StatusBadge status={transaction.status} />
                   </td>
-                  <td className="py-3 px-4 text-sm">
+                  <td className="py-3 px-4 text-sm text-gray-600">
                     {new Date(transaction.created_at).toLocaleDateString('en-US')}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex gap-2 justify-center flex-wrap">
-                      {transaction.status !== 'COMPLETED' && (
-                        <button
-                          onClick={() => {
-                            setNewStatus('COMPLETED')
-                            setModal({ type: 'update', transaction })
-                          }}
-                          className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
-                          title="Mark as Completed"
-                        >
-                          ✓ Complete
-                        </button>
-                      )}
-                      {transaction.status === 'COMPLETED' && (
-                        <button
-                          onClick={() => {
-                            setNewStatus('PENDING')
-                            setModal({ type: 'update', transaction })
-                          }}
-                          className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600"
-                          title="Mark as Pending"
-                        >
-                          ⟳ Pending
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setModal({ type: 'delete', transaction })}
-                        className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
-                      >
-                        Delete
-                      </button>
-                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      )}
-
-      {/* Modals */}
-      {modal.type === 'update' && modal.transaction && (
-        <ConfirmationModal
-          title="Update Transaction Status"
-          message={`Change transaction status to ${newStatus}?`}
-          onConfirm={() => handleStatusUpdate(modal.transaction!.id, newStatus)}
-          onCancel={() => setModal({ type: null })}
-          isLoading={isActionLoading}
-        />
-      )}
-
-      {modal.type === 'delete' && modal.transaction && (
-        <ConfirmationModal
-          title="Delete Transaction"
-          message={`Delete this transaction for ₦${modal.transaction.amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}? This action cannot be undone.`}
-          onConfirm={() => handleDelete(modal.transaction!.id)}
-          onCancel={() => setModal({ type: null })}
-          isLoading={isActionLoading}
-          isDangerous
-        />
       )}
     </div>
   )

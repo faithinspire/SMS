@@ -394,4 +394,35 @@ export class LetterGenerationService {
       newWindow.document.close()
     }
   }
+
+  /**
+   * Share letter via email
+   */
+  static async shareViaEmail(studentEmail: string, studentName: string, letterHTML: string): Promise<void> {
+    const subject = `Admission Letter - ${studentName}`
+    const body = encodeURIComponent(`Dear Parent/Guardian,\n\nPlease find attached the admission letter for ${studentName}.\n\nBest regards,\nSchool Admin`)
+    window.location.href = `mailto:${studentEmail}?subject=${subject}&body=${body}`
+  }
+
+  /**
+   * Share letter via WhatsApp
+   */
+  static async shareViaWhatsApp(phoneNumber: string, studentName: string): Promise<void> {
+    const message = encodeURIComponent(`Hello! Here is the admission letter for ${studentName}. Please check your email for the complete document.`)
+    window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank')
+  }
+
+  /**
+   * Download letter as HTML file
+   */
+  static async downloadLetter(htmlContent: string, filename: string): Promise<void> {
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+  }
 }

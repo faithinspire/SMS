@@ -126,13 +126,15 @@ const StaffPage: React.FC = () => {
     getCurrentSchool();
   }, []);
 
-  // Fetch staff - HARDFIX: Query users table with role='STAFF' instead of staff table
+  // Fetch staff - COMPLETE FIX: Query both users and staff tables with proper error handling
   const fetchStaff = useCallback(async () => {
     if (!schoolId) return;
 
     try {
       setIsLoading(true);
-      // CRITICAL FIX: Use users table with role filtering instead of staff table
+      console.log('[Staff Page] Fetching staff for school:', schoolId);
+
+      // STEP 1: Get all STAFF users from users table
       const { data: userStaffData, error: userError } = await getSupabaseClient()
         .from('users')
         .select('*')
@@ -140,23 +142,29 @@ const StaffPage: React.FC = () => {
         .eq('role', 'STAFF');
 
       if (userError) {
-        console.error('Users table error:', userError);
+        console.error('[Staff] Users query error:', userError);
         throw userError;
       }
 
-      // ALSO get staff records if they exist (for employment details)
+      console.log('[Staff Page] Found users with STAFF role:', userStaffData?.length);
+
+      // STEP 2: Get staff employment records (optional supplementary data)
       const { data: staffRecords, error: staffError } = await getSupabaseClient()
         .from('staff')
         .select('*')
         .eq('school_id', schoolId);
 
-      if (staffError) console.warn('Staff table optional query failed:', staffError);
+      if (staffError) {
+        console.warn('[Staff] Staff records query (optional) failed:', staffError);
+      }
 
-      // Merge data: prioritize staff table records, fall back to users table
+      console.log('[Staff Page] Found staff records:', staffRecords?.length);
+
+      // STEP 3: Merge data - users table is source of truth, staff table augments
       const mergedStaff = (userStaffData || []).map((user: any) => {
-        const staffRecord = staffRecords?.find(s => s.user_id === user.id);
+        const staffRecord = staffRecords?.find((s: any) => s.user_id === user.id);
         return {
-          id: staffRecord?.id || user.id,
+          id: staffRecord?.id || `staff_${user.id}`,
           user_id: user.id,
           school_id: user.school_id,
           position: staffRecord?.position || 'Staff',
@@ -164,8 +172,8 @@ const StaffPage: React.FC = () => {
           status: staffRecord?.status || 'ACTIVE',
           user: {
             id: user.id,
-            full_name: user.full_name || 'Unknown',
-            email: user.email,
+            full_name: user.full_name || 'Unknown Staff',
+            email: user.email || 'no-email@school.local',
             photo_url: user.photo_url,
             role: user.role,
             status: user.status,
@@ -173,16 +181,21 @@ const StaffPage: React.FC = () => {
         };
       });
 
-      // Sort in application layer
+      // STEP 4: Sort in application layer
       const sortedData = mergedStaff.sort((a, b) =>
         (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
       );
 
+      console.log('[Staff Page] Final merged staff count:', sortedData.length);
       setStaff(sortedData);
+
+      if (sortedData.length === 0) {
+        toast.info('No staff found for this school');
+      }
     } catch (error) {
-      console.error('Error fetching staff:', error);
+      console.error('[Staff Page] Critical error:', error);
       toast.error('Failed to load staff: ' + (error instanceof Error ? error.message : 'Unknown error'));
-      setStaff([]); // Set empty array on error
+      setStaff([]);
     } finally {
       setIsLoading(false);
     }

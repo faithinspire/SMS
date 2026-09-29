@@ -64,7 +64,7 @@ export default function SchoolAdminResultsPage() {
         setSelectedTerm(sessionTerms[0].id)
       }
     }
-  }, [selectedSession])
+  }, [selectedSession, terms])
 
   // When term changes, load classes and students
   useEffect(() => {
@@ -80,7 +80,7 @@ export default function SchoolAdminResultsPage() {
       setSelectedClass(classes[0].id)
       setSelectedClassData(classes[0])
     }
-  }, [classes])
+  }, [classes, selectedClass])
 
   const loadInitialData = async () => {
     try {
@@ -111,40 +111,46 @@ export default function SchoolAdminResultsPage() {
       setSchool(schoolData)
       console.log('[SchoolAdmin] School loaded:', schoolData?.name)
 
-      // Ensure school has sessions, terms, and classes
-      console.log('[SchoolAdmin] Ensuring school data...')
-      try {
-        await fetch(
-          `/api/results/ensure-school-data?schoolId=${currentUser.school_id}`,
-          { method: 'POST' }
-        )
-        console.log('[SchoolAdmin] School data ensured')
-      } catch (err) {
-        console.warn('[SchoolAdmin] Could not ensure school data:', err)
+      // Load sessions and terms directly from Supabase
+      console.log('[SchoolAdmin] Loading sessions and terms from Supabase...')
+      
+      // Fetch academic sessions
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from('academic_sessions')
+        .select('id, session_year, is_active')
+        .eq('school_id', currentUser.school_id)
+        .order('session_year', { ascending: false })
+
+      if (sessionsError) {
+        console.error('[SchoolAdmin] Error loading sessions:', sessionsError)
+        setSessions([])
+        return
       }
 
-      // Load sessions and terms
-      console.log('[SchoolAdmin] Loading sessions and terms...')
-      const response = await fetch(
-        `/api/results/school-sessions-and-terms?schoolId=${currentUser.school_id}`
-      )
+      // Fetch academic terms
+      const { data: termsData, error: termsError } = await supabase
+        .from('academic_terms')
+        .select('id, session_id, term_name, term_number, is_active')
+        .eq('school_id', currentUser.school_id)
+        .order('term_number', { ascending: true })
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
+      if (termsError) {
+        console.error('[SchoolAdmin] Error loading terms:', termsError)
+        setTerms([])
+        return
       }
 
-      const data = await response.json()
       console.log('[SchoolAdmin] Sessions and terms loaded:', {
-        sessions: data.sessions?.length || 0,
-        terms: data.terms?.length || 0,
+        sessions: sessionsData?.length || 0,
+        terms: termsData?.length || 0,
       })
 
-      setSessions(data.sessions || [])
-      setTerms(data.terms || [])
+      setSessions(sessionsData || [])
+      setTerms(termsData || [])
 
       // Auto-select first session
-      if (data.sessions && data.sessions.length > 0) {
-        const firstSession = data.sessions[0]
+      if (sessionsData && sessionsData.length > 0) {
+        const firstSession = sessionsData[0]
         console.log('[SchoolAdmin] Auto-selecting session:', firstSession.session_year)
         setSelectedSession(firstSession.id)
       }
@@ -160,18 +166,90 @@ export default function SchoolAdminResultsPage() {
       setLoadingClasses(true)
       console.log('[SchoolAdmin] Loading classes for term:', termId)
 
-      const response = await fetch(
-        `/api/results/school-classes-and-students?schoolId=${schoolId}&termId=${termId}&t=${Date.now()}`
-      )
+      // Fetch class_arm_combos for the school
+      const { data: classArms, error: classArmsError } = await supabase
+        .from('class_arm_combos')
+        .select(`
+          id,
+          class_id,
+          arm_id,
+          classes(name),
+          arms(name)
+        `)
+        .eq('school_id', schoolId)
+        .order('class_id', { ascending: true })
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
+      if (classArmsError) {
+        console.error('[SchoolAdmin] Error loading class_arm_combos:', classArmsError)
+        setClasses([])
+        setSelectedClass(null)
+        setSelectedClassData(null)
+        setLoadingClasses(false)
+        return
       }
 
-      const data = await response.json()
-      console.log('[SchoolAdmin] Classes loaded:', data.classes?.length || 0)
+      // For each class_arm_combo, fetch students and their scores
+      const classesWithStudents: ClassWithStudents[] = []
 
-      setClasses(data.classes || [])
+      for (const classArm of classArms || []) {
+        // Fetch students in this class
+        const { data: studentsData, error: studentsError } = await supabase
+          .from('students')
+          .select(`
+            id,
+            user_id,
+            admission_number,
+            users(full_name)
+          `)
+          .eq('school_id', schoolId)
+          .eq('class_arm_combo_id', classArm.id)
+          .eq('status', 'ACTIVE')
+
+        if (studentsError) {
+          console.error('[SchoolAdmin] Error loading students:', studentsError)
+          continue
+        }
+
+        // For each student, fetch their score sheet for this term
+        const studentsWithScores: StudentResult[] = []
+
+        for (const student of studentsData || []) {
+          const { data: scoreSheet, error: scoreError } = await supabase
+            .from('score_sheets')
+            .select('id, overall_score, performance_rating')
+            .eq('student_id', student.id)
+            .eq('term_id', termId)
+            .maybeSingle()
+
+          if (scoreError && scoreError.code !== 'PGRST116') {
+            console.error('[SchoolAdmin] Error loading score sheet:', scoreError)
+            continue
+          }
+
+          studentsWithScores.push({
+            id: student.id,
+            full_name: (student.users as any)?.full_name || 'Unknown',
+            admission_number: student.admission_number,
+            overall_score: scoreSheet?.overall_score || 0,
+            performance_rating: scoreSheet?.performance_rating || 'Not Graded',
+          })
+        }
+
+        // Build class name and arm name
+        const className = (classArm.classes as any)?.name || 'Class'
+        const armName = (classArm.arms as any)?.name || ''
+
+        classesWithStudents.push({
+          id: classArm.id,
+          class_name: className,
+          arm_name: armName,
+          student_count: studentsWithScores.length,
+          students: studentsWithScores,
+        })
+      }
+
+      console.log('[SchoolAdmin] Classes loaded:', classesWithStudents.length)
+      setClasses(classesWithStudents)
       setSelectedClass(null)
       setSelectedClassData(null)
     } catch (error) {

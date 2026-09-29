@@ -1,11 +1,10 @@
 /**
- * School Admin Students Management Page
- * Lists all students with filters by class, pause/activate/delete actions
+ * School Admin Students Management Page with Letter Preview and Share
  */
 
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
@@ -26,7 +25,7 @@ interface Student {
   user_id: string;
   school_id: string;
   admission_number: string;
-  date_of_birth: string;
+  date_of_birth: string | null;
   photo_url: string | null;
   status: 'ACTIVE' | 'INACTIVE' | 'PAUSED' | 'SUSPENDED';
   class_arm_combo_id: string;
@@ -36,6 +35,7 @@ interface Student {
     email: string;
     photo_url: string | null;
     status: string;
+    phone?: string;
   };
   class_arm_combo: {
     id: string;
@@ -67,6 +67,112 @@ const StatusBadge: React.FC<{ status: StatusType }> = ({ status }) => {
     <span className={`px-3 py-1 rounded-full text-sm font-semibold ${variants[status]}`}>
       {status}
     </span>
+  );
+};
+
+const LetterPreviewModal: React.FC<{
+  letterHTML: string;
+  studentName: string;
+  studentEmail: string;
+  studentPhone?: string;
+  onClose: () => void;
+  onDownload: () => void;
+}> = ({ letterHTML, studentName, studentEmail, studentPhone, onClose, onDownload }) => {
+  const [sharePhone, setSharePhone] = useState(studentPhone || '');
+
+  const handleShareEmail = () => {
+    LetterGenerationService.shareViaEmail(studentEmail, studentName, letterHTML);
+    toast.success('Opening email client...');
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!sharePhone.trim()) {
+      toast.error('Please enter phone number for WhatsApp');
+      return;
+    }
+    LetterGenerationService.shareViaWhatsApp(sharePhone, studentName);
+    toast.success('Opening WhatsApp...');
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="flex justify-between items-center p-6 border-b border-gray-200">
+          <h2 className="text-2xl font-bold text-gray-900">Letter Preview - {studentName}</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 text-2xl"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Letter Preview */}
+        <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+          <div className="bg-white p-6 rounded border border-gray-300">
+            <iframe
+              srcDoc={letterHTML}
+              className="w-full h-full border-0 rounded"
+              style={{ minHeight: '500px' }}
+            />
+          </div>
+        </div>
+
+        {/* Share Options */}
+        <div className="border-t border-gray-200 p-6 bg-gray-50">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Parent Email</label>
+              <input
+                type="email"
+                value={studentEmail}
+                disabled
+                className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-100 text-gray-600"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">WhatsApp Phone</label>
+              <input
+                type="tel"
+                placeholder="+234..."
+                value={sharePhone}
+                onChange={(e) => setSharePhone(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 flex-wrap justify-end">
+            <button
+              onClick={handleShareEmail}
+              className="px-4 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"
+            >
+              📧 Share via Email
+            </button>
+            <button
+              onClick={handleShareWhatsApp}
+              className="px-4 py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700"
+            >
+              💬 Share via WhatsApp
+            </button>
+            <button
+              onClick={onDownload}
+              className="px-4 py-2 bg-purple-600 text-white rounded font-semibold hover:bg-purple-700"
+            >
+              ⬇️ Download
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-400 text-white rounded font-semibold hover:bg-gray-500"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -118,6 +224,7 @@ const StudentsPage: React.FC = () => {
     student?: Student;
   }>({ type: null });
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [letterPreview, setLetterPreview] = useState<{ html: string; student: Student } | null>(null);
 
   // Get current user's school
   useEffect(() => {
@@ -186,7 +293,8 @@ const StudentsPage: React.FC = () => {
             full_name,
             email,
             photo_url,
-            status
+            status,
+            phone
           ),
           class_arm_combo:class_arm_combo_id (
             id,
@@ -202,7 +310,7 @@ const StudentsPage: React.FC = () => {
 
       if (error) throw error;
       
-      // Sort in application layer (avoids Supabase ordering issues)
+      // Sort in application layer
       const sortedData = (data || []).sort((a, b) => 
         (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
       );
@@ -210,7 +318,7 @@ const StudentsPage: React.FC = () => {
       setStudents(sortedData);
     } catch (error) {
       console.error('Error fetching students:', error);
-      toast.error('Failed to load students: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      toast.error('Failed to load students');
     } finally {
       setIsLoading(false);
     }
@@ -229,7 +337,7 @@ const StudentsPage: React.FC = () => {
       student.user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.admission_number?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'ALL' || student.status === filterStatus;
-    const matchesClass = filterClass === 'ALL' || student.class_arm_combo.class.name === filterClass;
+    const matchesClass = filterClass === 'ALL' || student.class_arm_combo?.class?.name === filterClass;
     return matchesSearch && matchesStatus && matchesClass;
   });
 
@@ -263,7 +371,6 @@ const StudentsPage: React.FC = () => {
     try {
       setIsActionLoading(true);
       
-      // Get the Supabase session token
       const { data: { session } } = await getSupabaseClient().auth.getSession();
       const token = session?.access_token;
       
@@ -296,57 +403,35 @@ const StudentsPage: React.FC = () => {
     }
   };
 
-  // Generate Admission Letter - HARDFIX: Use service with fallback values
+  // Generate Admission Letter with preview
   const generateAdmissionLetter = async (student: Student) => {
     try {
-      toast.loading('Generating admission letter...', { id: 'letter' })
+      toast.loading('Generating admission letter...', { id: 'letter' });
 
-      // Get school data
-      const { data: schoolData, error: schoolError } = await getSupabaseClient()
+      const { data: schoolData } = await getSupabaseClient()
         .from('schools')
         .select('*')
         .eq('id', schoolId)
-        .single()
+        .single();
 
-      if (schoolError || !schoolData) {
-        // Use fallback school data
-        const fallbackSchool = {
-          id: schoolId,
-          name: 'School',
-          email: 'school@example.com',
-          phone: '',
-          address: '',
-          logo_url: null,
-        }
+      const fallbackSchool = {
+        id: schoolId,
+        name: 'School',
+        email: 'school@example.com',
+        phone: '',
+        address: '',
+        logo_url: null,
+      };
 
-        // Generate with fallback
-        const letterHTML = await LetterGenerationService.generateAdmissionLetter(
-          {
-            id: student.id,
-            full_name: student.user.full_name || 'Student',
-            email: student.user.email || '',
-            admission_number: student.admission_number || 'ADM-000',
-            date_of_birth: student.date_of_birth || '',
-            class_name: `${student.class_arm_combo?.class?.name || 'Class'} ${student.class_arm_combo?.arm?.name || ''}`,
-            parent_name: 'Parent/Guardian',
-          },
-          fallbackSchool
-        )
+      const school = schoolData || fallbackSchool;
 
-        await LetterGenerationService.previewLetter(letterHTML)
-        toast.success('Admission letter generated!', { id: 'letter' })
-        return
-      }
-
-      // Get parent/guardian data
       const { data: guardianData } = await getSupabaseClient()
         .from('guardians')
         .select('full_name')
         .eq('student_id', student.id)
         .limit(1)
-        .single()
+        .single();
 
-      // Generate the letter HTML with real data
       const letterHTML = await LetterGenerationService.generateAdmissionLetter(
         {
           id: student.id,
@@ -358,22 +443,31 @@ const StudentsPage: React.FC = () => {
           parent_name: guardianData?.full_name || 'Parent/Guardian',
         },
         {
-          id: schoolData.id,
-          name: schoolData.name || 'School',
-          email: schoolData.email || '',
-          phone: schoolData.phone || '',
-          address: schoolData.address || '',
-          logo_url: schoolData.logo_url,
+          id: school.id,
+          name: school.name,
+          email: school.email,
+          phone: school.phone,
+          address: school.address,
+          logo_url: school.logo_url,
         }
-      )
+      );
 
-      // Open in new window for preview and printing
-      await LetterGenerationService.previewLetter(letterHTML)
-
-      toast.success('Admission letter generated!', { id: 'letter' })
+      setLetterPreview({ html: letterHTML, student });
+      toast.dismiss('letter');
+      toast.success('Letter generated!');
     } catch (error) {
-      console.error('Error generating letter:', error)
-      toast.error('Failed to generate admission letter', { id: 'letter' })
+      console.error('Error generating letter:', error);
+      toast.error('Failed to generate admission letter', { id: 'letter' });
+    }
+  };
+
+  const handleDownloadLetter = () => {
+    if (letterPreview) {
+      LetterGenerationService.downloadLetter(
+        letterPreview.html,
+        `Admission_Letter_${letterPreview.student.user.full_name.replace(/\s+/g, '_')}.html`
+      );
+      toast.success('Letter downloaded!');
     }
   };
 
@@ -433,7 +527,8 @@ const StudentsPage: React.FC = () => {
               <tr className="border-b-2 border-gray-200">
                 <th className="text-left py-3 px-4">Photo</th>
                 <th className="text-left py-3 px-4">Name</th>
-                <th className="text-left py-3 px-4">Admission</th>
+                <th className="text-left py-3 px-4">Email</th>
+                <th className="text-left py-3 px-4">Admission #</th>
                 <th className="text-left py-3 px-4">Class</th>
                 <th className="text-left py-3 px-4">Status</th>
                 <th className="text-center py-3 px-4">Actions</th>
@@ -443,25 +538,26 @@ const StudentsPage: React.FC = () => {
               {filteredStudents.map((student) => (
                 <tr key={student.id} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="py-3 px-4">
-                    {student.photo_url ? (
+                    {student.user.photo_url ? (
                       <div className="relative w-10 h-10">
                         <Image
-                          src={student.photo_url}
+                          src={student.user.photo_url}
                           alt={student.user.full_name}
                           fill
                           className="rounded-full object-cover"
                         />
                       </div>
                     ) : (
-                      <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-gray-600 text-sm">
-                        {student.user.full_name[0]}
+                      <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-gray-600 text-sm font-bold">
+                        {student.user.full_name?.[0] || 'S'}
                       </div>
                     )}
                   </td>
-                  <td className="py-3 px-4 font-semibold">{student.user.full_name}</td>
-                  <td className="py-3 px-4 text-sm">{student.admission_number}</td>
-                  <td className="py-3 px-4 text-sm">
-                    {student.class_arm_combo.class.name} {student.class_arm_combo.arm.name}
+                  <td className="py-3 px-4 font-semibold text-gray-900">{student.user.full_name}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">{student.user.email}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">{student.admission_number}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">
+                    {student.class_arm_combo?.class?.name} {student.class_arm_combo?.arm?.name}
                   </td>
                   <td className="py-3 px-4">
                     <StatusBadge status={student.status} />
@@ -471,14 +567,12 @@ const StudentsPage: React.FC = () => {
                       <button
                         onClick={() => router.push(`/school-admin/students/${student.id}`)}
                         className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-                        title="Edit Student Profile"
                       >
                         ✏️ Edit
                       </button>
                       <button
                         onClick={() => generateAdmissionLetter(student)}
                         className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
-                        title="Generate Admission Letter"
                       >
                         📄 Letter
                       </button>
@@ -512,7 +606,19 @@ const StudentsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Modals */}
+      {/* Letter Preview Modal */}
+      {letterPreview && (
+        <LetterPreviewModal
+          letterHTML={letterPreview.html}
+          studentName={letterPreview.student.user.full_name}
+          studentEmail={letterPreview.student.user.email}
+          studentPhone={letterPreview.student.user.phone}
+          onClose={() => setLetterPreview(null)}
+          onDownload={handleDownloadLetter}
+        />
+      )}
+
+      {/* Confirmation Modals */}
       {modal.type === 'pause' && modal.student && (
         <ConfirmationModal
           title="Pause Student"
