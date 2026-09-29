@@ -186,9 +186,21 @@ export default function StudentEditPage() {
     e.preventDefault()
     if (!student) return
 
-    if (!fullName.trim() || !email.trim() || !admissionNumber.trim() || !classArmComboId) {
-      setError('Name, email, admission number, and class are required')
-      toast.error('Name, email, admission number, and class are required')
+    if (!fullName.trim() || !email.trim()) {
+      setError('Name and email are required')
+      toast.error('Name and email are required')
+      return
+    }
+
+    if (!admissionNumber.trim()) {
+      setError('Admission number is required')
+      toast.error('Admission number is required')
+      return
+    }
+
+    if (!classArmComboId) {
+      setError('Please select a class/arm')
+      toast.error('Please select a class/arm')
       return
     }
 
@@ -221,8 +233,8 @@ export default function StudentEditPage() {
 
       if (studentError) throw studentError
 
-      toast.success('Student record updated successfully')
-      router.back()
+      toast.success('✅ Student record updated successfully')
+      setTimeout(() => router.back(), 1500)
     } catch (err: any) {
       console.error('Error saving student:', err)
       const errorMsg = err.message || 'Failed to save student record'

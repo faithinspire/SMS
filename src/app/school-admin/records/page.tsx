@@ -108,7 +108,6 @@ const RecordsPage: React.FC = () => {
           )
         `)
         .eq('school_id', schoolId)
-        .order('created_at', { ascending: false })
 
       if (error) throw error
 
@@ -117,48 +116,63 @@ const RecordsPage: React.FC = () => {
       )
 
       setStudents(sortedData)
+      setIsLoading(false)
     } catch (error) {
       console.error('Error fetching students:', error)
       toast.error('Failed to load students')
+      setStudents([])
+      setIsLoading(false)
     }
   }, [schoolId])
 
-  // Fetch staff
+  // Fetch staff - HARDFIX: Query users table with role='STAFF'
   const fetchStaff = useCallback(async () => {
     if (!schoolId) return
 
     try {
-      const { data, error } = await getSupabaseClient()
-        .from('staff')
-        .select(`
-          id,
-          user_id,
-          school_id,
-          position,
-          status,
-          user:user_id (
-            id,
-            full_name,
-            email,
-            phone,
-            photo_url,
-            role
-          )
-        `)
+      setIsLoading(true)
+      const { data: userStaffData, error: userError } = await getSupabaseClient()
+        .from('users')
+        .select('*')
         .eq('school_id', schoolId)
-        .order('created_at', { ascending: false })
+        .eq('role', 'STAFF')
 
-      if (error) throw error
+      if (userError) throw userError
 
-      const sortedData = (data || []).sort((a, b) =>
+      const { data: staffRecords } = await getSupabaseClient()
+        .from('staff')
+        .select('*')
+        .eq('school_id', schoolId)
+
+      const mergedStaff = (userStaffData || []).map((user: any) => {
+        const staffRecord = staffRecords?.find((s: any) => s.user_id === user.id)
+        return {
+          id: staffRecord?.id || user.id,
+          user_id: user.id,
+          school_id: user.school_id,
+          position: staffRecord?.position || 'Staff',
+          status: staffRecord?.status || 'ACTIVE',
+          user: {
+            id: user.id,
+            full_name: user.full_name || 'Unknown',
+            email: user.email,
+            phone: user.phone,
+            photo_url: user.photo_url,
+            role: user.role,
+          },
+        }
+      })
+
+      const sortedData = mergedStaff.sort((a, b) =>
         (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
       )
 
       setStaff(sortedData)
+      setIsLoading(false)
     } catch (error) {
       console.error('Error fetching staff:', error)
       toast.error('Failed to load staff')
-    } finally {
+      setStaff([])
       setIsLoading(false)
     }
   }, [schoolId])
@@ -173,7 +187,7 @@ const RecordsPage: React.FC = () => {
         setIsLoading(false)
       }
     }
-  }, [schoolId, activeTab, fetchStudents, fetchStaff])
+  }, [schoolId, activeTab])
 
   // Filter records
   const filteredStudents = students.filter((student) =>

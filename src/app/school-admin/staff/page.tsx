@@ -126,46 +126,63 @@ const StaffPage: React.FC = () => {
     getCurrentSchool();
   }, []);
 
-  // Fetch staff
+  // Fetch staff - HARDFIX: Query users table with role='STAFF' instead of staff table
   const fetchStaff = useCallback(async () => {
     if (!schoolId) return;
 
     try {
       setIsLoading(true);
-      const { data, error } = await getSupabaseClient()
+      // CRITICAL FIX: Use users table with role filtering instead of staff table
+      const { data: userStaffData, error: userError } = await getSupabaseClient()
+        .from('users')
+        .select('*')
+        .eq('school_id', schoolId)
+        .eq('role', 'STAFF');
+
+      if (userError) {
+        console.error('Users table error:', userError);
+        throw userError;
+      }
+
+      // ALSO get staff records if they exist (for employment details)
+      const { data: staffRecords, error: staffError } = await getSupabaseClient()
         .from('staff')
-        .select(`
-          id,
-          user_id,
-          school_id,
-          position,
-          employment_date,
-          status,
-          user:user_id (
-            id,
-            full_name,
-            email,
-            photo_url,
-            role,
-            status
-          )
-        `)
+        .select('*')
         .eq('school_id', schoolId);
 
-      if (error) {
-        console.error('Supabase Error:', error);
-        throw error;
-      }
-      
-      // Sort in application layer (avoids Supabase ordering issues)
-      const sortedData = (data || []).sort((a, b) => 
+      if (staffError) console.warn('Staff table optional query failed:', staffError);
+
+      // Merge data: prioritize staff table records, fall back to users table
+      const mergedStaff = (userStaffData || []).map((user: any) => {
+        const staffRecord = staffRecords?.find(s => s.user_id === user.id);
+        return {
+          id: staffRecord?.id || user.id,
+          user_id: user.id,
+          school_id: user.school_id,
+          position: staffRecord?.position || 'Staff',
+          employment_date: staffRecord?.employment_date || null,
+          status: staffRecord?.status || 'ACTIVE',
+          user: {
+            id: user.id,
+            full_name: user.full_name || 'Unknown',
+            email: user.email,
+            photo_url: user.photo_url,
+            role: user.role,
+            status: user.status,
+          },
+        };
+      });
+
+      // Sort in application layer
+      const sortedData = mergedStaff.sort((a, b) =>
         (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
       );
-      
+
       setStaff(sortedData);
     } catch (error) {
       console.error('Error fetching staff:', error);
       toast.error('Failed to load staff: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      setStaff([]); // Set empty array on error
     } finally {
       setIsLoading(false);
     }

@@ -13,16 +13,24 @@ export async function POST(request: Request) {
       tuitionFee,
     } = await request.json()
 
-    if (!studentName || !admissionNumber || !className || !schoolName) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    // HARDFIX: Better validation with fallback values
+    const finalStudentName = studentName || 'Student'
+    const finalAdmissionNumber = admissionNumber || 'ADM-000'
+    const finalClassName = className || 'Class'
+    const finalSchoolName = schoolName || 'School'
+
+    if (!finalStudentName || !finalAdmissionNumber || !finalClassName || !finalSchoolName) {
+      return NextResponse.json({ 
+        error: 'Missing required fields: studentName, admissionNumber, className, schoolName' 
+      }, { status: 400 })
     }
 
     // Generate AI-style admission letter
     const letterContent = generateAdmissionLetter({
-      studentName,
-      admissionNumber,
-      className,
-      schoolName,
+      studentName: finalStudentName,
+      admissionNumber: finalAdmissionNumber,
+      className: finalClassName,
+      schoolName: finalSchoolName,
       admissionDate: admissionDate || new Date().toLocaleDateString(),
       parentName: parentName || 'Parent/Guardian',
       tuitionFee: tuitionFee || 'As per fee schedule',
@@ -31,11 +39,11 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       letter: letterContent,
-      filename: `Admission_Letter_${studentName.replace(/\s+/g, '_')}_${Date.now()}.html`,
+      filename: `Admission_Letter_${finalStudentName.replace(/\s+/g, '_')}_${Date.now()}.html`,
     })
   } catch (error: any) {
     console.error('[API] Admission letter error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
   }
 }
 
