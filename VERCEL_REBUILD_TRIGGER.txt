@@ -1,0 +1,6 @@
+FORCE VERCEL REBUILD
+Timestamp: 2026-09-28T18:00:00Z
+Commit: HEAD - Forcing clean rebuild of all components
+
+This file triggers a new deployment on Vercel.
+StudentProfileEditModal and all fixes are ready.
