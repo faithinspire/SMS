@@ -66,6 +66,8 @@ export default function SchoolAdminDashboard() {
     editingStudent: null,
     editingName: '',
     editingEmail: '',
+    studentProfileEditOpen: false,
+    studentProfileEditId: null,
   })
 
   // CRITICAL FIX: Load dashboard data on component mount - AUTO-DEPLOY TRIGGERED
