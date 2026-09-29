@@ -385,9 +385,8 @@ export default function SchoolAdminDashboard() {
   const editStudent = async (student: any) => {
     setState(s => ({ 
       ...s, 
-      editingStudent: student,
-      editingName: student.full_name,
-      editingEmail: student.email,
+      studentProfileEditOpen: true,
+      studentProfileEditId: student.id,
     }))
   }
 
