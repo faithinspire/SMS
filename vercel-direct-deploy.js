@@ -10,8 +10,8 @@ const path = require('path');
 
 // Read OIDC token from .env.local
 const envLocal = fs.readFileSync(path.join(__dirname, '.env.local'), 'utf8');
-const tokenMatch = envLocal.match(/VERCEL_OIDC_TOKEN="([^"]+)"/);
-const oidcToken = tokenMatch ? tokenMatch[1] : null;
+const tokenMatch = envLocal.match(/VERCEL_OIDC_TOKEN=(.+)/);
+const oidcToken = tokenMatch ? tokenMatch[1].trim() : null;
 
 if (!oidcToken) {
   console.error('❌ VERCEL_OIDC_TOKEN not found in .env.local');

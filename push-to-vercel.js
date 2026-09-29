@@ -1,40 +1,60 @@
 #!/usr/bin/env node
+/**
+ * Push changes to GitHub and trigger Vercel deployment
+ */
 
-const { spawn } = require('child_process');
-const path = require('path');
+const { execSync } = require('child_process');
+const fs = require('fs');
 
-const projectRoot = path.normalize('c:\\Users\\OLU\\Desktop\\SMS');
+console.log('\x1b[36m' + '='.repeat(80) + '\x1b[0m');
+console.log('\x1b[36m🚀 PUSHING TO GITHUB AND VERCEL\x1b[0m');
+console.log('\x1b[36m' + '='.repeat(80) + '\x1b[0m\n');
 
-console.log('🚀 Pushing Migration 121 to Vercel...\n');
-
-// Create git push process
-const push = spawn('git', ['push', 'origin', 'main'], {
-  cwd: projectRoot,
-  stdio: 'inherit',
-  shell: true
-});
-
-push.on('close', (code) => {
-  console.log('\n');
-  if (code === 0) {
-    console.log('✅ SUCCESS! Migration 121 pushed to Vercel');
-    console.log('');
-    console.log('📋 Next Steps:');
-    console.log('  1. Vercel detects new commit (30-60 seconds)');
-    console.log('  2. Vercel rebuilds and deploys (1-2 minutes)');
-    console.log('  3. Migration 121 runs automatically');
-    console.log('  4. RLS disabled on result tables');
-    console.log('  5. Classes and students load with scores');
-    console.log('');
-    console.log('⏱️  Total time: 5-10 minutes');
-    process.exit(0);
+try {
+  console.log('[1/4] Checking git status...');
+  const statusOutput = execSync('git status --short', { cwd: __dirname }).toString();
+  const hasChanges = statusOutput.trim().length > 0;
+  
+  if (hasChanges) {
+    console.log('✅ Found changes to commit:\n');
+    console.log(statusOutput);
+    
+    console.log('\n[2/4] Staging all changes...');
+    execSync('git add -A', { cwd: __dirname });
+    console.log('✅ Changes staged\n');
+    
+    console.log('[3/4] Creating commit...');
+    execSync('git commit -m "🔥 Fix: Results page Supabase integration + All School Admin features"', { cwd: __dirname });
+    console.log('✅ Commit created\n');
   } else {
-    console.log(`❌ Push failed with exit code ${code}`);
-    process.exit(1);
+    console.log('⚠️  No changes to commit\n');
   }
-});
+  
+  console.log('[4/4] Pushing to GitHub...');
+  execSync('git push origin main', { cwd: __dirname, stdio: 'inherit' });
+  console.log('\n✅ Push successful\n');
+  
+  console.log('\x1b[36m' + '='.repeat(80) + '\x1b[0m');
+  console.log('\x1b[32m✅ DEPLOYMENT INITIATED\x1b[0m');
+  console.log('\x1b[36m' + '='.repeat(80) + '\x1b[0m\n');
+  
+  console.log('📊 Status:');
+  console.log('  ✅ Changes committed');
+  console.log('  ✅ Pushed to GitHub main branch');
+  console.log('  ✅ Vercel webhook triggered\n');
+  
+  console.log('📍 Monitor deployment:');
+  console.log('  • Vercel Dashboard: https://vercel.com/dashboard/projects/sms-gold-eta');
+  console.log('  • Live Site: https://sms-gold-eta.vercel.app/school-admin/dashboard\n');
+  
+  console.log('⏱️ Expected timeline:');
+  console.log('  NOW:      Push sent to GitHub');
+  console.log('  +30 sec:  Vercel receives webhook');
+  console.log('  +1 min:   Build starts');
+  console.log('  +3-5 min: Build completes');
+  console.log('  +5-7 min: 🎉 LIVE on production\n');
 
-push.on('error', (err) => {
-  console.error('❌ Error spawning process:', err);
+} catch (error) {
+  console.error('\x1b[31m❌ ERROR:\x1b[0m', error.message);
   process.exit(1);
-});
+}
