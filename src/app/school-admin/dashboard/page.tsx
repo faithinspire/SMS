@@ -610,47 +610,19 @@ export default function SchoolAdminDashboard() {
           </div>
         )}
 
-        {/* EDIT STUDENT MODAL */}
-        {state.editingStudent && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-8 max-w-md w-full">
-              <h3 className="text-2xl font-bold mb-4">Edit Student</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Name</label>
-                  <input
-                    type="text"
-                    value={state.editingName}
-                    onChange={(e) => setState(s => ({ ...s, editingName: e.target.value }))}
-                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Email</label>
-                  <input
-                    type="email"
-                    value={state.editingEmail}
-                    onChange={(e) => setState(s => ({ ...s, editingEmail: e.target.value }))}
-                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={() => setState(s => ({ ...s, editingStudent: null }))}
-                  className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveStudentEdit}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
+        {/* Student Profile Edit Modal - 5-Tab Professional Modal */}
+        {state.user?.school_id && state.studentProfileEditId && (
+          <StudentProfileEditModal
+            studentId={state.studentProfileEditId}
+            schoolId={state.user.school_id}
+            isOpen={state.studentProfileEditOpen}
+            onClose={() => setState(s => ({ ...s, studentProfileEditOpen: false, studentProfileEditId: null }))}
+            onSuccess={() => {
+              setState(s => ({ ...s, studentProfileEditOpen: false, studentProfileEditId: null }))
+              // Reload dashboard data to show updated student info
+              loadDashboardData()
+            }}
+          />
         )}
 
         {/* Overview Tab */}
