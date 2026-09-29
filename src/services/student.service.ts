@@ -523,7 +523,7 @@ export class StudentService {
   /**
    * UPDATE EXISTING STUDENT PROFILE
    * CRITICAL: Updates existing record - does NOT create duplicate
-   * Allows editing: name, DOB, class, subjects, guardian info, photo
+   * Allows editing: name, DOB, class, subjects, guardian info, photo, phone, contact details
    */
   static async updateStudentProfile(
     studentId: string,
@@ -531,13 +531,19 @@ export class StudentService {
     updates: {
       fullName?: string
       email?: string
-      department?: string | null
+      phone?: string
+      gender?: string
       dateOfBirth?: string
+      address?: string
+      state?: string
+      lga?: string
+      department?: string | null
       classArmComboId?: string
       subjectIds?: string[]
       guardianFullName?: string
       guardianPhone?: string
       guardianEmail?: string
+      guardianRelationship?: string
       photoFile?: File
     }
   ): Promise<{ student: Student; admission_number: string }> {
@@ -605,8 +611,8 @@ export class StudentService {
 
       console.log('✅ Student record updated')
 
-      // Update user name and email if provided
-      if (updates.fullName || updates.email) {
+      // Update user name, email, phone, gender, and contact fields
+      if (updates.fullName || updates.email || updates.phone || updates.gender || updates.address || updates.state || updates.lga) {
         const userUpdates: any = {
           updated_at: new Date().toISOString(),
         }
@@ -617,6 +623,26 @@ export class StudentService {
         
         if (updates.email) {
           userUpdates.email = updates.email
+        }
+
+        if (updates.phone) {
+          userUpdates.phone = updates.phone
+        }
+
+        if (updates.gender) {
+          userUpdates.gender = updates.gender
+        }
+
+        if (updates.address) {
+          userUpdates.address = updates.address
+        }
+
+        if (updates.state) {
+          userUpdates.state = updates.state
+        }
+
+        if (updates.lga) {
+          userUpdates.lga = updates.lga
         }
 
         const { error: userError } = await supabase
