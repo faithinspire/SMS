@@ -1,5 +1,4 @@
 /**
-/**
  * API Route: Create Shareable Letter Link
  * Generates a unique, time-limited link to share letters via WhatsApp or other services
  */
@@ -73,6 +72,7 @@ export async function POST(request: NextRequest) {
       { error: 'Internal server error' },
       { status: 500 }
     )
+  }
 }
 
 /**
