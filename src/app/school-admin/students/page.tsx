@@ -6,9 +6,11 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
+import { LetterGenerationService } from '@/services/letter-generation.service';
 
 let supabase: any = null;
 
@@ -103,6 +105,7 @@ const ConfirmationModal: React.FC<{
 );
 
 const StudentsPage: React.FC = () => {
+  const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -195,14 +198,19 @@ const StudentsPage: React.FC = () => {
             )
           )
         `)
-        .eq('school_id', schoolId)
-        .order('user.full_name', { ascending: true });
+        .eq('school_id', schoolId);
 
       if (error) throw error;
-      setStudents(data || []);
+      
+      // Sort in application layer (avoids Supabase ordering issues)
+      const sortedData = (data || []).sort((a, b) => 
+        (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
+      );
+      
+      setStudents(sortedData);
     } catch (error) {
       console.error('Error fetching students:', error);
-      toast.error('Failed to load students');
+      toast.error('Failed to load students: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsLoading(false);
     }
@@ -291,38 +299,56 @@ const StudentsPage: React.FC = () => {
   // Generate Admission Letter
   const generateAdmissionLetter = async (student: Student) => {
     try {
-      const response = await fetch('/api/school-admin/students/admission-letter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId: student.id,
-          studentName: student.user.full_name,
-          admissionNumber: student.admission_number,
-          className: student.class_arm_combo?.class?.name || 'Class',
-          schoolName: 'School Name',
-          parentName: 'Parent/Guardian',
-        }),
-      });
+      toast.loading('Generating admission letter...', { id: 'letter' })
 
-      if (!response.ok) throw new Error('Failed to generate letter');
+      // Get school data
+      const { data: schoolData } = await getSupabaseClient()
+        .from('schools')
+        .select('*')
+        .eq('id', schoolId)
+        .single()
 
-      const { letter, filename } = await response.json();
+      if (!schoolData) {
+        toast.error('School information not found')
+        return
+      }
 
-      // Download the letter
-      const blob = new Blob([letter], { type: 'text/html' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      // Get parent/guardian data
+      const { data: guardianData } = await getSupabaseClient()
+        .from('guardians')
+        .select('full_name')
+        .eq('student_id', student.id)
+        .limit(1)
+        .single()
 
-      toast.success('Admission letter generated and downloaded!');
+      // Generate the letter HTML
+      const letterHTML = await LetterGenerationService.generateAdmissionLetter(
+        {
+          id: student.id,
+          full_name: student.user.full_name,
+          email: student.user.email,
+          admission_number: student.admission_number,
+          date_of_birth: student.date_of_birth || '',
+          class_name: `${student.class_arm_combo.class.name} ${student.class_arm_combo.arm.name}`,
+          parent_name: guardianData?.full_name || 'Parent/Guardian',
+        },
+        {
+          id: schoolData.id,
+          name: schoolData.name,
+          email: schoolData.email,
+          phone: schoolData.phone,
+          address: schoolData.address,
+          logo_url: schoolData.logo_url,
+        }
+      )
+
+      // Open in new window for preview and printing
+      await LetterGenerationService.previewLetter(letterHTML)
+
+      toast.success('Admission letter generated!', { id: 'letter' })
     } catch (error) {
-      console.error('Error generating letter:', error);
-      toast.error('Failed to generate admission letter');
+      console.error('Error generating letter:', error)
+      toast.error('Failed to generate admission letter', { id: 'letter' })
     }
   };
 
@@ -417,6 +443,20 @@ const StudentsPage: React.FC = () => {
                   </td>
                   <td className="py-3 px-4 text-center">
                     <div className="flex gap-2 justify-center flex-wrap">
+                      <button
+                        onClick={() => router.push(`/school-admin/students/${student.id}`)}
+                        className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                        title="Edit Student Profile"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => generateAdmissionLetter(student)}
+                        className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                        title="Generate Admission Letter"
+                      >
+                        📄 Letter
+                      </button>
                       {student.status === 'ACTIVE' ? (
                         <button
                           onClick={() => setModal({ type: 'pause', student })}
@@ -427,18 +467,11 @@ const StudentsPage: React.FC = () => {
                       ) : student.status !== 'SUSPENDED' ? (
                         <button
                           onClick={() => setModal({ type: 'activate', student })}
-                          className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                          className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
                         >
                           Activate
                         </button>
                       ) : null}
-                      <button
-                        onClick={() => generateAdmissionLetter(student)}
-                        className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-                        title="Generate Admission Letter"
-                      >
-                        📄 Letter
-                      </button>
                       <button
                         onClick={() => setModal({ type: 'delete', student })}
                         className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
