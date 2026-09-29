@@ -7,6 +7,7 @@ import { SchoolService } from '@/services/school.service'
 import { supabase } from '@/lib/supabase-client'
 import { User } from '@/types'
 import StaffHeader from '@/components/StaffHeader'
+import StudentProfileEditModal from '@/components/admin/StudentProfileEditModal'
 
 interface DashboardState {
   user: User | null
