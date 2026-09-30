@@ -38,9 +38,9 @@ ALTER TABLE academic_terms DISABLE ROW LEVEL SECURITY;
 
 -- Ensure existing data is not duplicated - only insert if tables were empty
 INSERT INTO academic_sessions (school_id, session_year, is_active)
-SELECT DISTINCT school_id, '2024/2025', true FROM schools
-WHERE school_id NOT IN (SELECT DISTINCT school_id FROM academic_sessions)
-ON CONFLICT DO NOTHING;
+SELECT id, '2024/2025', true FROM schools
+WHERE id NOT IN (SELECT DISTINCT school_id FROM academic_sessions)
+ON CONFLICT (school_id, session_year) DO NOTHING;
 
 INSERT INTO academic_terms (school_id, session_id, term_name, term_order, is_active)
 SELECT 
@@ -51,7 +51,7 @@ SELECT
   true
 FROM schools s
 WHERE s.id NOT IN (SELECT DISTINCT school_id FROM academic_terms WHERE term_order = 1)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (school_id, session_id, term_order) DO NOTHING;
 
 INSERT INTO academic_terms (school_id, session_id, term_name, term_order, is_active)
 SELECT 
@@ -62,7 +62,7 @@ SELECT
   false
 FROM schools s
 WHERE s.id NOT IN (SELECT DISTINCT school_id FROM academic_terms WHERE term_order = 2)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (school_id, session_id, term_order) DO NOTHING;
 
 INSERT INTO academic_terms (school_id, session_id, term_name, term_order, is_active)
 SELECT 
@@ -73,4 +73,4 @@ SELECT
   false
 FROM schools s
 WHERE s.id NOT IN (SELECT DISTINCT school_id FROM academic_terms WHERE term_order = 3)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (school_id, session_id, term_order) DO NOTHING;
