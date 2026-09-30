@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { AcademicService } from '@/services/academic.service'
@@ -53,8 +53,8 @@ export default function SchoolAdminResultsPage() {
   const [loadingClasses, setLoadingClasses] = useState(false)
   const [schoolId, setSchoolId] = useState<string | null>(null)
 
-  // Memoized load classes function
-  const loadClassesForTerm = useCallback(async (schoolIdParam: string, termId: string) => {
+  // Load classes function
+  const loadClassesForTerm = async (schoolIdParam: string, termId: string) => {
     try {
       setLoadingClasses(true)
       console.log('[SchoolAdmin] Loading classes for term:', termId)
@@ -90,7 +90,7 @@ export default function SchoolAdminResultsPage() {
     } finally {
       setLoadingClasses(false)
     }
-  }, [])
+  }
 
   // Load on mount
   useEffect(() => {
@@ -184,7 +184,7 @@ export default function SchoolAdminResultsPage() {
     if (selectedTerm && schoolId) {
       loadClassesForTerm(schoolId, selectedTerm)
     }
-  }, [selectedTerm, schoolId, loadClassesForTerm])
+  }, [selectedTerm, schoolId])
 
   // Auto-select first class when classes load
   useEffect(() => {
