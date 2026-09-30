@@ -368,7 +368,7 @@ const StaffPage: React.FC = () => {
         abortControllerRef.current.abort();
       }
     };
-  }, [schoolId, fetchStaff]);
+  }, [schoolId]);
 
   // Filter staff
   const filteredStaff = staff.filter(member => {
