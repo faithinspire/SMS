@@ -210,49 +210,6 @@ const StaffPage: React.FC = () => {
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Get current user's school
-  useEffect(() => {
-    const getCurrentSchool = async () => {
-      try {
-        const { data: { user } } = await getSupabaseClient().auth.getUser();
-        if (!user) return;
-
-        const { data: userProfile } = await getSupabaseClient()
-          .from('users')
-          .select('school_id')
-          .eq('id', user.id)
-          .single();
-
-        if (userProfile) {
-          console.log('[Staff Page] Setting schoolId:', userProfile.school_id);
-          setSchoolId(userProfile.school_id);
-        }
-      } catch (error) {
-        console.error('[Staff Page] Error getting school:', error);
-      }
-    };
-
-    getCurrentSchool();
-  }, []);
-
-  // Fetch staff when schoolId changes
-  useEffect(() => {
-    if (!schoolId) {
-      console.log('[Staff Page] No schoolId, skipping fetch');
-      setIsLoading(false);
-      return;
-    }
-
-    console.log('[Staff Page] Effect triggered for schoolId:', schoolId);
-    fetchStaff(schoolId);
-
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [schoolId, fetchStaff]);
-
   // Fetch staff with abort controller to prevent race conditions
   const fetchStaff = useCallback(async (school: string) => {
     if (!school) {
@@ -369,6 +326,49 @@ const StaffPage: React.FC = () => {
       setIsLoading(false);
     }
   }, []);
+
+  // Get current user's school
+  useEffect(() => {
+    const getCurrentSchool = async () => {
+      try {
+        const { data: { user } } = await getSupabaseClient().auth.getUser();
+        if (!user) return;
+
+        const { data: userProfile } = await getSupabaseClient()
+          .from('users')
+          .select('school_id')
+          .eq('id', user.id)
+          .single();
+
+        if (userProfile) {
+          console.log('[Staff Page] Setting schoolId:', userProfile.school_id);
+          setSchoolId(userProfile.school_id);
+        }
+      } catch (error) {
+        console.error('[Staff Page] Error getting school:', error);
+      }
+    };
+
+    getCurrentSchool();
+  }, []);
+
+  // Fetch staff when schoolId changes
+  useEffect(() => {
+    if (!schoolId) {
+      console.log('[Staff Page] No schoolId, skipping fetch');
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('[Staff Page] Effect triggered for schoolId:', schoolId);
+    fetchStaff(schoolId);
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [schoolId, fetchStaff]);
 
   // Filter staff
   const filteredStaff = staff.filter(member => {
