@@ -53,49 +53,74 @@ export default function SchoolAdminResultsPage() {
   const [loadingClasses, setLoadingClasses] = useState(false)
   const [schoolId, setSchoolId] = useState<string | null>(null)
 
-  // Load classes function
+  // Load classes function - ONLY when both session and term are selected
   const loadClassesForTerm = async (schoolIdParam: string, termId: string) => {
-    try {
-      setLoadingClasses(true)
-      console.log('[SchoolAdmin] Loading classes for term:', termId)
-
-      const classArms = await AcademicService.getClassArmCombos(schoolIdParam)
-      const classesWithStudents: ClassWithStudents[] = []
-
-      for (const classArm of classArms || []) {
-        const studentsWithScores = await AcademicService.getStudentsWithScores(
-          schoolIdParam,
-          classArm.id,
-          termId
-        )
-
-        classesWithStudents.push({
-          id: classArm.id,
-          class_name: classArm.class?.name || 'Unknown',
-          arm_name: classArm.arm?.name || 'N/A',
-          student_count: studentsWithScores.length,
-          students: studentsWithScores,
-        })
-      }
-
-      console.log('[SchoolAdmin] Classes loaded:', classesWithStudents.length)
-      setClasses(classesWithStudents)
-      setSelectedClass(null)
-      setSelectedClassData(null)
-    } catch (error) {
-      console.error('[SchoolAdmin] Error loading classes:', error)
-      let errorMsg = 'Failed to load classes'
-      if (error instanceof Error) {
-        errorMsg = error.message
-      }
-      // Don't swallow the error - show it to user
-      setClasses([])
-      setSelectedClass(null)
-      setSelectedClassData(null)
-    } finally {
-      setLoadingClasses(false)
+    if (!schoolIdParam || !termId) {
+      console.log('[SchoolAdmin] Skipping class load - missing schoolId or termId');
+      setClasses([]);
+      return;
     }
-  }
+
+    try {
+      setLoadingClasses(true);
+      console.log('[SchoolAdmin] Loading classes for term:', termId, 'school:', schoolIdParam);
+
+      // Fetch class/arm combos for the school
+      const classArms = await AcademicService.getClassArmCombos(schoolIdParam);
+      console.log('[SchoolAdmin] Fetched class combos:', classArms.length);
+
+      if (!classArms || classArms.length === 0) {
+        console.warn('[SchoolAdmin] No class/arm combos found for school');
+        setClasses([]);
+        return;
+      }
+
+      const classesWithStudents: ClassWithStudents[] = [];
+
+      // For each class, fetch students and their scores
+      for (const classArm of classArms) {
+        try {
+          const studentsWithScores = await AcademicService.getStudentsWithScores(
+            schoolIdParam,
+            classArm.id,
+            termId
+          );
+
+          classesWithStudents.push({
+            id: classArm.id,
+            class_name: classArm.class?.name || 'Unknown',
+            arm_name: classArm.arm?.name || 'N/A',
+            student_count: studentsWithScores.length,
+            students: studentsWithScores,
+          });
+        } catch (classError) {
+          console.error(`[SchoolAdmin] Error loading students for class ${classArm.id}:`, classError);
+          // Continue with next class even if one fails
+        }
+      }
+
+      console.log('[SchoolAdmin] Classes loaded with students:', classesWithStudents.length);
+      setClasses(classesWithStudents);
+      
+      // Auto-select first class if available
+      if (classesWithStudents.length > 0 && !selectedClass) {
+        console.log('[SchoolAdmin] Auto-selecting first class');
+        setSelectedClass(classesWithStudents[0].id);
+        setSelectedClassData(classesWithStudents[0]);
+      }
+    } catch (error) {
+      console.error('[SchoolAdmin] Error loading classes:', error);
+      let errorMsg = 'Failed to load classes';
+      if (error instanceof Error) {
+        errorMsg = error.message;
+      }
+      setClasses([]);
+      setSelectedClass(null);
+      setSelectedClassData(null);
+    } finally {
+      setLoadingClasses(false);
+    }
+  };
 
   // Load on mount
   useEffect(() => {
@@ -187,18 +212,22 @@ export default function SchoolAdminResultsPage() {
   // When term changes, load classes
   useEffect(() => {
     if (selectedTerm && schoolId) {
-      loadClassesForTerm(schoolId, selectedTerm)
+      console.log('[SchoolAdmin] Loading classes - term selected:', selectedTerm);
+      loadClassesForTerm(schoolId, selectedTerm);
+    } else {
+      console.log('[SchoolAdmin] Not loading classes - term or schoolId missing');
+      setClasses([]);
     }
-  }, [selectedTerm, schoolId])
+  }, [selectedTerm, schoolId]);
 
   // Auto-select first class when classes load
   useEffect(() => {
     if (classes.length > 0 && !selectedClass) {
-      console.log('[SchoolAdmin] Auto-selecting first class:', classes[0].class_name)
-      setSelectedClass(classes[0].id)
-      setSelectedClassData(classes[0])
+      console.log('[SchoolAdmin] Auto-selecting first class:', classes[0].class_name);
+      setSelectedClass(classes[0].id);
+      setSelectedClassData(classes[0]);
     }
-  }, [classes, selectedClass])
+  }, [classes]);
 
 
 

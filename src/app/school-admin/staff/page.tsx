@@ -90,6 +90,107 @@ const ConfirmationModal: React.FC<{
   </div>
 );
 
+const EditModal: React.FC<{
+  staff: StaffMember;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (updates: Partial<StaffMember>) => Promise<void>;
+  isLoading?: boolean;
+}> = ({ staff, isOpen, onClose, onSave, isLoading = false }) => {
+  const [formData, setFormData] = useState(staff);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setFormData(staff);
+  }, [staff]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await onSave(formData);
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <h3 className="text-lg font-bold mb-4">Edit Staff Member</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
+            <input
+              type="text"
+              value={formData.user.full_name}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  user: { ...formData.user, full_name: e.target.value },
+                })
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              value={formData.user.email}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  user: { ...formData.user, email: e.target.value },
+                })
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Position</label>
+            <input
+              type="text"
+              value={formData.position || ''}
+              onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Employment Date</label>
+            <input
+              type="date"
+              value={formData.employment_date ? formData.employment_date.split('T')[0] : ''}
+              onChange={(e) => setFormData({ ...formData, employment_date: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex gap-3 justify-end pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || isLoading}
+              className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const StaffPage: React.FC = () => {
   const router = useRouter();
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -98,7 +199,7 @@ const StaffPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<StatusType | 'ALL'>('ALL');
   const [schoolId, setSchoolId] = useState<string>('');
   const [modal, setModal] = useState<{
-    type: 'pause' | 'activate' | 'inactive' | 'delete' | null;
+    type: 'edit' | 'pause' | 'activate' | 'inactive' | 'delete' | null;
     staff?: StaffMember;
   }>({ type: null });
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -123,6 +224,7 @@ const StaffPage: React.FC = () => {
           .single();
 
         if (userProfile) {
+          console.log('[Staff Page] Setting schoolId:', userProfile.school_id);
           setSchoolId(userProfile.school_id);
         }
       } catch (error) {
@@ -133,9 +235,30 @@ const StaffPage: React.FC = () => {
     getCurrentSchool();
   }, []);
 
-  // Fetch staff with abort controller to prevent race conditions
+  // Fetch staff when schoolId changes
   useEffect(() => {
-    if (!schoolId) return;
+    if (!schoolId) {
+      console.log('[Staff Page] No schoolId, skipping fetch');
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('[Staff Page] Effect triggered for schoolId:', schoolId);
+    fetchStaff(schoolId);
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [schoolId, fetchStaff]);
+
+  // Fetch staff with abort controller to prevent race conditions
+  const fetchStaff = useCallback(async (school: string) => {
+    if (!school) {
+      setIsLoading(false);
+      return;
+    }
 
     // Cancel any previous request
     if (abortControllerRef.current) {
@@ -145,109 +268,107 @@ const StaffPage: React.FC = () => {
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
-    const fetchStaff = async () => {
-      try {
-        setIsLoading(true);
-        console.log('[Staff Page] Fetching staff for school:', schoolId);
+    try {
+      setIsLoading(true);
+      console.log('[Staff Page] Fetching staff for school:', school);
 
-        // Add 15 second timeout for queries
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Staff query timeout after 15s')), 15000)
+      // Add 15 second timeout for queries
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Staff query timeout after 15s')), 15000)
+      );
+
+      const queryPromise = (async (): Promise<StaffMember[]> => {
+        // STEP 1: Get all STAFF users from users table
+        const { data: userStaffData, error: userError } = await getSupabaseClient()
+          .from('users')
+          .select('*')
+          .eq('school_id', school)
+          .in('role', ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'STAFF']);
+
+        if (signal.aborted) throw new Error('Request was cancelled');
+        if (userError) {
+          console.error('[Staff Page] User query error:', userError);
+          throw userError;
+        }
+        console.log('[Staff Page] Found users with STAFF role:', userStaffData?.length);
+
+        // STEP 2: Get staff employment records (optional supplementary data)
+        const { data: staffRecords, error: staffError } = await getSupabaseClient()
+          .from('staff')
+          .select('*')
+          .eq('school_id', school);
+
+        if (signal.aborted) throw new Error('Request was cancelled');
+        if (staffError) {
+          console.error('[Staff Page] Staff records query error:', staffError);
+          // Non-fatal error - proceed with users only
+        }
+        console.log('[Staff Page] Found staff records:', staffRecords?.length);
+
+        // STEP 3: Merge data - users table is source of truth, staff table augments
+        const mergedStaff = (userStaffData || []).map((user: any) => {
+          const staffRecord = staffRecords?.find((s: any) => s.user_id === user.id);
+          return {
+            id: staffRecord?.id || `staff_${user.id}`,
+            user_id: user.id,
+            school_id: user.school_id,
+            position: staffRecord?.position || 'Staff',
+            employment_date: staffRecord?.employment_date || null,
+            status: staffRecord?.status || 'ACTIVE',
+            user: {
+              id: user.id,
+              full_name: user.full_name || 'Unknown Staff',
+              email: user.email || 'no-email@school.local',
+              photo_url: user.photo_url,
+              role: user.role,
+              status: user.status,
+            },
+          };
+        });
+
+        // STEP 4: Sort in application layer
+        const sortedData = mergedStaff.sort((a, b) =>
+          (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
         );
 
-        const queryPromise = (async (): Promise<StaffMember[]> => {
-          // STEP 1: Get all STAFF users from users table
-          const { data: userStaffData, error: userError } = await getSupabaseClient()
-            .from('users')
-            .select('*')
-            .eq('school_id', schoolId)
-            .in('role', ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'STAFF']);
+        console.log('[Staff Page] Final merged staff count:', sortedData.length);
+        return sortedData;
+      })();
 
-          if (signal.aborted) throw new Error('Request was cancelled');
-          if (userError) throw userError;
-          console.log('[Staff Page] Found users with STAFF role:', userStaffData?.length);
-
-          // STEP 2: Get staff employment records (optional supplementary data)
-          const { data: staffRecords, error: staffError } = await getSupabaseClient()
-            .from('staff')
-            .select('*')
-            .eq('school_id', schoolId);
-
-          if (signal.aborted) throw new Error('Request was cancelled');
-          console.log('[Staff Page] Found staff records:', staffRecords?.length);
-
-          // STEP 3: Merge data - users table is source of truth, staff table augments
-          const mergedStaff = (userStaffData || []).map((user: any) => {
-            const staffRecord = staffRecords?.find((s: any) => s.user_id === user.id);
-            return {
-              id: staffRecord?.id || `staff_${user.id}`,
-              user_id: user.id,
-              school_id: user.school_id,
-              position: staffRecord?.position || 'Staff',
-              employment_date: staffRecord?.employment_date || null,
-              status: staffRecord?.status || 'ACTIVE',
-              user: {
-                id: user.id,
-                full_name: user.full_name || 'Unknown Staff',
-                email: user.email || 'no-email@school.local',
-                photo_url: user.photo_url,
-                role: user.role,
-                status: user.status,
-              },
-            };
-          });
-
-          // STEP 4: Sort in application layer
-          const sortedData = mergedStaff.sort((a, b) =>
-            (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
-          );
-
-          console.log('[Staff Page] Final merged staff count:', sortedData.length);
-          return sortedData;
-        })();
-
-        // Race between query and timeout
-        const staffData = await Promise.race([queryPromise, timeoutPromise]);
-        
-        if (!signal.aborted) {
-          setStaff(staffData);
-          if (staffData.length === 0) {
-            console.info('[Staff Page] No staff found - database may be empty for this school');
-          }
+      // Race between query and timeout
+      const staffData = await Promise.race([queryPromise, timeoutPromise]);
+      
+      if (!signal.aborted) {
+        setStaff(staffData);
+        console.log('[Staff Page] Staff set in state:', staffData.length);
+        if (staffData.length === 0) {
+          console.warn('[Staff Page] No staff found - database may be empty for this school');
         }
-      } catch (error) {
-        if (signal.aborted) {
-          console.log('[Staff Page] Request was cancelled');
+      }
+    } catch (error) {
+      if (signal.aborted) {
+        console.log('[Staff Page] Request was cancelled');
+        return;
+      }
+
+      console.error('[Staff Page] Critical error fetching staff:', error);
+      let errorMsg = 'Failed to load staff';
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          errorMsg = 'Staff data is taking too long to load. Try again in a moment.';
+        } else if (error.message.includes('cancelled')) {
           return;
+        } else {
+          errorMsg = error.message;
         }
-
-        console.error('[Staff Page] Critical error:', error);
-        let errorMsg = 'Failed to load staff';
-        if (error instanceof Error) {
-          if (error.message.includes('timeout')) {
-            errorMsg = 'Staff data is taking too long to load. Try again in a moment.';
-          } else if (error.message.includes('cancelled')) {
-            return;
-          } else {
-            errorMsg = error.message;
-          }
-        }
-        toast.error(errorMsg);
-        setStaff([]);
-      } finally {
-        // CRITICAL: Always set loading to false, regardless of abort status
-        setIsLoading(false);
       }
-    };
-
-    fetchStaff();
-
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [schoolId]);
+      toast.error(errorMsg);
+      setStaff([]);
+    } finally {
+      // CRITICAL: Always set loading to false, regardless of abort status
+      setIsLoading(false);
+    }
+  }, []);
 
   // Filter staff
   const filteredStaff = staff.filter(member => {
@@ -279,6 +400,48 @@ const StaffPage: React.FC = () => {
     } catch (error) {
       console.error('Error updating status:', error);
       toast.error('Failed to update staff status');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Update staff profile
+  const handleEditSave = async (staffId: string, updates: Partial<StaffMember>) => {
+    try {
+      setIsActionLoading(true);
+      
+      // Update user data
+      const { error: userError } = await getSupabaseClient()
+        .from('users')
+        .update({
+          full_name: updates.user?.full_name,
+          email: updates.user?.email,
+        })
+        .eq('id', updates.user_id);
+
+      if (userError) throw userError;
+
+      // Update staff data if position/employment_date changed
+      if (updates.position || updates.employment_date) {
+        const { error: staffError } = await getSupabaseClient()
+          .from('staff')
+          .update({
+            position: updates.position,
+            employment_date: updates.employment_date,
+          })
+          .eq('id', staffId);
+
+        if (staffError) throw staffError;
+      }
+
+      setStaff(staff.map(s =>
+        s.id === staffId ? { ...s, ...updates } : s
+      ));
+      toast.success('Staff member updated successfully');
+      setModal({ type: null });
+    } catch (error) {
+      console.error('Error updating staff:', error);
+      toast.error('Failed to update staff member');
     } finally {
       setIsActionLoading(false);
     }
@@ -412,7 +575,7 @@ const StaffPage: React.FC = () => {
                   <td className="py-3 px-4 text-center">
                     <div className="flex gap-2 justify-center flex-wrap">
                       <button
-                        onClick={() => router.push(`/school-admin/staff/${member.id}`)}
+                        onClick={() => setModal({ type: 'edit', staff: member })}
                         className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
                         title="Edit Staff Profile"
                       >
@@ -456,6 +619,16 @@ const StaffPage: React.FC = () => {
       )}
 
       {/* Modals */}
+      {modal.type === 'edit' && modal.staff && (
+        <EditModal
+          staff={modal.staff}
+          isOpen={true}
+          onClose={() => setModal({ type: null })}
+          onSave={(updates) => handleEditSave(modal.staff!.id, updates)}
+          isLoading={isActionLoading}
+        />
+      )}
+
       {modal.type === 'pause' && modal.staff && (
         <ConfirmationModal
           title="Pause Staff Member"

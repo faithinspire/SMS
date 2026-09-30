@@ -127,8 +127,11 @@ const StudentsPage: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Fetch students with abort controller to prevent race conditions
-  const fetchStudents = useCallback(async () => {
-    if (!schoolId) return;
+  const fetchStudents = useCallback(async (school: string) => {
+    if (!school) {
+      setIsLoading(false);
+      return;
+    }
 
     // Cancel any previous request
     if (abortControllerRef.current) {
@@ -140,7 +143,7 @@ const StudentsPage: React.FC = () => {
 
     try {
       setIsLoading(true);
-      console.log('[Students Page] Fetching students for school:', schoolId);
+      console.log('[Students Page] Fetching students for school:', school);
 
       // Add 15 second timeout for queries
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -177,16 +180,21 @@ const StudentsPage: React.FC = () => {
               )
             )
           `)
-          .eq('school_id', schoolId);
+          .eq('school_id', school)
+          .order('created_at', { ascending: false });
 
         if (signal.aborted) throw new Error('Request was cancelled');
-        if (error) throw error;
+        if (error) {
+          console.error('[Students Page] Query error:', error);
+          throw error;
+        }
         
-        // Sort in application layer
+        // Sort in application layer by name
         const sortedData = (data || []).sort((a: any, b: any) => 
           (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
         );
         
+        console.log('[Students Page] Loaded students:', sortedData.length);
         return sortedData;
       })();
 
@@ -194,8 +202,9 @@ const StudentsPage: React.FC = () => {
       
       if (!signal.aborted) {
         setStudents(studentData);
+        console.log('[Students Page] Students set in state:', studentData.length);
         if (studentData.length === 0) {
-          console.info('[Students Page] No students found - database may be empty for this school');
+          console.warn('[Students Page] No students found for school:', school);
         }
       }
     } catch (error) {
@@ -204,15 +213,13 @@ const StudentsPage: React.FC = () => {
         return;
       }
 
-      console.error('[Students Page] Error fetching students:', error);
+      console.error('[Students Page] Critical error fetching students:', error);
       let errorMsg = 'Failed to load students';
       if (error instanceof Error) {
         if (error.message.includes('timeout')) {
           errorMsg = 'Student data is taking too long to load. Try again in a moment.';
         } else if (error.message.includes('cancelled')) {
           return;
-        } else if (error.message.includes('gender')) {
-          errorMsg = 'Database schema error - missing columns. Contact administrator.';
         } else {
           errorMsg = error.message;
         }
@@ -223,7 +230,7 @@ const StudentsPage: React.FC = () => {
       // CRITICAL: Always set loading to false, regardless of abort status
       setIsLoading(false);
     }
-  }, [schoolId]);
+  }, []);
 
   // Get current user's school
   useEffect(() => {
@@ -272,16 +279,21 @@ const StudentsPage: React.FC = () => {
 
   // Fetch students when schoolId changes
   useEffect(() => {
-    if (schoolId) {
-      fetchStudents();
+    if (!schoolId) {
+      console.log('[Students Page] No schoolId, skipping fetch');
+      setIsLoading(false);
+      return;
     }
+
+    console.log('[Students Page] Effect triggered for schoolId:', schoolId);
+    fetchStudents(schoolId);
 
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [schoolId]);
+  }, [schoolId, fetchStudents]);
 
   // Filter students
   const filteredStudents = students.filter(student => {
