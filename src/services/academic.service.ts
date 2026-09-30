@@ -27,9 +27,9 @@ export class AcademicService {
   static async getTerms(schoolId: string) {
     const { data, error } = await supabase
       .from('academic_terms')
-      .select('id, session_id, term_name, term_number, is_active, school_id')
+      .select('id, session_id, term_name, term_order, is_active, school_id')
       .eq('school_id', schoolId)
-      .order('term_number', { ascending: true })
+      .order('term_order', { ascending: true })
 
     if (error) throw new Error(`Failed to fetch terms: ${error.message}`)
     return data || []
@@ -41,10 +41,10 @@ export class AcademicService {
   static async getTermsForSession(schoolId: string, sessionId: string) {
     const { data, error } = await supabase
       .from('academic_terms')
-      .select('id, session_id, term_name, term_number, is_active')
+      .select('id, session_id, term_name, term_order, is_active')
       .eq('school_id', schoolId)
       .eq('session_id', sessionId)
-      .order('term_number', { ascending: true })
+      .order('term_order', { ascending: true })
 
     if (error) throw new Error(`Failed to fetch terms for session: ${error.message}`)
     return data || []
