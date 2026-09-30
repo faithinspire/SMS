@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
@@ -124,6 +124,8 @@ const StudentsPage: React.FC = () => {
     studentId?: string;
   }>({ isOpen: false });
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Get current user's school
   useEffect(() => {
     const getCurrentSchool = async () => {
@@ -141,7 +143,7 @@ const StudentsPage: React.FC = () => {
           setSchoolId(userProfile.school_id);
         }
       } catch (error) {
-        console.error('Error getting school:', error);
+        console.error('[Students Page] Error getting school:', error);
       }
     };
 
@@ -162,90 +164,121 @@ const StudentsPage: React.FC = () => {
         if (error) throw error;
         setClasses(data || []);
       } catch (error) {
-        console.error('Error fetching classes:', error);
+        console.error('[Students Page] Error fetching classes:', error);
       }
     };
 
     fetchClasses();
   }, [schoolId]);
 
-  // Fetch students
-  const fetchStudents = useCallback(async () => {
+  // Fetch students with abort controller to prevent race conditions
+  useEffect(() => {
     if (!schoolId) return;
 
-    try {
-      setIsLoading(true);
+    // Cancel any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
 
-      // Add 15 second timeout for queries
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Students query timeout')), 15000)
-      );
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
-      const queryPromise = (async () => {
-        const { data, error } = await getSupabaseClient()
-          .from('students')
-          .select(`
-            id,
-            user_id,
-            school_id,
-            admission_number,
-            date_of_birth,
-            photo_url,
-            status,
-            class_arm_combo_id,
-            user:user_id (
+    const fetchStudents = async () => {
+      try {
+        setIsLoading(true);
+        console.log('[Students Page] Fetching students for school:', schoolId);
+
+        // Add 15 second timeout for queries
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Students query timeout after 15s')), 15000)
+        );
+
+        const queryPromise = (async (): Promise<Student[]> => {
+          const { data, error } = await getSupabaseClient()
+            .from('students')
+            .select(`
               id,
-              full_name,
-              email,
+              user_id,
+              school_id,
+              admission_number,
+              date_of_birth,
               photo_url,
               status,
-              phone
-            ),
-            class_arm_combo:class_arm_combo_id (
-              id,
-              class:class_id (
-                name
+              class_arm_combo_id,
+              user:user_id (
+                id,
+                full_name,
+                email,
+                photo_url,
+                status,
+                phone
               ),
-              arm:arm_id (
-                name
+              class_arm_combo:class_arm_combo_id (
+                id,
+                class:class_id (
+                  name
+                ),
+                arm:arm_id (
+                  name
+                )
               )
-            )
-          `)
-          .eq('school_id', schoolId);
+            `)
+            .eq('school_id', schoolId);
 
-        if (error) throw error;
+          if (signal.aborted) throw new Error('Request was cancelled');
+          if (error) throw error;
+          
+          // Sort in application layer
+          const sortedData = (data || []).sort((a: any, b: any) => 
+            (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
+          );
+          
+          return sortedData;
+        })();
+
+        const studentData = await Promise.race([queryPromise, timeoutPromise]);
         
-        // Sort in application layer
-        const sortedData = (data || []).sort((a, b) => 
-          (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
-        );
-        
-        return sortedData;
-      })();
+        if (!signal.aborted) {
+          setStudents(studentData);
+          if (studentData.length === 0) {
+            console.info('[Students Page] No students found - database may be empty for this school');
+          }
+        }
+      } catch (error) {
+        if (signal.aborted) {
+          console.log('[Students Page] Request was cancelled');
+          return;
+        }
 
-      const studentData = await Promise.race([queryPromise, timeoutPromise]);
-      setStudents(studentData);
-
-      if (studentData.length === 0) {
-        toast.info('No students found for this school');
-      }
-    } catch (error) {
-      console.error('Error fetching students:', error);
-      let errorMsg = 'Failed to load students';
-      if (error instanceof Error) {
-        if (error.message.includes('timeout')) {
-          errorMsg = 'Students query timed out - database may be slow';
-        } else if (error.message.includes('gender')) {
-          errorMsg = 'Database schema error - missing columns. Contact administrator.';
-        } else {
-          errorMsg = error.message;
+        console.error('[Students Page] Error fetching students:', error);
+        let errorMsg = 'Failed to load students';
+        if (error instanceof Error) {
+          if (error.message.includes('timeout')) {
+            errorMsg = 'Student data is taking too long to load. Try again in a moment.';
+          } else if (error.message.includes('cancelled')) {
+            return;
+          } else if (error.message.includes('gender')) {
+            errorMsg = 'Database schema error - missing columns. Contact administrator.';
+          } else {
+            errorMsg = error.message;
+          }
+        }
+        toast.error(errorMsg);
+        setStudents([]);
+      } finally {
+        if (!signal.aborted) {
+          setIsLoading(false);
         }
       }
-      toast.error(errorMsg);
-      setStudents([]);
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    fetchStudents();
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [schoolId]);
 
   useEffect(() => {

@@ -107,6 +107,8 @@ const StaffPage: React.FC = () => {
     staffId?: string;
   }>({ isOpen: false });
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Get current user's school
   useEffect(() => {
     const getCurrentSchool = async () => {
@@ -124,104 +126,129 @@ const StaffPage: React.FC = () => {
           setSchoolId(userProfile.school_id);
         }
       } catch (error) {
-        console.error('Error getting school:', error);
+        console.error('[Staff Page] Error getting school:', error);
       }
     };
 
     getCurrentSchool();
   }, []);
 
-  // Fetch staff - COMPLETE FIX: Query both users and staff tables with proper timeout and error handling
-  const fetchStaff = useCallback(async () => {
+  // Fetch staff with abort controller to prevent race conditions
+  useEffect(() => {
     if (!schoolId) return;
 
-    try {
-      setIsLoading(true);
-      console.log('[Staff Page] Fetching staff for school:', schoolId);
+    // Cancel any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
 
-      // Add 15 second timeout for queries
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Staff query timeout')), 15000)
-      );
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
-      const queryPromise = (async () => {
-        // STEP 1: Get all STAFF users from users table
-        const { data: userStaffData, error: userError } = await getSupabaseClient()
-          .from('users')
-          .select('*')
-          .eq('school_id', schoolId)
-          .eq('role', 'STAFF');
+    const fetchStaff = async () => {
+      try {
+        setIsLoading(true);
+        console.log('[Staff Page] Fetching staff for school:', schoolId);
 
-        if (userError) throw userError;
-        console.log('[Staff Page] Found users with STAFF role:', userStaffData?.length);
-
-        // STEP 2: Get staff employment records (optional supplementary data)
-        const { data: staffRecords, error: staffError } = await getSupabaseClient()
-          .from('staff')
-          .select('*')
-          .eq('school_id', schoolId);
-
-        console.log('[Staff Page] Found staff records:', staffRecords?.length);
-
-        // STEP 3: Merge data - users table is source of truth, staff table augments
-        const mergedStaff = (userStaffData || []).map((user: any) => {
-          const staffRecord = staffRecords?.find((s: any) => s.user_id === user.id);
-          return {
-            id: staffRecord?.id || `staff_${user.id}`,
-            user_id: user.id,
-            school_id: user.school_id,
-            position: staffRecord?.position || 'Staff',
-            employment_date: staffRecord?.employment_date || null,
-            status: staffRecord?.status || 'ACTIVE',
-            user: {
-              id: user.id,
-              full_name: user.full_name || 'Unknown Staff',
-              email: user.email || 'no-email@school.local',
-              photo_url: user.photo_url,
-              role: user.role,
-              status: user.status,
-            },
-          };
-        });
-
-        // STEP 4: Sort in application layer
-        const sortedData = mergedStaff.sort((a, b) =>
-          (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
+        // Add 15 second timeout for queries
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Staff query timeout after 15s')), 15000)
         );
 
-        console.log('[Staff Page] Final merged staff count:', sortedData.length);
-        return sortedData;
-      })();
+        const queryPromise = (async (): Promise<StaffMember[]> => {
+          // STEP 1: Get all STAFF users from users table
+          const { data: userStaffData, error: userError } = await getSupabaseClient()
+            .from('users')
+            .select('*')
+            .eq('school_id', schoolId)
+            .eq('role', 'STAFF');
 
-      // Race between query and timeout
-      const staffData = await Promise.race([queryPromise, timeoutPromise]);
-      setStaff(staffData);
+          if (signal.aborted) throw new Error('Request was cancelled');
+          if (userError) throw userError;
+          console.log('[Staff Page] Found users with STAFF role:', userStaffData?.length);
 
-      if (staffData.length === 0) {
-        toast.info('No staff found for this school - check if staff users exist in database');
-      }
-    } catch (error) {
-      console.error('[Staff Page] Critical error:', error);
-      let errorMsg = 'Failed to load staff';
-      if (error instanceof Error) {
-        if (error.message.includes('timeout')) {
-          errorMsg = 'Staff query timed out - database may be slow or no data';
-        } else {
-          errorMsg = error.message;
+          // STEP 2: Get staff employment records (optional supplementary data)
+          const { data: staffRecords, error: staffError } = await getSupabaseClient()
+            .from('staff')
+            .select('*')
+            .eq('school_id', schoolId);
+
+          if (signal.aborted) throw new Error('Request was cancelled');
+          console.log('[Staff Page] Found staff records:', staffRecords?.length);
+
+          // STEP 3: Merge data - users table is source of truth, staff table augments
+          const mergedStaff = (userStaffData || []).map((user: any) => {
+            const staffRecord = staffRecords?.find((s: any) => s.user_id === user.id);
+            return {
+              id: staffRecord?.id || `staff_${user.id}`,
+              user_id: user.id,
+              school_id: user.school_id,
+              position: staffRecord?.position || 'Staff',
+              employment_date: staffRecord?.employment_date || null,
+              status: staffRecord?.status || 'ACTIVE',
+              user: {
+                id: user.id,
+                full_name: user.full_name || 'Unknown Staff',
+                email: user.email || 'no-email@school.local',
+                photo_url: user.photo_url,
+                role: user.role,
+                status: user.status,
+              },
+            };
+          });
+
+          // STEP 4: Sort in application layer
+          const sortedData = mergedStaff.sort((a, b) =>
+            (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
+          );
+
+          console.log('[Staff Page] Final merged staff count:', sortedData.length);
+          return sortedData;
+        })();
+
+        // Race between query and timeout
+        const staffData = await Promise.race([queryPromise, timeoutPromise]);
+        
+        if (!signal.aborted) {
+          setStaff(staffData);
+          if (staffData.length === 0) {
+            console.info('[Staff Page] No staff found - database may be empty for this school');
+          }
+        }
+      } catch (error) {
+        if (signal.aborted) {
+          console.log('[Staff Page] Request was cancelled');
+          return;
+        }
+
+        console.error('[Staff Page] Critical error:', error);
+        let errorMsg = 'Failed to load staff';
+        if (error instanceof Error) {
+          if (error.message.includes('timeout')) {
+            errorMsg = 'Staff data is taking too long to load. Try again in a moment.';
+          } else if (error.message.includes('cancelled')) {
+            return;
+          } else {
+            errorMsg = error.message;
+          }
+        }
+        toast.error(errorMsg);
+        setStaff([]);
+      } finally {
+        if (!signal.aborted) {
+          setIsLoading(false);
         }
       }
-      toast.error(errorMsg);
-      setStaff([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [schoolId]);
+    };
 
-  useEffect(() => {
-    if (schoolId) {
-      fetchStaff();
-    }
-  }, [schoolId, fetchStaff]);
+    fetchStaff();
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [schoolId]);
 
   // Filter staff
   const filteredStaff = staff.filter(member => {

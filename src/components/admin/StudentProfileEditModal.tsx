@@ -92,13 +92,32 @@ export default function StudentProfileEditModal({
       setStudent(studentRecord)
 
       // Fetch user profile with all fields - status is in users table
+      // Handle gracefully if columns don't exist (migration 147 adds them)
       const { data: userProfile, error: userError } = await supabase
         .from('users')
-        .select('id, full_name, email, phone, gender, address, state, lga, status')
+        .select('id, full_name, email, phone, status')
         .eq('id', studentRecord.user_id)
         .single()
 
       if (userError) throw userError
+
+      // Try to fetch optional columns (gender, address, state, lga)
+      // These might not exist until migration 147 is run
+      let optionalFields: any = {}
+      try {
+        const { data: optionalData } = await supabase
+          .from('users')
+          .select('gender, address, state, lga')
+          .eq('id', studentRecord.user_id)
+          .single()
+        
+        if (optionalData) {
+          optionalFields = optionalData
+        }
+      } catch (e) {
+        // Columns don't exist yet, use defaults
+        console.warn('[StudentProfileEditModal] Optional profile columns not yet available:', e)
+      }
 
       // Parse name
       const nameParts = (userProfile.full_name || '').split(' ')
@@ -108,10 +127,10 @@ export default function StudentProfileEditModal({
 
       setEmail(userProfile.email || '')
       setPhone(userProfile.phone || '')
-      setGender(userProfile.gender || '')
-      setAddress(userProfile.address || '')
-      setState(userProfile.state || '')
-      setLga(userProfile.lga || '')
+      setGender(optionalFields.gender || '')
+      setAddress(optionalFields.address || '')
+      setState(optionalFields.state || '')
+      setLga(optionalFields.lga || '')
       setAdmissionNumber(studentRecord.admission_number || '')
       setDateOfBirth(studentRecord.date_of_birth || '')
       setStudentStatus(userProfile.status || 'ACTIVE')

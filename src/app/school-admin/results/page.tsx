@@ -241,37 +241,53 @@ export default function SchoolAdminResultsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="bg-white rounded-lg shadow-lg p-4">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Session:</label>
-            <select
-              value={selectedSession || ''}
-              onChange={(e) => setSelectedSession(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
-            >
-              <option value="">-- Select Session --</option>
-              {sessions.map((session) => (
-                <option key={session.id} value={session.id}>
-                  {session.session_year} {session.is_active ? '(Active)' : ''}
-                </option>
-              ))}
-            </select>
+            {sessions.length === 0 ? (
+              <div className="w-full px-4 py-2 border-2 border-yellow-300 bg-yellow-50 rounded-lg text-yellow-700 text-sm">
+                ⚠️ No academic sessions found. Admin needs to create sessions.
+              </div>
+            ) : (
+              <select
+                value={selectedSession || ''}
+                onChange={(e) => setSelectedSession(e.target.value)}
+                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+              >
+                <option value="">-- Select Session --</option>
+                {sessions.map((session) => (
+                  <option key={session.id} value={session.id}>
+                    {session.session_year} {session.is_active ? '(Active)' : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="bg-white rounded-lg shadow-lg p-4">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Term:</label>
-            <select
-              value={selectedTerm || ''}
-              onChange={(e) => setSelectedTerm(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
-              disabled={!selectedSession}
-            >
-              <option value="">-- Select Term --</option>
-              {terms
-                .filter((t) => t.session_id === selectedSession)
-                .map((term) => (
-                  <option key={term.id} value={term.id}>
-                    {term.term_name}
-                  </option>
-                ))}
-            </select>
+            {!selectedSession ? (
+              <div className="w-full px-4 py-2 border-2 border-gray-300 bg-gray-50 rounded-lg text-gray-600 text-sm">
+                👆 Select a session first
+              </div>
+            ) : terms.filter((t) => t.session_id === selectedSession).length === 0 ? (
+              <div className="w-full px-4 py-2 border-2 border-yellow-300 bg-yellow-50 rounded-lg text-yellow-700 text-sm">
+                ⚠️ No terms in this session. Admin needs to add terms.
+              </div>
+            ) : (
+              <select
+                value={selectedTerm || ''}
+                onChange={(e) => setSelectedTerm(e.target.value)}
+                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                disabled={!selectedSession}
+              >
+                <option value="">-- Select Term --</option>
+                {terms
+                  .filter((t) => t.session_id === selectedSession)
+                  .map((term) => (
+                    <option key={term.id} value={term.id}>
+                      {term.term_name}
+                    </option>
+                  ))}
+              </select>
+            )}
           </div>
         </div>
 
