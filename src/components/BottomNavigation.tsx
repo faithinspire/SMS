@@ -60,6 +60,8 @@ export default function BottomNavigation() {
 
   // Navigation items based on user role
   const getNavItems = useCallback(() => {
+    if (!user) return []
+    
     switch (user.role) {
       case 'STUDENT':
         return [
@@ -101,7 +103,7 @@ export default function BottomNavigation() {
       default:
         return []
     }
-  }, [user.role])
+  }, [user])
 
   const navItems = getNavItems()
   
