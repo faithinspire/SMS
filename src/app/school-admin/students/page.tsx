@@ -282,7 +282,7 @@ const StudentsPage: React.FC = () => {
         abortControllerRef.current.abort();
       }
     };
-  }, [schoolId, fetchStudents]);
+  }, [schoolId]);
 
   // Filter students
   const filteredStudents = students.filter(student => {

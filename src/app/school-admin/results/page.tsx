@@ -84,6 +84,11 @@ export default function SchoolAdminResultsPage() {
       setSelectedClassData(null)
     } catch (error) {
       console.error('[SchoolAdmin] Error loading classes:', error)
+      let errorMsg = 'Failed to load classes'
+      if (error instanceof Error) {
+        errorMsg = error.message
+      }
+      // Don't swallow the error - show it to user
       setClasses([])
       setSelectedClass(null)
       setSelectedClassData(null)

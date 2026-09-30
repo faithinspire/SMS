@@ -1,0 +1,1 @@
+a094a5072875fc58f7f0702c9b8ee5b06a466051 CRITICAL FIX: Remove problematic useCallback pattern from results page - fixes React #310 error (too many re-renders)

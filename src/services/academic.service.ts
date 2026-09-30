@@ -117,12 +117,39 @@ export class AcademicService {
 
     if (error) throw new Error(`Failed to fetch students in class: ${error.message}`)
     
-    // Filter for active students (status is in users table)
-    return (data || []).filter(s => s.user?.status === 'ACTIVE' || !s.user?.status)
+    // Return all enrolled students - no user status filtering
+    return data || []
   }
 
   /**
-   * Get scores for students in a specific term
+   * Get scores for students in a specific term and class
+   */
+  static async getScoresForTermAndClass(termId: string, classArmComboId: string) {
+    const { data, error } = await supabase
+      .from('score_sheets')
+      .select(`
+        id,
+        student_id,
+        overall_score,
+        performance_rating,
+        term_id
+      `)
+      .eq('term_id', termId)
+      .eq('class_arm_combo_id', classArmComboId)
+
+    if (error) throw new Error(`Failed to fetch scores: ${error.message}`)
+    
+    // Create a map for quick lookup
+    const scoresMap = new Map()
+    ;(data || []).forEach(score => {
+      scoresMap.set(score.student_id, score)
+    })
+    
+    return scoresMap
+  }
+
+  /**
+   * Get scores for students in a specific term (all classes)
    */
   static async getScoresForTerm(termId: string) {
     const { data, error } = await supabase
@@ -243,8 +270,8 @@ export class AcademicService {
       // Get students in class
       const students = await this.getStudentsInClass(schoolId, classArmComboId)
 
-      // Get scores for term
-      const scoresMap = await this.getScoresForTerm(termId)
+      // Get scores for this specific class in the term
+      const scoresMap = await this.getScoresForTermAndClass(termId, classArmComboId)
 
       // Combine data
       const studentsWithScores = students.map(student => ({
