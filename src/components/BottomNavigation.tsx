@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AuthService } from '@/services/auth.service'
 import { User } from '@/types'
 
@@ -15,40 +15,39 @@ export default function BottomNavigation() {
   const userCacheRef = useRef<{ user: User | null; timestamp: number } | null>(null)
   const CACHE_DURATION = 60000 // 60 seconds - cache user data
 
-  // Get user with caching
-  const getUserWithCache = useCallback(async () => {
-    const now = Date.now()
-    
-    // Use cached user if still valid
-    if (userCacheRef.current && (now - userCacheRef.current.timestamp) < CACHE_DURATION) {
-      setUser(userCacheRef.current.user)
-      setLoading(false)
-      return
-    }
-
-    try {
-      setLoading(true)
-      const currentUser = await AuthService.getCurrentUser()
-      
-      // Update cache
-      userCacheRef.current = {
-        user: currentUser,
-        timestamp: now,
-      }
-      
-      setUser(currentUser)
-    } catch (err) {
-      console.error('[BottomNav] Error loading user:', err)
-      setUser(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
   // Load user only once on mount
   useEffect(() => {
-    getUserWithCache()
-  }, [getUserWithCache])
+    const loadUser = async () => {
+      const now = Date.now()
+      
+      // Use cached user if still valid
+      if (userCacheRef.current && (now - userCacheRef.current.timestamp) < CACHE_DURATION) {
+        setUser(userCacheRef.current.user)
+        setLoading(false)
+        return
+      }
+
+      try {
+        setLoading(true)
+        const currentUser = await AuthService.getCurrentUser()
+        
+        // Update cache
+        userCacheRef.current = {
+          user: currentUser,
+          timestamp: now,
+        }
+        
+        setUser(currentUser)
+      } catch (err) {
+        console.error('[BottomNav] Error loading user:', err)
+        setUser(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadUser()
+  }, [])
 
   // Don't show nav while loading or if no user
   if (loading || !user) return null
@@ -59,7 +58,7 @@ export default function BottomNavigation() {
   }
 
   // Navigation items based on user role
-  const getNavItems = useCallback(() => {
+  const getNavItems = () => {
     if (!user) return []
     
     switch (user.role) {
@@ -103,14 +102,14 @@ export default function BottomNavigation() {
       default:
         return []
     }
-  }, [user])
+  }
 
   const navItems = getNavItems()
   
-  // Memoize active path check
-  const isActive = useCallback((path: string) => {
+  // Check if path is active
+  const isActive = (path: string) => {
     return pathname === path || pathname?.startsWith(path)
-  }, [pathname])
+  }
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-300 shadow-xl z-50">
