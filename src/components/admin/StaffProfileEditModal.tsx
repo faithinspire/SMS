@@ -105,14 +105,35 @@ export default function StaffProfileEditModal({
       if (staffError) throw staffError
       setStaff(staffRecord)
 
-      // Fetch user profile
-      const { data: userProfile, error: userError } = await supabase
-        .from('users')
-        .select('id, full_name, email, phone, gender')
-        .eq('id', staffRecord.user_id)
-        .single()
+      // Fetch user profile - with graceful fallback for missing columns
+      let userProfile
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, full_name, email, phone, gender, address, state, lga')
+          .eq('id', staffRecord.user_id)
+          .single()
 
-      if (userError) throw userError
+        if (error) throw error
+        userProfile = data
+      } catch (err: any) {
+        // Fallback: column may not exist yet, fetch without optional fields
+        console.warn('[StaffModal] Optional columns not yet available, using fallback query:', err.message)
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, full_name, email, phone')
+          .eq('id', staffRecord.user_id)
+          .single()
+
+        if (error) throw error
+        userProfile = {
+          ...data,
+          gender: null,
+          address: null,
+          state: null,
+          lga: null,
+        }
+      }
 
       // Parse name
       const nameParts = userProfile.full_name.split(' ')
