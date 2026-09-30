@@ -223,7 +223,6 @@ const StudentsPage: React.FC = () => {
       // CRITICAL: Always set loading to false, regardless of abort status
       setIsLoading(false);
     }
-    }
   }, [schoolId]);
 
   // Get current user's school
