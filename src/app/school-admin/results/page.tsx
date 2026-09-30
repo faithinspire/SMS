@@ -1,11 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { AcademicService } from '@/services/academic.service'
-import { supabase } from '@/lib/supabase-client'
+import { createClient } from '@/lib/supabase-client'
 import StaffHeader from '@/components/StaffHeader'
+import { toast } from 'react-hot-toast'
+
+let supabase: any = null
+
+function getSupabaseClient() {
+  if (!supabase) {
+    supabase = createClient()
+  }
+  return supabase
+}
 
 interface ClassWithStudents {
   id: string
@@ -33,7 +43,7 @@ interface Term {
   id: string
   session_id: string
   term_name: string
-  term_number: number
+  term_order: number
   is_active: boolean
 }
 
@@ -52,82 +62,161 @@ export default function SchoolAdminResultsPage() {
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null)
   const [loadingClasses, setLoadingClasses] = useState(false)
   const [schoolId, setSchoolId] = useState<string | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Load classes function - ONLY when both session and term are selected
-  const loadClassesForTerm = async (schoolIdParam: string, termId: string) => {
+  // Load classes function - REAL-TIME with proper class fetching
+  const loadClassesForTerm = useCallback(async (schoolIdParam: string, termId: string) => {
     if (!schoolIdParam || !termId) {
-      console.log('[SchoolAdmin] Skipping class load - missing schoolId or termId');
-      setClasses([]);
-      return;
+      console.log('[Results] Skipping class load - missing schoolId or termId')
+      setClasses([])
+      return
     }
 
+    // Cancel any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
+
     try {
-      setLoadingClasses(true);
-      console.log('[SchoolAdmin] Loading classes for term:', termId, 'school:', schoolIdParam);
+      setLoadingClasses(true)
+      console.log('[Results] Loading classes for term:', termId, 'school:', schoolIdParam)
 
-      // Fetch class/arm combos for the school
-      const classArms = await AcademicService.getClassArmCombos(schoolIdParam);
-      console.log('[SchoolAdmin] Fetched class combos:', classArms.length);
+      // STEP 1: Fetch all class/arm combos for the school with real data
+      const { data: classArmsData, error: classArmsError } = await getSupabaseClient()
+        .from('class_arm_combos')
+        .select(`
+          id,
+          school_id,
+          class:class_id (id, name),
+          arm:arm_id (id, name)
+        `)
+        .eq('school_id', schoolIdParam)
+        .order('created_at', { ascending: true })
 
-      if (!classArms || classArms.length === 0) {
-        console.warn('[SchoolAdmin] No class/arm combos found for school');
-        setClasses([]);
-        return;
+      if (signal.aborted) throw new Error('Request was cancelled')
+      if (classArmsError) {
+        console.error('[Results] Class/arms query error:', classArmsError)
+        throw classArmsError
       }
 
-      const classesWithStudents: ClassWithStudents[] = [];
+      console.log('[Results] Fetched class combos:', classArmsData?.length || 0)
 
-      // For each class, fetch students and their scores
-      for (const classArm of classArms) {
+      if (!classArmsData || classArmsData.length === 0) {
+        console.warn('[Results] No class/arm combos found for school')
+        setClasses([])
+        setSelectedClass(null)
+        setSelectedClassData(null)
+        return
+      }
+
+      // STEP 2: For each class, fetch students with their scores in parallel
+      const classesWithStudents: ClassWithStudents[] = []
+
+      const studentPromises = (classArmsData || []).map(async (classArm: any) => {
         try {
-          const studentsWithScores = await AcademicService.getStudentsWithScores(
-            schoolIdParam,
-            classArm.id,
-            termId
-          );
+          if (signal.aborted) throw new Error('Request was cancelled')
 
-          classesWithStudents.push({
+          // Fetch students in this class with their scores for this term
+          const { data: scoresData, error: scoresError } = await getSupabaseClient()
+            .from('score_sheets')
+            .select(`
+              student:student_id (
+                id,
+                user:user_id (full_name),
+                admission_number
+              ),
+              total_score
+            `)
+            .eq('class_arm_combo_id', classArm.id)
+            .eq('academic_term_id', termId)
+            .not('student', 'is', null)
+
+          if (scoresError) {
+            console.error(`[Results] Error loading scores for class ${classArm.id}:`, scoresError)
+            return null
+          }
+
+          if (signal.aborted) throw new Error('Request was cancelled')
+
+          // Transform score data into StudentResult format
+          const students: StudentResult[] = (scoresData || [])
+            .filter((score: any) => score.student)
+            .map((score: any) => {
+              const totalScore = score.total_score || 0
+              let rating = 'Poor'
+              if (totalScore >= 80) rating = 'Excellent'
+              else if (totalScore >= 70) rating = 'Very Good'
+              else if (totalScore >= 60) rating = 'Good'
+              else if (totalScore >= 50) rating = 'Fair'
+              else if (totalScore >= 40) rating = 'Poor'
+              else rating = 'Very Poor'
+
+              return {
+                id: score.student.id,
+                full_name: score.student.user?.full_name || 'Unknown',
+                admission_number: score.student.admission_number || 'N/A',
+                overall_score: totalScore,
+                performance_rating: rating,
+              }
+            })
+            .sort((a: any, b: any) => b.overall_score - a.overall_score)
+
+          return {
             id: classArm.id,
             class_name: classArm.class?.name || 'Unknown',
             arm_name: classArm.arm?.name || 'N/A',
-            student_count: studentsWithScores.length,
-            students: studentsWithScores,
-          });
-        } catch (classError) {
-          console.error(`[SchoolAdmin] Error loading students for class ${classArm.id}:`, classError);
-          // Continue with next class even if one fails
+            student_count: students.length,
+            students,
+          }
+        } catch (error) {
+          console.error(`[Results] Error processing class ${classArm.id}:`, error)
+          return null
         }
-      }
+      })
 
-      console.log('[SchoolAdmin] Classes loaded with students:', classesWithStudents.length);
-      setClasses(classesWithStudents);
+      const results = await Promise.all(studentPromises)
+      const validResults = results.filter((r): r is ClassWithStudents => r !== null)
+
+      if (signal.aborted) throw new Error('Request was cancelled')
+
+      console.log('[Results] Classes loaded with students:', validResults.length)
+      setClasses(validResults)
       
       // Auto-select first class if available
-      if (classesWithStudents.length > 0 && !selectedClass) {
-        console.log('[SchoolAdmin] Auto-selecting first class');
-        setSelectedClass(classesWithStudents[0].id);
-        setSelectedClassData(classesWithStudents[0]);
+      if (validResults.length > 0 && !selectedClass) {
+        console.log('[Results] Auto-selecting first class')
+        setSelectedClass(validResults[0].id)
+        setSelectedClassData(validResults[0])
       }
     } catch (error) {
-      console.error('[SchoolAdmin] Error loading classes:', error);
-      let errorMsg = 'Failed to load classes';
-      if (error instanceof Error) {
-        errorMsg = error.message;
+      if ((error as Error).message === 'Request was cancelled') {
+        console.log('[Results] Request was cancelled')
+        return
       }
-      setClasses([]);
-      setSelectedClass(null);
-      setSelectedClassData(null);
+      
+      console.error('[Results] Error loading classes:', error)
+      let errorMsg = 'Failed to load class results'
+      if (error instanceof Error) {
+        errorMsg = error.message
+      }
+      toast.error(errorMsg)
+      setClasses([])
+      setSelectedClass(null)
+      setSelectedClassData(null)
     } finally {
-      setLoadingClasses(false);
+      setLoadingClasses(false)
     }
-  };
+  }, [selectedClass])
 
   // Load on mount
   useEffect(() => {
     const initData = async () => {
       try {
         setLoading(true)
-        console.log('[SchoolAdmin] Loading initial data...')
+        console.log('[Results] Loading initial data...')
 
         const currentUser = await AuthService.getCurrentUser()
 
@@ -139,58 +228,59 @@ export default function SchoolAdminResultsPage() {
         setUser(currentUser)
 
         if (!currentUser.school_id) {
-          console.error('[SchoolAdmin] No school ID found')
+          console.error('[Results] No school ID found')
           return
         }
 
         setSchoolId(currentUser.school_id)
 
-        const { data: schoolData } = await supabase
+        const { data: schoolData } = await getSupabaseClient()
           .from('schools')
           .select('id, name, logo_url')
           .eq('id', currentUser.school_id)
           .single()
 
         setSchool(schoolData)
-        console.log('[SchoolAdmin] School loaded:', schoolData?.name)
+        console.log('[Results] School loaded:', schoolData?.name)
 
-        const { data: sessionsData, error: sessionsError } = await supabase
-          .from('academic_sessions')
-          .select('id, session_year, is_active, created_at')
-          .eq('school_id', currentUser.school_id)
-          .order('session_year', { ascending: false })
+        // Load sessions and terms in parallel with abort support
+        const abortCtrl = new AbortController()
 
-        if (sessionsError) {
-          console.warn('[SchoolAdmin] Sessions error:', sessionsError.message)
-        }
+        const [sessionsResult, termsResult] = await Promise.all([
+          getSupabaseClient()
+            .from('academic_sessions')
+            .select('id, session_year, is_active, created_at')
+            .eq('school_id', currentUser.school_id)
+            .order('session_year', { ascending: false }),
+          getSupabaseClient()
+            .from('academic_terms')
+            .select('id, session_id, term_name, term_order, is_active, school_id')
+            .eq('school_id', currentUser.school_id)
+            .order('term_order', { ascending: true }),
+        ])
 
-        const { data: termsData, error: termsError } = await supabase
-          .from('academic_terms')
-          .select('id, session_id, term_name, term_order, is_active, school_id')
-          .eq('school_id', currentUser.school_id)
-          .order('term_order', { ascending: true })
+        const sessionsData = sessionsResult.data || []
+        const termsData = termsResult.data || []
 
-        if (termsError) {
-          console.warn('[SchoolAdmin] Terms error:', termsError.message)
-        }
-
-        console.log('[SchoolAdmin] Data loaded:', {
-          sessions: sessionsData?.length || 0,
-          terms: termsData?.length || 0,
+        console.log('[Results] Data loaded:', {
+          sessions: sessionsData.length,
+          terms: termsData.length,
         })
 
-        setSessions(sessionsData || [])
-        setTerms(termsData || [])
+        setSessions(sessionsData)
+        setTerms(termsData)
 
         if (sessionsData && sessionsData.length > 0) {
           const firstSession = sessionsData[0]
-          console.log('[SchoolAdmin] Auto-selecting session:', firstSession.session_year)
+          console.log('[Results] Auto-selecting session:', firstSession.session_year)
           setSelectedSession(firstSession.id)
         } else {
-          console.warn('[SchoolAdmin] No academic sessions found in database')
+          console.warn('[Results] No academic sessions found in database')
+          toast.error('No academic sessions found. Please create sessions in Academic Management.')
         }
       } catch (error) {
-        console.error('[SchoolAdmin] Load error:', error)
+        console.error('[Results] Load error:', error)
+        toast.error('Failed to load results page')
       } finally {
         setLoading(false)
       }
@@ -209,27 +299,26 @@ export default function SchoolAdminResultsPage() {
     }
   }, [selectedSession, terms])
 
-  // When term changes, load classes
+  // When term changes, load classes with REAL-TIME data
   useEffect(() => {
     if (selectedTerm && schoolId) {
-      console.log('[SchoolAdmin] Loading classes - term selected:', selectedTerm);
-      loadClassesForTerm(schoolId, selectedTerm);
+      console.log('[Results] Loading classes - term selected:', selectedTerm)
+      loadClassesForTerm(schoolId, selectedTerm)
     } else {
-      console.log('[SchoolAdmin] Not loading classes - term or schoolId missing');
-      setClasses([]);
+      console.log('[Results] Not loading classes - term or schoolId missing')
+      setClasses([])
     }
-  }, [selectedTerm, schoolId]);
+  }, [selectedTerm, schoolId, loadClassesForTerm])
 
-  // Auto-select first class when classes load
+  // When class data loads, update selected class data
   useEffect(() => {
-    if (classes.length > 0 && !selectedClass) {
-      console.log('[SchoolAdmin] Auto-selecting first class:', classes[0].class_name);
-      setSelectedClass(classes[0].id);
-      setSelectedClassData(classes[0]);
+    if (selectedClass && classes.length > 0) {
+      const classData = classes.find(c => c.id === selectedClass)
+      if (classData) {
+        setSelectedClassData(classData)
+      }
     }
-  }, [classes]);
-
-
+  }, [selectedClass, classes])
 
   const getPerformanceColor = (rating: string) => {
     switch (rating) {
@@ -270,7 +359,7 @@ export default function SchoolAdminResultsPage() {
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-8">📊 Student Results & Performance</h1>
+        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-8">📊 Student Results & Performance</h1>
 
         {/* Session and Term Filters */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -298,6 +387,133 @@ export default function SchoolAdminResultsPage() {
 
           <div className="bg-white rounded-lg shadow-lg p-4">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Term:</label>
+            {selectedSession && terms.filter(t => t.session_id === selectedSession).length === 0 ? (
+              <div className="w-full px-4 py-2 border-2 border-yellow-300 bg-yellow-50 rounded-lg text-yellow-700 text-sm">
+                ⚠️ No terms found for this session.
+              </div>
+            ) : (
+              <select
+                value={selectedTerm || ''}
+                onChange={(e) => setSelectedTerm(e.target.value)}
+                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                disabled={!selectedSession}
+              >
+                <option value="">-- Select Term --</option>
+                {selectedSession && terms
+                  .filter(t => t.session_id === selectedSession)
+                  .map((term) => (
+                    <option key={term.id} value={term.id}>
+                      {term.term_name}
+                    </option>
+                  ))}
+              </select>
+            )}
+          </div>
+        </div>
+
+        {/* Main Content Area */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Left Sidebar - Classes List */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-lg p-4">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">📚 Classes</h2>
+              {loadingClasses ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent mx-auto mb-2"></div>
+                  <p className="text-sm text-gray-600">Loading...</p>
+                </div>
+              ) : classes.length === 0 ? (
+                <div className="text-center py-8 text-gray-600">
+                  <p className="text-sm">No classes found</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {classes.map((cls) => (
+                    <button
+                      key={cls.id}
+                      onClick={() => {
+                        setSelectedClass(cls.id)
+                        setSelectedClassData(cls)
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                        selectedClass === cls.id
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                      }`}
+                    >
+                      <div className="font-semibold text-sm">{cls.class_name}</div>
+                      <div className="text-xs opacity-75">{cls.arm_name}</div>
+                      <div className="text-xs opacity-75">{cls.student_count} students</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Content - Class Results */}
+          <div className="lg:col-span-3">
+            {selectedClassData ? (
+              <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                <div className="p-6 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {selectedClassData.class_name} ({selectedClassData.arm_name})
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-2">
+                    {selectedClassData.students.length} students with results
+                  </p>
+                </div>
+
+                {selectedClassData.students.length === 0 ? (
+                  <div className="p-8 text-center text-gray-600">
+                    <p>No results yet for this class in the selected term</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="px-6 py-3 text-left font-semibold text-gray-900">#</th>
+                          <th className="px-6 py-3 text-left font-semibold text-gray-900">Student Name</th>
+                          <th className="px-6 py-3 text-left font-semibold text-gray-900">Admission #</th>
+                          <th className="px-6 py-3 text-center font-semibold text-gray-900">Score</th>
+                          <th className="px-6 py-3 text-left font-semibold text-gray-900">Performance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {selectedClassData.students.map((student, idx) => (
+                          <tr key={student.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4 font-bold text-gray-900">{idx + 1}</td>
+                            <td className="px-6 py-4 text-gray-900 font-semibold">{student.full_name}</td>
+                            <td className="px-6 py-4 text-gray-600">{student.admission_number}</td>
+                            <td className="px-6 py-4 text-center">
+                              <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full font-bold">
+                                {student.overall_score.toFixed(1)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPerformanceColor(student.performance_rating)}`}>
+                                {student.performance_rating}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+                <p className="text-gray-600">Select a class to view results</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
             {!selectedSession ? (
               <div className="w-full px-4 py-2 border-2 border-gray-300 bg-gray-50 rounded-lg text-gray-600 text-sm">
                 👆 Select a session first
