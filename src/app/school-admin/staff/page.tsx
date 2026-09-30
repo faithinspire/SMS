@@ -139,67 +139,86 @@ const StaffPage: React.FC = () => {
       setIsLoading(true);
       console.log('[Staff Page] Fetching staff for school:', schoolId);
 
-      // STEP 1: Get all STAFF users from users table
-      const { data: userStaffData, error: userError } = await getSupabaseClient()
-        .from('users')
-        .select('*')
-        .eq('school_id', schoolId)
-        .eq('role', 'STAFF');
+  // Fetch staff - COMPLETE FIX: Query both users and staff tables with proper timeout and error handling
+  const fetchStaff = useCallback(async () => {
+    if (!schoolId) return;
 
-      if (userError) {
-        console.error('[Staff] Users query error:', userError);
-        throw userError;
-      }
+    try {
+      setIsLoading(true);
+      console.log('[Staff Page] Fetching staff for school:', schoolId);
 
-      console.log('[Staff Page] Found users with STAFF role:', userStaffData?.length);
-
-      // STEP 2: Get staff employment records (optional supplementary data)
-      const { data: staffRecords, error: staffError } = await getSupabaseClient()
-        .from('staff')
-        .select('*')
-        .eq('school_id', schoolId);
-
-      if (staffError) {
-        console.warn('[Staff] Staff records query (optional) failed:', staffError);
-      }
-
-      console.log('[Staff Page] Found staff records:', staffRecords?.length);
-
-      // STEP 3: Merge data - users table is source of truth, staff table augments
-      const mergedStaff = (userStaffData || []).map((user: any) => {
-        const staffRecord = staffRecords?.find((s: any) => s.user_id === user.id);
-        return {
-          id: staffRecord?.id || `staff_${user.id}`,
-          user_id: user.id,
-          school_id: user.school_id,
-          position: staffRecord?.position || 'Staff',
-          employment_date: staffRecord?.employment_date || null,
-          status: staffRecord?.status || 'ACTIVE',
-          user: {
-            id: user.id,
-            full_name: user.full_name || 'Unknown Staff',
-            email: user.email || 'no-email@school.local',
-            photo_url: user.photo_url,
-            role: user.role,
-            status: user.status,
-          },
-        };
-      });
-
-      // STEP 4: Sort in application layer
-      const sortedData = mergedStaff.sort((a, b) =>
-        (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
+      // Add 15 second timeout for queries
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Staff query timeout')), 15000)
       );
 
-      console.log('[Staff Page] Final merged staff count:', sortedData.length);
-      setStaff(sortedData);
+      const queryPromise = (async () => {
+        // STEP 1: Get all STAFF users from users table
+        const { data: userStaffData, error: userError } = await getSupabaseClient()
+          .from('users')
+          .select('*')
+          .eq('school_id', schoolId)
+          .eq('role', 'STAFF');
 
-      if (sortedData.length === 0) {
-        toast.info('No staff found for this school');
+        if (userError) throw userError;
+        console.log('[Staff Page] Found users with STAFF role:', userStaffData?.length);
+
+        // STEP 2: Get staff employment records (optional supplementary data)
+        const { data: staffRecords, error: staffError } = await getSupabaseClient()
+          .from('staff')
+          .select('*')
+          .eq('school_id', schoolId);
+
+        console.log('[Staff Page] Found staff records:', staffRecords?.length);
+
+        // STEP 3: Merge data - users table is source of truth, staff table augments
+        const mergedStaff = (userStaffData || []).map((user: any) => {
+          const staffRecord = staffRecords?.find((s: any) => s.user_id === user.id);
+          return {
+            id: staffRecord?.id || `staff_${user.id}`,
+            user_id: user.id,
+            school_id: user.school_id,
+            position: staffRecord?.position || 'Staff',
+            employment_date: staffRecord?.employment_date || null,
+            status: staffRecord?.status || 'ACTIVE',
+            user: {
+              id: user.id,
+              full_name: user.full_name || 'Unknown Staff',
+              email: user.email || 'no-email@school.local',
+              photo_url: user.photo_url,
+              role: user.role,
+              status: user.status,
+            },
+          };
+        });
+
+        // STEP 4: Sort in application layer
+        const sortedData = mergedStaff.sort((a, b) =>
+          (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
+        );
+
+        console.log('[Staff Page] Final merged staff count:', sortedData.length);
+        return sortedData;
+      })();
+
+      // Race between query and timeout
+      const staffData = await Promise.race([queryPromise, timeoutPromise]);
+      setStaff(staffData);
+
+      if (staffData.length === 0) {
+        toast.info('No staff found for this school - check if staff users exist in database');
       }
     } catch (error) {
       console.error('[Staff Page] Critical error:', error);
-      toast.error('Failed to load staff: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      let errorMsg = 'Failed to load staff';
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          errorMsg = 'Staff query timed out - database may be slow or no data';
+        } else {
+          errorMsg = error.message;
+        }
+      }
+      toast.error(errorMsg);
       setStaff([]);
     } finally {
       setIsLoading(false);

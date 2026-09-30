@@ -112,25 +112,42 @@ export default function SchoolAdminResultsPage() {
       setSchool(schoolData)
       console.log('[SchoolAdmin] School loaded:', schoolData?.name)
 
-      // Load sessions and terms using centralized service
+      // Load sessions and terms using centralized service with timeout
       console.log('[SchoolAdmin] Loading sessions and terms from AcademicService...')
       
-      const sessionsData = await AcademicService.getSessions(currentUser.school_id)
-      const termsData = await AcademicService.getTerms(currentUser.school_id)
+      try {
+        const sessionTimeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Sessions query timeout')), 10000)
+        );
+        const sessionsPromise = AcademicService.getSessions(currentUser.school_id);
+        const sessionsData = await Promise.race([sessionsPromise, sessionTimeout]);
 
-      console.log('[SchoolAdmin] Sessions and terms loaded:', {
-        sessions: sessionsData?.length || 0,
-        terms: termsData?.length || 0,
-      })
+        const termsTimeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Terms query timeout')), 10000)
+        );
+        const termsPromise = AcademicService.getTerms(currentUser.school_id);
+        const termsData = await Promise.race([termsPromise, termsTimeout]);
 
-      setSessions(sessionsData || [])
-      setTerms(termsData || [])
+        console.log('[SchoolAdmin] Sessions and terms loaded:', {
+          sessions: sessionsData?.length || 0,
+          terms: termsData?.length || 0,
+        })
 
-      // Auto-select first session
-      if (sessionsData && sessionsData.length > 0) {
-        const firstSession = sessionsData[0]
-        console.log('[SchoolAdmin] Auto-selecting session:', firstSession.session_year)
-        setSelectedSession(firstSession.id)
+        setSessions(sessionsData || [])
+        setTerms(termsData || [])
+
+        // Auto-select first session
+        if (sessionsData && sessionsData.length > 0) {
+          const firstSession = sessionsData[0]
+          console.log('[SchoolAdmin] Auto-selecting session:', firstSession.session_year)
+          setSelectedSession(firstSession.id)
+        } else {
+          console.warn('[SchoolAdmin] No academic sessions found in database');
+        }
+      } catch (error) {
+        console.error('[SchoolAdmin] Failed to load academic data:', error);
+        setSessions([]);
+        setTerms([]);
       }
     } catch (error) {
       console.error('[SchoolAdmin] Load error:', error)

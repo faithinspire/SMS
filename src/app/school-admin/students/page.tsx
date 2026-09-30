@@ -175,48 +175,74 @@ const StudentsPage: React.FC = () => {
 
     try {
       setIsLoading(true);
-      const { data, error } = await getSupabaseClient()
-        .from('students')
-        .select(`
-          id,
-          user_id,
-          school_id,
-          admission_number,
-          date_of_birth,
-          photo_url,
-          status,
-          class_arm_combo_id,
-          user:user_id (
+
+      // Add 15 second timeout for queries
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Students query timeout')), 15000)
+      );
+
+      const queryPromise = (async () => {
+        const { data, error } = await getSupabaseClient()
+          .from('students')
+          .select(`
             id,
-            full_name,
-            email,
+            user_id,
+            school_id,
+            admission_number,
+            date_of_birth,
             photo_url,
             status,
-            phone
-          ),
-          class_arm_combo:class_arm_combo_id (
-            id,
-            class:class_id (
-              name
+            class_arm_combo_id,
+            user:user_id (
+              id,
+              full_name,
+              email,
+              photo_url,
+              status,
+              phone
             ),
-            arm:arm_id (
-              name
+            class_arm_combo:class_arm_combo_id (
+              id,
+              class:class_id (
+                name
+              ),
+              arm:arm_id (
+                name
+              )
             )
-          )
-        `)
-        .eq('school_id', schoolId);
+          `)
+          .eq('school_id', schoolId);
 
-      if (error) throw error;
-      
-      // Sort in application layer
-      const sortedData = (data || []).sort((a, b) => 
-        (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
-      );
-      
-      setStudents(sortedData);
+        if (error) throw error;
+        
+        // Sort in application layer
+        const sortedData = (data || []).sort((a, b) => 
+          (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
+        );
+        
+        return sortedData;
+      })();
+
+      const studentData = await Promise.race([queryPromise, timeoutPromise]);
+      setStudents(studentData);
+
+      if (studentData.length === 0) {
+        toast.info('No students found for this school');
+      }
     } catch (error) {
       console.error('Error fetching students:', error);
-      toast.error('Failed to load students');
+      let errorMsg = 'Failed to load students';
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          errorMsg = 'Students query timed out - database may be slow';
+        } else if (error.message.includes('gender')) {
+          errorMsg = 'Database schema error - missing columns. Contact administrator.';
+        } else {
+          errorMsg = error.message;
+        }
+      }
+      toast.error(errorMsg);
+      setStudents([]);
     } finally {
       setIsLoading(false);
     }
