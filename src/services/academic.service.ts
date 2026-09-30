@@ -25,29 +25,49 @@ export class AcademicService {
    * Get all terms for a school
    */
   static async getTerms(schoolId: string) {
-    const { data, error } = await supabase
-      .from('academic_terms')
-      .select('id, session_id, term_name, term_order, is_active, school_id')
-      .eq('school_id', schoolId)
-      .order('term_order', { ascending: true })
+    try {
+      const { data, error } = await supabase
+        .from('academic_terms')
+        .select('id, session_id, term_name, term_order, is_active, school_id')
+        .eq('school_id', schoolId)
+        .order('term_order', { ascending: true })
 
-    if (error) throw new Error(`Failed to fetch terms: ${error.message}`)
-    return data || []
+      if (error) throw new Error(`Failed to fetch terms: ${error.message}`)
+      
+      // Map term_order to term_number for backwards compatibility
+      return (data || []).map(term => ({
+        ...term,
+        term_number: term.term_order // Alias for compatibility
+      }))
+    } catch (error) {
+      console.error('[AcademicService] getTerms error:', error)
+      throw error
+    }
   }
 
   /**
    * Get terms for a specific session
    */
   static async getTermsForSession(schoolId: string, sessionId: string) {
-    const { data, error } = await supabase
-      .from('academic_terms')
-      .select('id, session_id, term_name, term_order, is_active')
-      .eq('school_id', schoolId)
-      .eq('session_id', sessionId)
-      .order('term_order', { ascending: true })
+    try {
+      const { data, error } = await supabase
+        .from('academic_terms')
+        .select('id, session_id, term_name, term_order, is_active')
+        .eq('school_id', schoolId)
+        .eq('session_id', sessionId)
+        .order('term_order', { ascending: true })
 
-    if (error) throw new Error(`Failed to fetch terms for session: ${error.message}`)
-    return data || []
+      if (error) throw new Error(`Failed to fetch terms for session: ${error.message}`)
+      
+      // Map term_order to term_number for backwards compatibility
+      return (data || []).map(term => ({
+        ...term,
+        term_number: term.term_order // Alias for compatibility
+      }))
+    } catch (error) {
+      console.error('[AcademicService] getTermsForSession error:', error)
+      throw error
+    }
   }
 
   /**
