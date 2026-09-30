@@ -161,7 +161,7 @@ const StaffPage: React.FC = () => {
             .from('users')
             .select('*')
             .eq('school_id', schoolId)
-            .eq('role', 'STAFF');
+            .in('role', ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'STAFF']);
 
           if (signal.aborted) throw new Error('Request was cancelled');
           if (userError) throw userError;
