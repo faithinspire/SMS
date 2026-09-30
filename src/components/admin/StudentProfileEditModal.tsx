@@ -78,11 +78,11 @@ export default function StudentProfileEditModal({
       setLoading(true)
       setError('')
 
-      // Fetch student record
+      // Fetch student record - NO status field in students table
       const { data: studentRecord, error: studentError } = await supabase
         .from('students')
         .select(`
-          id, admission_number, date_of_birth, status, department,
+          id, admission_number, date_of_birth, department,
           class_arm_combo_id, user_id, school_id, created_at
         `)
         .eq('id', studentId)
@@ -91,10 +91,10 @@ export default function StudentProfileEditModal({
       if (studentError) throw studentError
       setStudent(studentRecord)
 
-      // Fetch user profile with all fields
+      // Fetch user profile with all fields - status is in users table
       const { data: userProfile, error: userError } = await supabase
         .from('users')
-        .select('id, full_name, email, phone, gender, address, state, lga')
+        .select('id, full_name, email, phone, gender, address, state, lga, status')
         .eq('id', studentRecord.user_id)
         .single()
 
@@ -114,7 +114,7 @@ export default function StudentProfileEditModal({
       setLga(userProfile.lga || '')
       setAdmissionNumber(studentRecord.admission_number || '')
       setDateOfBirth(studentRecord.date_of_birth || '')
-      setStudentStatus(studentRecord.status || 'ACTIVE')
+      setStudentStatus(userProfile.status || 'ACTIVE')
       setSelectedClassComboId(studentRecord.class_arm_combo_id || '')
       setSelectedDepartment(studentRecord.department || '')
 
@@ -178,6 +178,29 @@ export default function StudentProfileEditModal({
 
       toast.success('✅ Personal information saved')
       if (onSuccess) onSuccess()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSaveAdmissionInfo = async () => {
+    try {
+      setSaving(true)
+
+      // Update status in users table
+      if (student?.user_id) {
+        const { error } = await supabase
+          .from('users')
+          .update({ status: studentStatus, updated_at: new Date().toISOString() })
+          .eq('id', student.user_id)
+
+        if (error) throw error
+        
+        toast.success('✅ Status saved')
+        if (onSuccess) onSuccess()
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to save')
     } finally {
@@ -392,7 +415,7 @@ export default function StudentProfileEditModal({
 
                   <div className="flex gap-3 pt-4 border-t">
                     <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
-                    <button disabled className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg">No Changes</button>
+                    <button onClick={handleSaveAdmissionInfo} disabled={saving} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{saving ? 'Saving...' : 'Save'}</button>
                   </div>
                 </div>
               )}

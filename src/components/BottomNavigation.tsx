@@ -62,10 +62,10 @@ export default function BottomNavigation() {
       case 'SCHOOL_ADMIN':
       case 'ADMIN':
         return [
-          { icon: '🏫', label: 'Admin', path: '/school-admin/dashboard' },
-          { icon: '📋', label: 'Records', path: '/school-admin/records' },
+          { icon: '🏫', label: 'Dashboard', path: '/school-admin/dashboard' },
           { icon: '👥', label: 'Staff', path: '/school-admin/staff' },
           { icon: '📚', label: 'Students', path: '/school-admin/students' },
+          { icon: '📊', label: 'Results', path: '/school-admin/results' },
         ]
       case 'ACCOUNTANT':
         // Accountant dashboard needs navigation to other sections

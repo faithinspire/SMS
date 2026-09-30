@@ -98,13 +98,13 @@ const RecordsPage: React.FC = () => {
           school_id,
           admission_number,
           date_of_birth,
-          status,
           user:user_id (
             id,
             full_name,
             email,
             phone,
-            photo_url
+            photo_url,
+            status
           )
         `)
         .eq('school_id', schoolId)
@@ -115,7 +115,10 @@ const RecordsPage: React.FC = () => {
         (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
       )
 
-      setStudents(sortedData)
+      setStudents(sortedData.map(s => ({
+        ...s,
+        status: s.user?.status || 'ACTIVE'
+      })))
       setIsLoading(false)
     } catch (error) {
       console.error('Error fetching students:', error)

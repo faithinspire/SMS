@@ -82,22 +82,23 @@ export class AcademicService {
         user_id,
         admission_number,
         date_of_birth,
-        status,
         user:user_id (
           id,
           full_name,
           email,
           phone,
-          gender
+          gender,
+          status
         )
       `)
       .eq('school_id', schoolId)
       .eq('class_arm_combo_id', classArmComboId)
-      .eq('status', 'ACTIVE')
       .order('created_at', { ascending: true })
 
     if (error) throw new Error(`Failed to fetch students in class: ${error.message}`)
-    return data || []
+    
+    // Filter for active students (status is in users table)
+    return (data || []).filter(s => s.user?.status === 'ACTIVE' || !s.user?.status)
   }
 
   /**
