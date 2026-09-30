@@ -235,9 +235,8 @@ const StaffPage: React.FC = () => {
         toast.error(errorMsg);
         setStaff([]);
       } finally {
-        if (!signal.aborted) {
-          setIsLoading(false);
-        }
+        // CRITICAL: Always set loading to false, regardless of abort status
+        setIsLoading(false);
       }
     };
 

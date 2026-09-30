@@ -220,9 +220,9 @@ const StudentsPage: React.FC = () => {
       toast.error(errorMsg);
       setStudents([]);
     } finally {
-      if (!signal.aborted) {
-        setIsLoading(false);
-      }
+      // CRITICAL: Always set loading to false, regardless of abort status
+      setIsLoading(false);
+    }
     }
   }, [schoolId]);
 

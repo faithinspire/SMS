@@ -97,7 +97,7 @@ export default function SchoolAdminDashboard() {
             .from('users')
             .select('id, full_name, email, role, status, phone, gender, address, state, lga')
             .eq('school_id', currentUser.school_id)
-            .eq('role', 'STAFF')
+            .in('role', ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'STAFF'])
             .then(r => {
               if (r.error) console.error('[Staff Query Error]', r.error.message)
               return r.data || []
