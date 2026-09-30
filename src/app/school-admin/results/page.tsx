@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { AcademicService } from '@/services/academic.service'
@@ -51,134 +51,20 @@ export default function SchoolAdminResultsPage() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null)
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null)
   const [loadingClasses, setLoadingClasses] = useState(false)
+  const [schoolId, setSchoolId] = useState<string | null>(null)
 
-  // Load on mount
-  useEffect(() => {
-    loadInitialData()
-  }, [])
-
-  // When session changes, load its terms
-  useEffect(() => {
-    if (selectedSession) {
-      const sessionTerms = terms.filter((t) => t.session_id === selectedSession)
-      if (sessionTerms.length > 0) {
-        setSelectedTerm(sessionTerms[0].id)
-      }
-    }
-  }, [selectedSession, terms])
-
-  // When term changes, load classes and students
-  useEffect(() => {
-    if (selectedTerm && user?.school_id) {
-      loadClassesForTerm(user.school_id, selectedTerm)
-    }
-  }, [selectedTerm, user?.school_id])
-
-  // Auto-select first class when classes load
-  useEffect(() => {
-    if (classes.length > 0 && !selectedClass) {
-      console.log('[SchoolAdmin] Auto-selecting first class:', classes[0].class_name)
-      setSelectedClass(classes[0].id)
-      setSelectedClassData(classes[0])
-    }
-  }, [classes, selectedClass])
-
-  const loadInitialData = async () => {
-    try {
-      setLoading(true)
-      console.log('[SchoolAdmin] Loading initial data...')
-
-      const currentUser = await AuthService.getCurrentUser()
-
-      if (!currentUser || currentUser.role !== 'SCHOOL_ADMIN') {
-        router.push('/landing')
-        return
-      }
-
-      setUser(currentUser)
-
-      if (!currentUser.school_id) {
-        console.error('[SchoolAdmin] No school ID found')
-        return
-      }
-
-      // Load school info
-      const { data: schoolData } = await supabase
-        .from('schools')
-        .select('id, name, logo_url')
-        .eq('id', currentUser.school_id)
-        .single()
-
-      setSchool(schoolData)
-      console.log('[SchoolAdmin] School loaded:', schoolData?.name)
-
-      // Load sessions and terms directly from database with proper error handling
-      console.log('[SchoolAdmin] Loading sessions and terms...')
-      
-      try {
-        // Get sessions
-        const { data: sessionsData, error: sessionsError } = await supabase
-          .from('academic_sessions')
-          .select('id, session_year, is_active, created_at')
-          .eq('school_id', currentUser.school_id)
-          .order('session_year', { ascending: false })
-
-        if (sessionsError) {
-          console.warn('[SchoolAdmin] Sessions error:', sessionsError.message)
-        }
-
-        // Get terms
-        const { data: termsData, error: termsError } = await supabase
-          .from('academic_terms')
-          .select('id, session_id, term_name, term_order, is_active, school_id')
-          .eq('school_id', currentUser.school_id)
-          .order('term_order', { ascending: true })
-
-        if (termsError) {
-          console.warn('[SchoolAdmin] Terms error:', termsError.message)
-        }
-
-        console.log('[SchoolAdmin] Data loaded:', {
-          sessions: sessionsData?.length || 0,
-          terms: termsData?.length || 0,
-        })
-
-        setSessions(sessionsData || [])
-        setTerms(termsData || [])
-
-        // Auto-select first session
-        if (sessionsData && sessionsData.length > 0) {
-          const firstSession = sessionsData[0]
-          console.log('[SchoolAdmin] Auto-selecting session:', firstSession.session_year)
-          setSelectedSession(firstSession.id)
-        } else {
-          console.warn('[SchoolAdmin] No academic sessions found in database')
-        }
-      } catch (error) {
-        console.error('[SchoolAdmin] Failed to load academic data:', error)
-        setSessions([])
-        setTerms([])
-      }
-    } catch (error) {
-      console.error('[SchoolAdmin] Load error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadClassesForTerm = async (schoolId: string, termId: string) => {
+  // Memoized load classes function
+  const loadClassesForTerm = useCallback(async (schoolIdParam: string, termId: string) => {
     try {
       setLoadingClasses(true)
       console.log('[SchoolAdmin] Loading classes for term:', termId)
 
-      // Get students with scores for all classes in the term
-      const classArms = await AcademicService.getClassArmCombos(schoolId)
-
+      const classArms = await AcademicService.getClassArmCombos(schoolIdParam)
       const classesWithStudents: ClassWithStudents[] = []
 
       for (const classArm of classArms || []) {
         const studentsWithScores = await AcademicService.getStudentsWithScores(
-          schoolId,
+          schoolIdParam,
           classArm.id,
           termId
         )
@@ -204,7 +90,112 @@ export default function SchoolAdminResultsPage() {
     } finally {
       setLoadingClasses(false)
     }
-  }
+  }, [])
+
+  // Load on mount
+  useEffect(() => {
+    const initData = async () => {
+      try {
+        setLoading(true)
+        console.log('[SchoolAdmin] Loading initial data...')
+
+        const currentUser = await AuthService.getCurrentUser()
+
+        if (!currentUser || currentUser.role !== 'SCHOOL_ADMIN') {
+          router.push('/landing')
+          return
+        }
+
+        setUser(currentUser)
+
+        if (!currentUser.school_id) {
+          console.error('[SchoolAdmin] No school ID found')
+          return
+        }
+
+        setSchoolId(currentUser.school_id)
+
+        const { data: schoolData } = await supabase
+          .from('schools')
+          .select('id, name, logo_url')
+          .eq('id', currentUser.school_id)
+          .single()
+
+        setSchool(schoolData)
+        console.log('[SchoolAdmin] School loaded:', schoolData?.name)
+
+        const { data: sessionsData, error: sessionsError } = await supabase
+          .from('academic_sessions')
+          .select('id, session_year, is_active, created_at')
+          .eq('school_id', currentUser.school_id)
+          .order('session_year', { ascending: false })
+
+        if (sessionsError) {
+          console.warn('[SchoolAdmin] Sessions error:', sessionsError.message)
+        }
+
+        const { data: termsData, error: termsError } = await supabase
+          .from('academic_terms')
+          .select('id, session_id, term_name, term_order, is_active, school_id')
+          .eq('school_id', currentUser.school_id)
+          .order('term_order', { ascending: true })
+
+        if (termsError) {
+          console.warn('[SchoolAdmin] Terms error:', termsError.message)
+        }
+
+        console.log('[SchoolAdmin] Data loaded:', {
+          sessions: sessionsData?.length || 0,
+          terms: termsData?.length || 0,
+        })
+
+        setSessions(sessionsData || [])
+        setTerms(termsData || [])
+
+        if (sessionsData && sessionsData.length > 0) {
+          const firstSession = sessionsData[0]
+          console.log('[SchoolAdmin] Auto-selecting session:', firstSession.session_year)
+          setSelectedSession(firstSession.id)
+        } else {
+          console.warn('[SchoolAdmin] No academic sessions found in database')
+        }
+      } catch (error) {
+        console.error('[SchoolAdmin] Load error:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    initData()
+  }, [router])
+
+  // When session changes, select first term
+  useEffect(() => {
+    if (selectedSession && terms.length > 0) {
+      const sessionTerms = terms.filter((t) => t.session_id === selectedSession)
+      if (sessionTerms.length > 0) {
+        setSelectedTerm(sessionTerms[0].id)
+      }
+    }
+  }, [selectedSession, terms])
+
+  // When term changes, load classes
+  useEffect(() => {
+    if (selectedTerm && schoolId) {
+      loadClassesForTerm(schoolId, selectedTerm)
+    }
+  }, [selectedTerm, schoolId, loadClassesForTerm])
+
+  // Auto-select first class when classes load
+  useEffect(() => {
+    if (classes.length > 0 && !selectedClass) {
+      console.log('[SchoolAdmin] Auto-selecting first class:', classes[0].class_name)
+      setSelectedClass(classes[0].id)
+      setSelectedClassData(classes[0])
+    }
+  }, [classes, selectedClass])
+
+
 
   const getPerformanceColor = (rating: string) => {
     switch (rating) {
