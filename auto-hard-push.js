@@ -9,7 +9,7 @@ const { execSync, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const REPO_PATH = path.resolve('c:', 'Users', 'OLU', 'Desktop', 'SMS');
+const REPO_PATH = 'c:\\Users\\OLU\\Desktop\\SMS';
 
 function log(message, type = 'info') {
   const colors = {
