@@ -134,28 +134,3 @@ export default function BottomNavigation() {
     </div>
   )
 }
-
-  return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-300 shadow-xl z-50">
-      <div className="flex justify-around items-stretch w-full">
-        {navItems.map((item) => (
-          <button
-            key={item.path}
-            onClick={() => router.push(item.path)}
-            className={`flex-1 flex flex-col items-center justify-center py-3 px-1 transition-all duration-200 border-t-4 ${
-              isActive(item.path)
-                ? 'text-blue-600 border-blue-600 bg-blue-50'
-                : 'text-gray-600 border-transparent hover:text-blue-500 hover:bg-gray-50'
-            }`}
-            title={item.label}
-          >
-            <span className="text-2xl leading-none mb-1">{item.icon}</span>
-            <span className="text-xs font-semibold text-center leading-tight whitespace-nowrap">
-              {item.label}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
