@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS academic_sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   session_year TEXT NOT NULL,
+  start_year INTEGER,
   is_active BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -19,10 +20,13 @@ CREATE TABLE IF NOT EXISTS academic_terms (
   session_id UUID NOT NULL REFERENCES academic_sessions(id) ON DELETE CASCADE,
   term_name TEXT NOT NULL,
   term_order INTEGER NOT NULL,
+  start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  end_date DATE NOT NULL DEFAULT (CURRENT_DATE + INTERVAL '90 days'),
   is_active BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(school_id, session_id, term_order)
+  UNIQUE(school_id, session_id, term_order),
+  CHECK (end_date > start_date)
 );
 
 -- Create indexes for performance
@@ -37,39 +41,45 @@ ALTER TABLE academic_sessions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE academic_terms DISABLE ROW LEVEL SECURITY;
 
 -- Ensure existing data is not duplicated - only insert if tables were empty
-INSERT INTO academic_sessions (school_id, session_year, is_active)
-SELECT id, '2024/2025', true FROM schools
+INSERT INTO academic_sessions (school_id, session_year, start_year, is_active)
+SELECT id, '2024/2025', 2024, true FROM schools
 WHERE id NOT IN (SELECT DISTINCT school_id FROM academic_sessions)
 ON CONFLICT (school_id, session_year) DO NOTHING;
 
-INSERT INTO academic_terms (school_id, session_id, term_name, term_order, is_active)
+INSERT INTO academic_terms (school_id, session_id, term_name, term_order, start_date, end_date, is_active)
 SELECT 
   s.id,
   (SELECT id FROM academic_sessions WHERE school_id = s.id ORDER BY created_at DESC LIMIT 1),
-  'Term 1',
+  'First Term',
   1,
+  MAKE_DATE(2024, 9, 1),
+  MAKE_DATE(2024, 11, 30),
   true
 FROM schools s
 WHERE s.id NOT IN (SELECT DISTINCT school_id FROM academic_terms WHERE term_order = 1)
 ON CONFLICT (school_id, session_id, term_order) DO NOTHING;
 
-INSERT INTO academic_terms (school_id, session_id, term_name, term_order, is_active)
+INSERT INTO academic_terms (school_id, session_id, term_name, term_order, start_date, end_date, is_active)
 SELECT 
   s.id,
   (SELECT id FROM academic_sessions WHERE school_id = s.id ORDER BY created_at DESC LIMIT 1),
-  'Term 2',
+  'Second Term',
   2,
+  MAKE_DATE(2024, 12, 1),
+  MAKE_DATE(2025, 2, 28),
   false
 FROM schools s
 WHERE s.id NOT IN (SELECT DISTINCT school_id FROM academic_terms WHERE term_order = 2)
 ON CONFLICT (school_id, session_id, term_order) DO NOTHING;
 
-INSERT INTO academic_terms (school_id, session_id, term_name, term_order, is_active)
+INSERT INTO academic_terms (school_id, session_id, term_name, term_order, start_date, end_date, is_active)
 SELECT 
   s.id,
   (SELECT id FROM academic_sessions WHERE school_id = s.id ORDER BY created_at DESC LIMIT 1),
-  'Term 3',
+  'Third Term',
   3,
+  MAKE_DATE(2025, 3, 1),
+  MAKE_DATE(2025, 5, 31),
   false
 FROM schools s
 WHERE s.id NOT IN (SELECT DISTINCT school_id FROM academic_terms WHERE term_order = 3)
