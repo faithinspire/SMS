@@ -131,14 +131,6 @@ const StaffPage: React.FC = () => {
     getCurrentSchool();
   }, []);
 
-  // Fetch staff - COMPLETE FIX: Query both users and staff tables with proper error handling
-  const fetchStaff = useCallback(async () => {
-    if (!schoolId) return;
-
-    try {
-      setIsLoading(true);
-      console.log('[Staff Page] Fetching staff for school:', schoolId);
-
   // Fetch staff - COMPLETE FIX: Query both users and staff tables with proper timeout and error handling
   const fetchStaff = useCallback(async () => {
     if (!schoolId) return;
