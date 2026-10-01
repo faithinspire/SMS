@@ -221,7 +221,7 @@ export class StaffRegistrationService {
       }
 
       // Step 4: Assign subjects if provided (for teachers)
-      if (data.subjectIds && data.subjectIds.length > 0 && data.classArmComboId) {
+      if (data.subjectIds && data.subjectIds.length > 0 && data.classArmComboId && userId) {
         try {
           const subjectAssignments = data.subjectIds.map(subjectId => ({
             teacher_id: userId,
@@ -367,5 +367,34 @@ export class StaffRegistrationService {
    */
   private static generatePin(): string {
     return Math.floor(100000 + Math.random() * 900000).toString()
+  }
+
+  /**
+   * Validate that all required fields for a stage are present
+   * Stages: 1=Personal, 2=Contact, 3=Employment, 4=Professional, 5=Class, 6=Subjects, 7=Salary, 8=Account, 9=Review
+   */
+  static validateStage(stage: number, data: Partial<StaffRegistrationData>): boolean {
+    const requirements: Record<number, string[]> = {
+      1: ['firstName', 'lastName'],
+      2: ['email', 'phone', 'emergencyContact', 'emergencyContactPhone', 'residentialAddress'],
+      3: ['role', 'dateEmployed', 'dateAppointed'],
+      4: [],
+      5: [],
+      6: [],
+      7: [],
+      8: ['password'],
+      9: [],
+    }
+
+    const required = requirements[stage] || []
+
+    for (const field of required) {
+      const value = (data as any)[field]
+      if (value === undefined || value === null || value === '') {
+        return false
+      }
+    }
+
+    return true
   }
 }

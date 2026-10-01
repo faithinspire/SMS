@@ -241,6 +241,10 @@ export class StudentRegistrationService {
           student_id: newStudent.id,
           subject_id: subjectId,
           school_id: data.schoolId,
+          session_id: data.sessionId,
+          term_id: data.termId,
+          class_arm_combo_id: data.classArmComboId,
+          enrollment_status: 'ACTIVE',
           created_at: new Date().toISOString(),
         }))
 

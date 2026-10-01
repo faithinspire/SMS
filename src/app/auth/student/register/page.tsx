@@ -179,21 +179,40 @@ export default function StudentRegisterPage() {
 
     const loadSubjects = async () => {
       try {
+        console.log('[StudentRegister] Loading subjects for classArmComboId:', formData.classArmComboId)
+        console.log('[StudentRegister] Available classOptions:', classOptions)
+        
         const classCombo = classOptions.find((c) => c.id === formData.classArmComboId)
-        if (!classCombo?.classes?.level) return
+        
+        if (!classCombo) {
+          console.warn('[StudentRegister] Class combo not found in classOptions')
+          setSubjects([])
+          toast.error('Selected class not found. Please reselect.')
+          return
+        }
+        
+        if (!classCombo?.classes?.level) {
+          console.warn('[StudentRegister] Class level is undefined for combo:', classCombo)
+          setSubjects([])
+          toast.error('Class level information not available. Please reselect class.')
+          return
+        }
 
+        console.log('[StudentRegister] Fetching subjects for level:', classCombo.classes.level)
         const subjectList = await CanonicalSubjectService.getSubjectsForLevel(
           formData.schoolId!,
           classCombo.classes.level
         )
+        console.log('[StudentRegister] Subjects loaded:', subjectList)
         setSubjects(subjectList)
       } catch (error) {
-        console.error('Error loading subjects:', error)
+        console.error('[StudentRegister] Error loading subjects:', error)
         toast.error('Failed to load subjects')
+        setSubjects([])
       }
     }
     loadSubjects()
-  }, [formData.classArmComboId, formData.schoolId])
+  }, [formData.classArmComboId, formData.schoolId, classOptions])
 
   const validateStage = (): boolean => {
     if (!StudentRegistrationService.validateStage(currentStage, formData)) {

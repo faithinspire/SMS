@@ -1,520 +1,292 @@
-# FTECH SMS Implementation Plan: Multi-Stage Staff & Student Registration with Data Fixes
+# SMS Registration Pages Fix - Implementation Plan
 
-## Executive Summary
-
-This plan addresses the core user request: converting FTECH SMS from a fragmented system into a professional school management solution with:
-1. **Multi-stage Staff Registration** (10 stages) — from personal info to account creation
-2. **Multi-stage Student Registration** (10 stages) — from personal to admission confirmation
-3. **Fix for Staff/Student/Results data fetching** — pages not showing records that exist in Supabase
-4. **Professional workflow** — no more uncontrolled giant forms
-
-The existing architecture is sound. This work **repairs, completes, and integrates** rather than rebuilds.
+## Overview
+Fix critical issues in staff and student registration pages: subject/class fetching failures, missing role dropdown in staff registration, and incomplete letter generation. Three main issues to resolve with data dependencies between registration forms and letter generation.
 
 ---
 
-## SECTION A: Architecture Findings
+## Issue Analysis & Design Decisions
 
-### A.1 Real Database Tables (Canonical)
+### Issue 1: Subject & Class Fetching Not Working
+**Root Cause**: The `useEffect` hooks in both registration pages have timing issues. When `getSubjectsForLevel()` is called in CanonicalSubjectService, it uses PostgreSQL array containment queries that may not work correctly with the current API or the applicable_to_levels column structure. Additionally, the dependencies in useEffect may not trigger on class selection if the state updates are not properly sequenced.
 
-| Table | Purpose | Key Columns |
-|-------|---------|-----------|
-| `schools` | Tenant root | id, name, logo_url, type (PRIMARY/SECONDARY/BOTH) |
-| `users` | All users (unified) | id, school_id, email, full_name, role, status |
-| `students` | Student enrollment | id, user_id, school_id, admission_number, class_arm_combo_id, date_of_birth |
-| `staff` | Staff employment records | id, user_id, school_id, position, employment_date, status |
-| `classes` | Class levels | id, school_id, name, level (0-14 per Nigerian curriculum) |
-| `arms` | Class sections | id, class_id, school_id, name, capacity |
-| `class_arm_combos` | Class + Arm pairs | id, school_id, class_id, arm_id, class_teacher_id |
-| `subjects` | Curriculum subjects | id, school_id, name, code, applicable_to_levels (int array), department |
-| `subject_teacher_assignments` | Teacher → Subject/Class | id, teacher_id, subject_id, class_arm_combo_id, school_id |
-| `student_subjects` | Student → Subject enrollment | id, student_id, subject_id, school_id |
-| `academic_sessions` | School year (e.g., 2024/2025) | id, school_id, session_year, start_year, is_active |
-| `academic_terms` | Term per session | id, school_id, session_id, term_name, term_order, start_date, end_date |
-| `score_sheets` | Student grades | id, school_id, student_id, subject_id, academic_term_id, test1-4, exam, total, grade |
-| `transactions` | Staff salary/payments | id, school_id, payer_id, amount, payment_method, description |
-| `guardians` | Student guardians | id, student_id, school_id, full_name, relationship, phone, email |
+**Design Decision**: Fix the useEffect hook in both student and staff registration pages to ensure proper sequencing when class is selected. Add logging to CanonicalSubjectService to diagnose the query failures. Ensure classOptions are properly populated before attempting to fetch subjects. The issue is likely that `classCombo.classes?.level` may be undefined, causing the subjects query to fail silently.
 
-### A.2 Existing Services (Import Paths & Methods)
+### Issue 2: Staff Stage 5 Missing Role/Responsibility Dropdown
+**Root Cause**: Stage 5 currently shows a free-text input for `primaryRole` instead of a dropdown. The form does have `formData.role` from Stage 3 (employment role dropdown), but it's not being reused in Stage 5.
 
-#### AuthService (`@/services/auth.service.ts`)
-- `getAllSchools()` → School[]
-- `registerTeacher(input)` → User
-- `registerStudent(input)` → User
-- `getCurrentUser()` → User | null
-- `login(email, password)` → {user, token}
+**Design Decision**: Replace the text input in Stage 5 with a dropdown that mirrors the Stage 3 role options (TEACHER, HEAD_TEACHER, PRINCIPAL, ACCOUNTANT, STAFF). This dropdown will auto-populate from `formData.role` when the user revisits Stage 5 or progresses past Stage 3. The `primaryRole` should be hidden and auto-set to the value of `formData.role` at stage transition to prevent user confusion.
 
-#### TeacherService (`@/services/teacher.service.ts`)
-- `assignSubjects(teacherId, schoolId, assignments)` → void
-- `assignClassToTeacher(userId, classArmComboId)` → void
-- `getTeacherDashboard(teacherId, schoolId)` → {managedClasses, taughtSubjects, stats}
-- `updateTeacherProfile(teacherId, schoolId, updates)` → {teacher}
+### Issue 3: Letter Generation Missing Details
+**Root Cause**: The letter templates use basic field mappings. Staff appointment letters don't include salary frequency, full role/position distinctions, or department info in tables. Student admission letters don't include list of assigned subjects or session/term details. The services fetch data but the templates don't use all available fields.
 
-#### CanonicalSubjectService (`@/services/canonical-subject.service.ts`)
-- `getAllSubjectsForSchool(schoolId)` → CanonicalSubject[]
-- `getSubjectsForLevel(schoolId, level)` → CanonicalSubject[] (filters by level)
-- `getSubjectsForClass(classArmComboId, schoolId)` → CanonicalSubject[] (auto-joins level)
-
-#### StudentService (`@/services/student.service.ts`)
-- `registerStudent(fullName, schoolId, classArmComboId, subjectIds, ..., admissionNumberOverride?)` → {student, pin, admission_number}
-- `generateAdmissionNumber(year, schoolId, classArmComboId)` → string
-- `updateStudentProfile(studentId, schoolId, updates)` → {student, admission_number}
-
-#### UserRegistrationService (`@/services/user-registration.service.ts`)
-- `registerUser(data: {email, full_name, school_id, admission_number?, ...})` → {user, pin}
-- Auto-generates admission_number if not provided: format `YEAR-CLASSPREFIX-SEQUENCE`
-
-#### LetterGenerationService (`@/services/letter-generation.service.ts`)
-- `generateAdmissionLetter(studentId, schoolId)` → PDF
-- `generateAppointmentLetter(staffId, schoolId)` → PDF
-
-### A.3 Current Pain Points Identified
-
-**1. Staff Page Not Showing Records**
-- **Current code**: Queries `users` table for role IN ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'STAFF']
-- **Issue**: Staff record must exist in BOTH `users` (mandatory) AND `staff` table (optional employment details)
-- **Root cause**: Registration flow may not be creating `staff` records after `users` record
-- **Fix**: Ensure every staff registration flow creates both `users` + `staff` records in same transaction
-
-**2. Students Page Not Showing Records**
-- **Current code**: Queries `students` table with proper `school_id` filter
-- **Issue**: May be timeout (15s) on large datasets or students missing `class_arm_combo_id`
-- **Root cause**: Students registered without class assignment or incomplete migration
-- **Fix**: Verify students.class_arm_combo_id is always set; add indexes for query performance
-
-**3. Results Page Not Showing Classes/Students**
-- **Current code**: Queries `class_arm_combos` then `score_sheets` with `academic_term_id`
-- **Issue**: No scores exist OR terms not properly set up OR students not in score sheets
-- **Root cause**: CBT system may not be auto-populating score sheets; missing term setup
-- **Fix**: Ensure score sheets auto-created when students enroll in subjects; verify term data exists
-
-**4. Admission Number Generation**
-- **Current code**: Format `YEAR-CLASSPREFIX-SEQUENCE` (e.g., `2026-SSA-0001`)
-- **Issue**: Some admission numbers broken (`2026-UNK-undefined`)
-- **Root cause**: Class lookup fails → classPrefix becomes 'UNK'; level undefined
-- **Fix**: Fallback to UUID-based format when class data unavailable; validate before save
-
-**5. Staff Register Page (Existing but Minimal)**
-- Current: Single flat form with school, class, subject selection
-- **Issue**: Not multi-stage; missing employment, salary, bank, account setup
-- **Fix**: Convert to 10-stage wizard
-
-**6. No Student Register Page**
-- **Issue**: Form doesn't exist; students registered only via admin (if at all)
-- **Fix**: Create full 10-stage student registration with guardian, admission, subject selection
-
-### A.4 Curriculum Data Status
-
-- Migration `146_complete_nigerian_curriculum_all_schools.sql` populates subjects for all levels
-- Levels: 0-2 (Nursery/PREP), 3-8 (Primary 1-6), 9-11 (JSS1-3), 12-14 (SS1-3)
-- Each subject has `applicable_to_levels` array for filtering by class level
-- **Status**: ✅ Curriculum exists; just needs proper service queries
+**Design Decision**: Enhance both letter templates to include all form-captured details in structured tables:
+- Staff letter: Add salary frequency row, full role with department, bank details in dedicated section
+- Student letter: Add assigned subjects list, academic session, term, and enrollment date details in dedicated section
+These enhancements require no data fetching changes, only template modifications to display existing data.
 
 ---
 
-## SECTION B: Phase-by-Phase Implementation Plan
+## Implementation Steps
 
-### Phase 1: Fix Staff Registration Flow
-**Goal**: Ensure all staff registrations create both `users` AND `staff` records atomically.
+### Step 1: Fix Student Registration Page - Subject Fetching
+**Purpose**: Debug and fix the useEffect that loads subjects when class is selected.
 
-#### 1.1 Extend Staff Registration Service
-Create new file: `src/services/staff-registration.service.ts`
-- Wrap staff registration in transaction or error-recovery logic
-- Ensure both `users` and `staff` table writes succeed before returning
-- Generate PIN for staff login
-- Idempotency: check if user already exists by (school_id, email) before creating
+**Changes**:
+- Modify `src/app/auth/student/register/page.tsx` Stage 5 useEffect hook
+- Add console logging to trace when `formData.classArmComboId` changes
+- Verify that `classOptions.find()` returns a valid combo with `classes.level` defined
+- Add fallback if level is undefined: log error and show message "Subjects not available for this class"
+- Ensure the dependency array includes both `formData.classArmComboId` AND `classOptions` to re-trigger on class load
 
-**Files to create**:
-- `src/services/staff-registration.service.ts` (200 lines)
+**Files**: 
+- `src/app/auth/student/register/page.tsx` (useEffect at line ~140, around Stage 5 subjects loading)
+
+**Verify**: Run registration form, select school, session, term, class → check browser console for subject fetch logs → subjects should populate in Stage 5 dropdown
+
+---
+
+### Step 2: Fix Staff Registration Page - Subject Fetching
+**Purpose**: Same fix as Step 1 but for staff form, which has identical issue in Stage 7 (Subject Assignment).
+
+**Changes**:
+- Modify `src/app/auth/staff/register/page.tsx` Stage 7 useEffect hook (around line ~130)
+- Add same logging and fallback as Step 1
+- Ensure dependency array includes `formData.classArmComboId` AND `classOptions`
+
+**Files**: 
+- `src/app/auth/staff/register/page.tsx` (useEffect around line 130)
+
+**Verify**: Run registration form, select school, class → check browser console for subject fetch logs → subjects should populate in Stage 7
+
+---
+
+### Step 3: Fix Staff Registration Stage 5 - Replace Text Input with Role Dropdown
+**Purpose**: Replace free-text primary role input with dropdown that auto-populates from Stage 3 role selection.
+
+**Changes**:
+- Modify `src/app/auth/staff/register/page.tsx` Stage 5 renderStageContent
+- Remove the `<input>` for "Primary Role" (placeholder: "Primary Role *")
+- Replace with `<select>` dropdown with options: TEACHER, HEAD_TEACHER, PRINCIPAL, ACCOUNTANT, STAFF
+- Bind to `formData.role` (not a new field, reuse the Stage 3 role) to auto-populate
+- Add note below dropdown: "Based on employment role selected in Stage 3"
+- Update validation in `StaffRegistrationService.validateStage()` to check for role presence in Stage 5
+
+**Files**: 
+- `src/app/auth/staff/register/page.tsx` (case 5 section, around line 400-410)
+- `src/services/staff-registration.service.ts` (validateStage method if it exists)
+
+**Verify**: Fill form → Stage 3: select role (e.g., TEACHER) → Stage 5: verify dropdown shows TEACHER and is pre-selected
+
+---
+
+### Step 4: Enhance Staff Appointment Letter - Add Salary & Role Details
+**Purpose**: Add salary frequency, full role/position, department to the letter template.
+
+**Changes**:
+- Modify `src/services/letter-generation.service.ts` in `generateAppointmentLetter()` method
+- Update the StaffData interface to include `salaryFrequency` field
+- In the details table (after Department row), add new rows:
+  - Salary Frequency (if staffData.salaryFrequency exists)
+  - Full Role/Position (combine position + department)
+  - Bank Details section (separate section with Bank Name, Account Name, Account Number if all present)
+- Ensure template HTML shows all fields with proper formatting
+
+**Files**: 
+- `src/services/letter-generation.service.ts` (StaffData interface + generateAppointmentLetter method, around line 8-150)
+
+**Verify**: Trigger letter generation for a staff member with salary/bank details filled → preview letter → verify salary frequency and bank details appear in formatted table
+
+---
+
+### Step 5: Enhance Student Admission Letter - Add Subjects & Session Details
+**Purpose**: Add list of assigned subjects and academic session/term info to letter template.
+
+**Changes**:
+- Modify `src/services/letter-generation.service.ts` in `generateAdmissionLetter()` method
+- Accept an additional parameter for subjects array: `subjects?: CanonicalSubject[]`
+- Update the details table to include:
+  - Term (if studentData.term exists)
+  - Academic Session (if studentData.session exists)
+  - Subjects Assigned section (new): list all selected subjects in a bullet list or table
+- Ensure the admission letter calls include subjects when generating
+
+**Files**: 
+- `src/services/letter-generation.service.ts` (generateAdmissionLetter method signature + template, around line 200-350)
+
+**Verify**: Trigger letter generation for student with subjects selected → preview letter → verify subjects list appears with course names
+
+---
+
+### Step 6: Update Registration Config Service - Add Diagnostics
+**Purpose**: Improve logging and error handling in RegistrationConfigService to aid future debugging.
+
+**Changes**:
+- Modify `src/services/registration-config.service.ts`
+- Add console group wrappers around method calls for cleaner logging
+- Add detailed error messages that include returned data shapes
+- In `getSubjectsForLevels()`, log the input levels and the PostgreSQL query equivalent for manual verification
+- Add validation: if levels array is empty, log warning "No levels provided for subject query"
+
+**Files**: 
+- `src/services/registration-config.service.ts` (all methods, especially getSubjectsForLevels)
+
+**Verify**: Open browser DevTools console, fill registration form, observe grouped logs showing data loads at each stage
+
+---
+
+### Step 7: Validate Integration - Test Both Registration Flows
+**Purpose**: Ensure all fixes work together in both student and staff registration.
+
+**Changes**:
+- Manual testing script (no code change, verification step only)
+- Test student registration: School → Session → Term → Class → Subjects populate
+- Test staff registration: School → Class → Subjects populate → Stage 5 role shows dropdown
+- Test letter generation: Complete registration → trigger letter download → verify details present
+
+**Files**: None (test-only step)
 
 **Verify**: 
-```bash
-npm run build
-# Confirm no type errors
-```
-
-#### 1.2 Update Staff Register Page to 10 Stages
-File: `src/app/auth/staff/register/page.tsx`
-
-Replace current single-form with multi-stage wizard:
-- **Stage 1**: Personal Information (first name, middle name, last name, gender, DOB, photo, nationality, state, LGA, marital status)
-- **Stage 2**: Contact & Address (phone, email, residential address, state, LGA, emergency contact, emergency phone)
-- **Stage 3**: Employment Information (staff ID, position, role, department, employment type, employment status, date employed, date appointed, reporting authority)
-- **Stage 4**: Professional Information (highest qualification, professional qualification, institution, course/field, graduation year, teaching experience, professional certifications)
-- **Stage 5**: Role & Responsibilities (primary role, secondary responsibilities, department, admin responsibility — populated from existing roles in system)
-- **Stage 6**: Class & Subject Assignment (for teachers: class selection, subject multi-select from class curriculum)
-- **Stage 7**: Salary & Bank Information (salary, salary frequency, bank name, account name, account number, payment method)
-- **Stage 8**: Account & Security (email/username, account role, PIN generation)
-- **Stage 9**: Review & Confirmation (display summary of all stages with edit buttons per stage)
-- **Stage 10**: Submit Registration (validate all stages → call StaffRegistrationService → show confirmation)
-
-**Component features**:
-- Progress bar showing stage X/10
-- Previous/Next buttons between stages
-- Edit button on review page to jump to any stage
-- Validation per stage (required fields, email format, phone format)
-- Multi-select checkboxes for subjects (filter by class level automatically)
-
-**Files to modify**:
-- `src/app/auth/staff/register/page.tsx` (450 lines)
-
-**Verify**:
-```bash
-npm run build
-npm run lint
-# Test form at http://localhost:3001/auth/staff/register
-# Complete all 10 stages, submit, check Supabase for users + staff records
-```
-
-#### 1.3 Fix Staff Admin Dashboard Data Fetch
-File: `src/app/school-admin/staff/page.tsx`
-
-Current issue: Only queries `users` table; misses staff-only metadata.
-
-**Changes**:
-- Query both `users` (role in ['TEACHER', 'HEAD_TEACHER', ...]) AND `staff` table
-- Left-join to get employment_date, position, status from staff record
-- Fallback gracefully if staff record missing (show as 'Staff' with no position)
-- Add indexes for faster lookup: `idx_users_school_id_role`, `idx_staff_school_id`
-
-**Files to modify**:
-- `src/app/school-admin/staff/page.tsx` (update fetch logic in `fetchStaff()` callback)
-
-**Verify**:
-```bash
-# Register new staff via /auth/staff/register
-# Refresh school-admin/staff page
-# Should display new staff member
-```
+- Run student registration with school/class selection and verify subjects load in Stage 5
+- Run staff registration with class selection and verify subjects load in Stage 7
+- Run staff registration Stage 5 and verify role dropdown is visible and pre-populated
+- Generate letters and verify new fields (salary frequency, subjects list) appear
 
 ---
 
-### Phase 2: Create Multi-Stage Student Registration
+## Detailed Implementation Notes
 
-**Goal**: Create full 10-stage student registration flow with proper admission number generation and subject selection.
+### For Subject Fetching Fix (Steps 1-2):
+The issue manifests as empty subject dropdowns. The root cause is likely one of:
+1. `classCombo.classes.level` is undefined, causing the subjects query to fail
+2. The `classes` nested field is not being returned properly by Supabase
+3. The useEffect dependency array is missing `classOptions`, so it doesn't re-trigger when classes load
 
-#### 2.1 Create Student Registration Service
-File: `src/services/student-registration.service.ts`
-
-Wrapper around StudentService with explicit multi-stage validation:
-- Stage-by-stage data collection
-- Admission number generation with fallback
-- Guardian record creation
-- Student subject enrollment
-- Document upload handling (passport/photo)
-- Idempotency: check if student with admission_number already exists
-
-**Files to create**:
-- `src/services/student-registration.service.ts` (250 lines)
-
-**Verify**:
-```bash
-npm run build
-# Confirm no type errors
-```
-
-#### 2.2 Create Student Register Page (10 Stages)
-File: `src/app/auth/student/register/page.tsx` (NEW)
-
-**Stages**:
-- **Stage 1**: Student Personal Information (first name, middle name, last name, gender, DOB, photo, nationality, state, LGA, address, phone, email)
-- **Stage 2**: Parent/Guardian Information (name, relationship, phone, email, address, occupation, emergency contact, additional guardian option)
-- **Stage 3**: Admission Information (admission number auto-generated or manual override, admission date, admission status, session, term)
-- **Stage 4**: Class & Session & Term (school dropdown, session dropdown, term dropdown, class dropdown, class arm dropdown)
-- **Stage 5**: Subject Selection (multi-select subjects; auto-filtered by class level from CanonicalSubjectService)
-- **Stage 6**: Previous School & Academic Info (previous school name, previous class level, previous performance, transfer certificate)
-- **Stage 7**: Medical & Emergency Information (blood group, allergies, medical conditions, emergency contact name, emergency contact phone)
-- **Stage 8**: Documents & Passport (photo upload, passport/national ID upload)
-- **Stage 9**: Review & Confirmation (display all stages with edit buttons)
-- **Stage 10**: Complete Registration (submit to StudentRegistrationService, display PIN, redirect to login)
-
-**Features**:
-- Admission number auto-generated in Stage 3; format: `YEAR-CLASSPREFIX-SEQUENCE` with UUID fallback
-- Subjects filter automatically by class level selected in Stage 4
-- Guardian can be different from student
-- All uploads to Supabase Storage in `/students/{studentId}/` path
-- PIN auto-generated and displayed for parent login
-
-**Files to create**:
-- `src/app/auth/student/register/page.tsx` (500 lines)
-
-**Verify**:
-```bash
-npm run build
-npm run lint
-# Test form at http://localhost:3001/auth/student/register
-# Complete all 10 stages, submit
-# Check Supabase: users table, students table, student_subjects table, guardians table
-# Admission number format should be valid (not undefined)
-```
-
----
-
-### Phase 3: Fix Student Admin Dashboard Data Fetch
-
-**Goal**: Ensure students page displays all enrolled students correctly.
-
-#### 3.1 Fix School Admin Students Page
-File: `src/app/school-admin/students/page.tsx`
-
-Current issue: 15-second timeout on large datasets; students may be missing class assignment.
-
-**Changes**:
-- Add database indexes: `idx_students_school_id`, `idx_students_class_arm_combo_id`
-- Increase query timeout to 30s or paginate results (load 50 at a time)
-- Filter students where `class_arm_combo_id IS NOT NULL` to exclude incomplete registrations
-- Sort by admission_number instead of created_at for natural order
-- Add debug logging: count total, count with class, count fetched
-
-**Files to modify**:
-- `src/app/school-admin/students/page.tsx` (update `fetchStudents()` callback, increase timeout, add index check)
-
-**Database migration** (new):
-- `database/migrations/153_add_performance_indexes.sql`
-  - Add indexes on school_id, class_arm_combo_id for students
-  - Add indexes on school_id, role for users
-  - Add indexes on school_id for staff
-
-**Verify**:
-```bash
-npm run build
-# Apply migration manually or during build
-# Register 5+ students
-# Visit school-admin/students
-# Should load all students without timeout; admission numbers visible
-```
-
----
-
-### Phase 4: Fix Results Page Data Fetch
-
-**Goal**: Ensure results page shows classes and students with scores.
-
-#### 4.1 Fix School Admin Results Page
-File: `src/app/school-admin/results/page.tsx`
-
-Current issue: Classes load but students/scores don't; likely no score_sheets exist or academic_term_id doesn't match.
-
-**Changes**:
-- Verify academic sessions and terms are created (migration 152 does this)
-- Query score_sheets with correct join to academic_terms
-- Fallback: If no score_sheets exist, show "No results yet" with explanation
-- Add pre-population: When term is selected, auto-create empty score_sheets for all students in classes (admin can fill in)
-- Timeout remains 15s; paginate if needed
-
-**Files to modify**:
-- `src/app/school-admin/results/page.tsx` (verify term/session queries, add score sheet fallback)
-
-**Verify**:
-```bash
-npm run build
-# Ensure academic_sessions and academic_terms exist for school
-# Enter a term with enrolled students
-# Should show classes; clicking class shows empty/populated score_sheets
-```
-
----
-
-### Phase 5: Create Database Performance Indexes
-
-**File to create**: `database/migrations/153_add_performance_indexes.sql`
-
-```sql
--- Add critical indexes for fast queries
-CREATE INDEX IF NOT EXISTS idx_students_school_id ON students(school_id);
-CREATE INDEX IF NOT EXISTS idx_students_class_arm_combo_id ON students(class_arm_combo_id);
-CREATE INDEX IF NOT EXISTS idx_users_school_id_role ON users(school_id, role);
-CREATE INDEX IF NOT EXISTS idx_staff_school_id ON staff(school_id);
-CREATE INDEX IF NOT EXISTS idx_subject_teacher_assignments_school_teacher ON subject_teacher_assignments(school_id, teacher_id);
-CREATE INDEX IF NOT EXISTS idx_student_subjects_school_student ON student_subjects(school_id, student_id);
-CREATE INDEX IF NOT EXISTS idx_score_sheets_school_term ON score_sheets(school_id, academic_term_id);
-
--- Verify RLS is disabled (critical for performance)
-ALTER TABLE students DISABLE ROW LEVEL SECURITY;
-ALTER TABLE staff DISABLE ROW LEVEL SECURITY;
-ALTER TABLE score_sheets DISABLE ROW LEVEL SECURITY;
-```
-
-**Files to create**:
-- `database/migrations/153_add_performance_indexes.sql`
-
-**Verify**:
-```bash
-# Run migration in Supabase
-# Query should complete in < 1 second per 1000 records
-```
-
----
-
-### Phase 6: Add Validation & Admission Number Fallback
-
-**Goal**: Ensure admission numbers never break; format always valid.
-
-#### 6.1 Strengthen Admission Number Generation
-File: `src/services/student.service.ts` → `generateAdmissionNumber()` method
-
-Current code:
+Solution: Add defensive programming:
 ```typescript
-admissionNumber = `${year}-${classPrefix}-${sequence}`
-```
-
-Issue: If classPrefix is 'UNK' or undefined, result breaks.
-
-**Fix**:
-```typescript
-private static async generateAdmissionNumber(
-  year: number,
-  schoolId: string,
-  classArmComboId: string
-): Promise<string> {
-  try {
-    const { data: classCombo } = await supabase
-      .from('class_arm_combos')
-      .select('classes(name, level), arms(name)')
-      .eq('id', classArmComboId)
-      .single();
-
-    if (!classCombo?.classes?.name || classCombo.classes.level === undefined) {
-      throw new Error('Class data incomplete');
-    }
-
-    const classPrefix = classCombo.classes.name.substring(0, 3).toUpperCase();
-    const armPrefix = classCombo.arms?.name?.substring(0, 1) || 'X';
-    
-    const { count } = await supabase
-      .from('students')
-      .select('*', { count: 'exact', head: true })
-      .eq('school_id', schoolId)
-      .eq('class_arm_combo_id', classArmComboId);
-
-    const sequence = ((count || 0) + 1).toString().padStart(4, '0');
-    return `${year}-${classPrefix}${armPrefix}-${sequence}`;
-  } catch (err) {
-    console.warn('Admission number generation failed, using UUID fallback:', err);
-    // Fallback: Use UUID-based format
-    const uuid = crypto.randomUUID().substring(0, 8).toUpperCase();
-    return `${year}-ADM-${uuid}`;
-  }
+const classCombo = classOptions.find((c) => c.id === formData.classArmComboId)
+if (!classCombo) {
+  console.warn('[Register] Class combo not found in classOptions')
+  setSubjects([])
+  return
 }
+if (!classCombo.classes?.level) {
+  console.warn('[Register] Class level is undefined for combo:', classCombo)
+  setSubjects([])
+  return
+}
+// Now safe to fetch subjects
 ```
 
-**Files to modify**:
-- `src/services/student.service.ts` → `generateAdmissionNumber()` method (add try-catch fallback)
+### For Role Dropdown Fix (Step 3):
+The current form has `formData.role` set in Stage 3. In Stage 5, instead of storing a separate `primaryRole` string, bind the dropdown to `formData.role`. This ensures:
+- Auto-population from Stage 3
+- Single source of truth
+- No duplicate role fields in the form state
 
-**Verify**:
-```bash
-npm run build
-# Test with class that has no name or level
-# Should generate valid fallback admission number (not 'undefined')
-```
-
----
-
-## SECTION C: File Change Manifest
-
-### Files to Create
-
-| File | Lines | Purpose |
-|------|-------|---------|
-| `src/services/staff-registration.service.ts` | 200 | Staff registration with transaction logic, PIN generation |
-| `src/services/student-registration.service.ts` | 250 | Student registration with idempotency, guardian handling |
-| `src/app/auth/student/register/page.tsx` | 500 | 10-stage student registration UI |
-| `database/migrations/153_add_performance_indexes.sql` | 30 | Database indexes for query performance |
-
-### Files to Modify
-
-| File | Changes | Purpose |
-|------|---------|---------|
-| `src/app/auth/staff/register/page.tsx` | Replace single form with 10-stage wizard (450 lines) | Multi-stage staff registration UI |
-| `src/app/school-admin/staff/page.tsx` | Update `fetchStaff()` query; join both users + staff tables; improve error handling | Fix staff page data fetch |
-| `src/app/school-admin/students/page.tsx` | Increase timeout to 30s; add class_arm_combo_id filter; pagination if needed | Fix students page data fetch |
-| `src/app/school-admin/results/page.tsx` | Verify academic_term_id joins correctly; add empty score_sheets fallback | Fix results page data fetch |
-| `src/services/student.service.ts` | Strengthen `generateAdmissionNumber()` with UUID fallback | Prevent broken admission numbers |
-
-### Build & Test Commands
-
-```bash
-# Build
-npm run build
-
-# Lint
-npm run lint
-
-# Manual verification (if test suite exists)
-npm run test
-
-# Development mode
-npm run dev
-# Visit:
-# - http://localhost:3001/auth/staff/register
-# - http://localhost:3001/auth/student/register
-# - http://localhost:3001/school-admin/staff
-# - http://localhost:3001/school-admin/students
-# - http://localhost:3001/school-admin/results
-```
+### For Letter Generation (Steps 4-5):
+The letter templates are HTML strings. To add new fields:
+1. Add fields to the interface (StaffData already has salaryFrequency from staff table)
+2. In the HTML template, add new `<tr>` rows in the details table with conditional rendering: `${staffData.salary ? '<tr>...</tr>' : ''}`
+3. For subjects in student letters, loop through the subjects array: `${subjects?.map(s => '<li>' + s.name + '</li>').join('')}`
 
 ---
 
-## SECTION D: Implementation Order
+## Files Summary
 
-Execute in this sequence to avoid blockers:
-
-1. **Phase 1.1** → Staff Registration Service (foundation)
-2. **Phase 5** → Database Indexes (performance baseline)
-3. **Phase 1.2** → Staff Register Page (10-stage wizard)
-4. **Phase 1.3** → Fix Staff Admin Page (verify data visibility)
-5. **Phase 6** → Strengthen Admission Number Generation (safety)
-6. **Phase 2.1** → Student Registration Service (foundation)
-7. **Phase 2.2** → Student Register Page (10-stage wizard)
-8. **Phase 3.1** → Fix Student Admin Page (verify data visibility)
-9. **Phase 4.1** → Fix Results Admin Page (verify score data)
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `src/app/auth/student/register/page.tsx` | Fix | Add logging, fix useEffect dependencies for subject loading |
+| `src/app/auth/staff/register/page.tsx` | Fix | Same as above + replace text role input with dropdown |
+| `src/services/letter-generation.service.ts` | Enhancement | Add salary frequency, subjects list, session details to letter templates |
+| `src/services/registration-config.service.ts` | Enhancement | Improve logging for debugging |
+| `src/services/staff-registration.service.ts` | Reference | No changes needed; validateStage already supports role validation |
 
 ---
 
-## SECTION E: Known Constraints & Assumptions
+## Verification Checklist
 
-1. **RLS Policies**: All tables have RLS disabled for performance; rely on app-layer school_id checks
-2. **Admission Number Format**: Designed as `YEAR-CLASSPREFIX-SEQUENCE`; fallback to UUID if class data unavailable
-3. **Multi-Tenancy**: Every table has `school_id` FK; queries MUST filter by school_id to prevent cross-school data leaks
-4. **Academic Calendar**: Sessions and terms auto-created in migration 152; admins can create additional as needed
-5. **Subject Curriculum**: Nigerian curriculum (levels 0-14) pre-populated; subjects linked via `applicable_to_levels` int array
-6. **Staff vs Users**: Staff person exists in `users` table (mandatory); optional `staff` record for employment details
-7. **Student Enrollment**: Students MUST have `class_arm_combo_id` set; incomplete registrations won't display in admin pages
-8. **Idempotency**: Staff/student registration checks (school_id, email) to prevent duplicates on accidental re-submit
-9. **Timeout Strategy**: Pages use 15-30 second timeouts for queries; pagination/filtering recommended for >1000 records per school
+- [ ] Student registration: Select school, session, term, class → subjects dropdown populates
+- [ ] Staff registration: Select school, class → subjects dropdown populates  
+- [ ] Staff Stage 5: Role dropdown visible and pre-populated from Stage 3
+- [ ] Staff appointment letter: Salary frequency, full role, department, bank details display
+- [ ] Student admission letter: Subjects list, session, term display
+- [ ] No console errors in browser DevTools during registration flow
+- [ ] All form progression buttons (Next/Previous) still function correctly
 
 ---
 
-## SECTION F: Success Criteria
+## Testing Scenarios
 
-✅ **Staff Registration**:
-- [ ] 10-stage form displays correctly with progress bar
-- [ ] All stages validate required fields (email format, phone format)
-- [ ] Subject selection filters by class level automatically
-- [ ] Submission creates both `users` AND `staff` records
-- [ ] Staff page displays newly registered staff within 5 seconds
-- [ ] No duplicate staff created on accidental double-submit (within 60 seconds)
+### Test 1: Student Registration Complete Flow
+1. Navigate to student registration
+2. Stage 1: Fill personal info, select school (e.g., "Test School")
+3. Stage 2: Fill guardian info
+4. Stage 3: Fill admission info
+5. Stage 4: Select session → Select term → Select class (verify subjects load automatically)
+6. Stage 5: Verify subjects list is populated and can select multiple
+7. Expected: Subjects dropdown shows 5+ subjects relevant to the selected class level
+8. **Verification**: Browser console shows subject fetch logs without errors
 
-✅ **Student Registration**:
-- [ ] 10-stage form displays correctly with progress bar
-- [ ] Admission number auto-generated with valid format (never 'undefined')
-- [ ] Guardian records created separately from student user
-- [ ] Subject selection filters by class level automatically
-- [ ] Submission creates `users`, `students`, `student_subjects`, `guardians` records
-- [ ] Student page displays newly registered students within 5 seconds
-- [ ] PIN auto-generated and displayed to parent
+### Test 2: Staff Registration Complete Flow
+1. Navigate to staff registration
+2. Stage 1: Fill personal info
+3. Stage 2: Select school, fill contact info
+4. Stage 3: Select role (e.g., TEACHER)
+5. Stage 4: Fill professional info
+6. Stage 5: Verify role dropdown shows "TEACHER" and is pre-populated
+7. Stage 6: Select class (verify subjects load in Stage 7)
+8. Stage 7: Verify subjects dropdown is populated and can select multiple
+9. **Verification**: Subjects appear in Stage 7; role dropdown in Stage 5 matches Stage 3 selection
 
-✅ **Data Fetching**:
-- [ ] Staff page queries return all staff for school within 5 seconds
-- [ ] Student page queries return all students for school within 5 seconds
-- [ ] Results page loads classes and populated/empty score_sheets within 5 seconds
-- [ ] No timeout errors on pages with < 500 records per school
-- [ ] Database indexes present and used (verify with EXPLAIN ANALYZE)
+### Test 3: Letter Generation with New Fields
+1. Complete staff registration with full details (salary, bank info, etc.)
+2. Trigger "Generate Appointment Letter" button
+3. Open letter preview
+4. Expected: See salary frequency, department, and bank details in letter
+5. **Verification**: All filled form fields appear in letter table
 
-✅ **Code Quality**:
-- [ ] `npm run build` completes without errors
-- [ ] `npm run lint` finds no issues
-- [ ] No console errors in browser DevTools on happy path
+### Test 4: Student Admission Letter
+1. Complete student registration with subjects selected
+2. Trigger "Generate Admission Letter" button
+3. Open letter preview
+4. Expected: See subjects list, session, term in letter
+5. **Verification**: All enrolled subjects listed; session and term visible
 
 ---
 
-This plan is complete and ready for implementation.
+## Risk Assessment
+
+| Risk | Severity | Mitigation |
+|------|----------|-----------|
+| Subject query may fail if level is undefined | Medium | Add defensive null checks and logging |
+| Role dropdown binding to formData.role may cause conflicts | Low | formData.role already exists; just rebind UI |
+| Letter template changes may break CSS on printing | Low | Keep existing style structure; only add rows to table |
+| Subjects already partially load (partial fix needed) | Low | Root cause is dependency array; fix is straightforward |
+
+---
+
+## Success Criteria
+
+✅ Student registration Stage 5: Subjects dropdown populates after class selection  
+✅ Staff registration Stage 7: Subjects dropdown populates after class selection  
+✅ Staff registration Stage 5: Role dropdown visible with pre-populated value from Stage 3  
+✅ Staff appointment letter: Includes salary frequency and bank details  
+✅ Student admission letter: Includes assigned subjects and academic session  
+✅ No breaking changes to existing registration flow  
+✅ All console logs clean (no errors)  
+
+---
+
+## Next Steps After Implementation
+
+1. **Test deployment to Vercel**: Ensure fixes work in production environment
+2. **Update navbar navigation**: Fix school admin navbar not showing (separate issue mentioned in original request)
+3. **Next button responsiveness**: Test registration form progression buttons are responsive (separate issue mentioned)
+4. **Monitor logs**: Use browser DevTools to verify logging appears during first week of usage
+
+---
+
+**Estimated Effort**: 4-5 hours  
+**Priority**: High (blocking staff/student registration)  
+**Complexity**: Medium (fixes require debugging + template updates)

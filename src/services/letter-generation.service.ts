@@ -12,10 +12,26 @@ interface StaffData {
   position: string
   department?: string
   salary?: number
-  bank_name?: string
-  account_number?: string
+  salaryFrequency?: string
+  bankName?: string
+  accountNumber?: string
+  accountName?: string
+  role?: string
   employment_date?: string
   qualification?: string
+}
+
+interface StudentData {
+  id: string
+  full_name: string
+  admission_number: string
+  email?: string
+  className?: string
+  session?: string
+  term?: string
+  subjects?: any[]
+  date_of_birth?: string
+  parent_name?: string
 }
 
 interface SchoolData {
@@ -266,6 +282,10 @@ export class LetterGenerationService {
                     <td class="label">Position:</td>
                     <td>${staffData.position || 'Not specified'}</td>
                 </tr>
+                <tr>
+                    <td class="label">Role:</td>
+                    <td>${staffData.role || 'Not specified'}</td>
+                </tr>
                 ${staffData.department ? `
                 <tr>
                     <td class="label">Department:</td>
@@ -281,7 +301,13 @@ export class LetterGenerationService {
                 ${staffData.salary ? `
                 <tr>
                     <td class="label">Salary:</td>
-                    <td>₦${(staffData.salary).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                    <td>₦${(staffData.salary).toLocaleString('en-US', { maximumFractionDigits: 2 })} (${staffData.salaryFrequency || 'Monthly'})</td>
+                </tr>
+                ` : ''}
+                ${staffData.salaryFrequency && !staffData.salary ? `
+                <tr>
+                    <td class="label">Salary Frequency:</td>
+                    <td>${staffData.salaryFrequency}</td>
                 </tr>
                 ` : ''}
                 ${staffData.qualification ? `
@@ -291,6 +317,31 @@ export class LetterGenerationService {
                 </tr>
                 ` : ''}
             </table>
+
+            ${staffData.bankName || staffData.accountNumber ? `
+            <!-- Bank Details Section -->
+            <p style="margin-top: 20px; font-weight: bold;">Bank Details:</p>
+            <table class="details-table">
+                ${staffData.bankName ? `
+                <tr>
+                    <td class="label">Bank Name:</td>
+                    <td>${staffData.bankName}</td>
+                </tr>
+                ` : ''}
+                ${staffData.accountName ? `
+                <tr>
+                    <td class="label">Account Name:</td>
+                    <td>${staffData.accountName}</td>
+                </tr>
+                ` : ''}
+                ${staffData.accountNumber ? `
+                <tr>
+                    <td class="label">Account Number:</td>
+                    <td>${staffData.accountNumber}</td>
+                </tr>
+                ` : ''}
+            </table>
+            ` : ''}
 
             <!-- Terms and Conditions -->
             <p style="margin-top: 20px;">
@@ -436,16 +487,28 @@ export class LetterGenerationService {
                     <td class="label">Admission Number:</td>
                     <td>${studentData.admission_number || 'TBD'}</td>
                 </tr>
-                ${classInfo ? `
+                ${studentData.className ? `
                 <tr>
                     <td class="label">Class Assigned:</td>
-                    <td>${classInfo.name || 'To be determined'}</td>
+                    <td>${studentData.className}</td>
                 </tr>
                 ` : ''}
                 ${studentData.session ? `
                 <tr>
                     <td class="label">Academic Session:</td>
                     <td>${studentData.session}</td>
+                </tr>
+                ` : ''}
+                ${studentData.term ? `
+                <tr>
+                    <td class="label">Term:</td>
+                    <td>${studentData.term}</td>
+                </tr>
+                ` : ''}
+                ${studentData.subjects && studentData.subjects.length > 0 ? `
+                <tr>
+                    <td class="label">Enrolled Subjects:</td>
+                    <td>${studentData.subjects.map(s => s.name || s).join(', ')}</td>
                 </tr>
                 ` : ''}
                 ${studentData.date_of_birth ? `
@@ -455,6 +518,14 @@ export class LetterGenerationService {
                 </tr>
                 ` : ''}
             </table>
+
+            ${studentData.subjects && studentData.subjects.length > 0 ? `
+            <!-- Subjects Section -->
+            <p style="margin-top: 20px; font-weight: bold;">Assigned Subjects:</p>
+            <ul style="margin-left: 20px; margin-top: 10px;">
+                ${studentData.subjects.map(s => `<li>${s.name || s}</li>`).join('')}
+            </ul>
+            ` : ''}
 
             <!-- Next Steps -->
             <p style="margin-top: 20px;">

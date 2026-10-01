@@ -13,12 +13,11 @@ const STAGES = [
   { number: 2, title: 'Contact & Address', icon: '📍' },
   { number: 3, title: 'Employment Information', icon: '💼' },
   { number: 4, title: 'Professional Information', icon: '🎓' },
-  { number: 5, title: 'Role & Responsibilities', icon: '⚙️' },
-  { number: 6, title: 'Class Assignment', icon: '🏫' },
-  { number: 7, title: 'Subject Assignment', icon: '📚' },
-  { number: 8, title: 'Salary & Bank', icon: '💰' },
-  { number: 9, title: 'Account & Security', icon: '🔐' },
-  { number: 10, title: 'Review & Confirm', icon: '✓' },
+  { number: 5, title: 'Class Assignment', icon: '🏫' },
+  { number: 6, title: 'Subject Assignment', icon: '📚' },
+  { number: 7, title: 'Salary & Bank', icon: '💰' },
+  { number: 8, title: 'Account & Security', icon: '🔐' },
+  { number: 9, title: 'Review & Confirm', icon: '✓' },
 ]
 
 interface Schools {
@@ -152,21 +151,40 @@ export default function StaffRegisterPage() {
 
     const loadSubjects = async () => {
       try {
+        console.log('[StaffRegister] Loading subjects for classArmComboId:', formData.classArmComboId)
+        console.log('[StaffRegister] Available classOptions:', classOptions)
+        
         const classCombo = classOptions.find((c) => c.id === formData.classArmComboId)
-        if (!classCombo?.classes?.level) return
+        
+        if (!classCombo) {
+          console.warn('[StaffRegister] Class combo not found in classOptions')
+          setSubjects([])
+          toast.error('Selected class not found. Please reselect.')
+          return
+        }
+        
+        if (!classCombo?.classes?.level) {
+          console.warn('[StaffRegister] Class level is undefined for combo:', classCombo)
+          setSubjects([])
+          toast.error('Class level information not available. Please reselect class.')
+          return
+        }
 
+        console.log('[StaffRegister] Fetching subjects for level:', classCombo.classes.level)
         const subjectList = await CanonicalSubjectService.getSubjectsForLevel(
           formData.schoolId!,
           classCombo.classes.level
         )
+        console.log('[StaffRegister] Subjects loaded:', subjectList)
         setSubjects(subjectList)
       } catch (error) {
-        console.error('Error loading subjects:', error)
+        console.error('[StaffRegister] Error loading subjects:', error)
         toast.error('Failed to load subjects')
+        setSubjects([])
       }
     }
     loadSubjects()
-  }, [formData.classArmComboId, formData.schoolId])
+  }, [formData.classArmComboId, formData.schoolId, classOptions])
 
   const validateStage = (): boolean => {
     if (!StaffRegistrationService.validateStage(currentStage, formData)) {
@@ -207,25 +225,11 @@ export default function StaffRegisterPage() {
     return true
   }
 
-  const handleNext = async () => {
-    // Don't proceed if already loading or validation is stuck
-    if (isLoading) return
-    
-    try {
-      const isValid = validateStage()
-      if (!isValid) {
-        console.log('[Register] Stage validation failed for stage:', currentStage)
-        return
-      }
-
-      // Allow progression even if some optional fields are missing
-      if (currentStage < STAGES.length) {
-        setCurrentStage(currentStage + 1)
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      }
-    } catch (error) {
-      console.error('[Register] handleNext error:', error)
-      toast.error('An error occurred while progressing to next stage')
+  const handleNext = () => {
+    if (!validateStage()) return
+    if (currentStage < STAGES.length) {
+      setCurrentStage(currentStage + 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 
@@ -418,20 +422,6 @@ export default function StaffRegisterPage() {
           <div className="space-y-4">
             <h3 className="text-lg font-semibold mb-4">Employment Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="Staff ID"
-                value={formData.staffId || ''}
-                onChange={(e) => setFormData({ ...formData, staffId: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Position *"
-                value={formData.position || ''}
-                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
               <select
                 value={formData.role || 'TEACHER'}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
@@ -480,13 +470,6 @@ export default function StaffRegisterPage() {
                 placeholder="Date Appointed *"
                 value={formData.dateAppointed || ''}
                 onChange={(e) => setFormData({ ...formData, dateAppointed: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Reporting Authority"
-                value={formData.reportingAuthority || ''}
-                onChange={(e) => setFormData({ ...formData, reportingAuthority: e.target.value })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
@@ -553,42 +536,7 @@ export default function StaffRegisterPage() {
           </div>
         )
 
-      case 5: // Role & Responsibilities
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Role & Responsibilities</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="Primary Role *"
-                value={formData.primaryRole || ''}
-                onChange={(e) => setFormData({ ...formData, primaryRole: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Admin Responsibility"
-                value={formData.adminResponsibility || ''}
-                onChange={(e) => setFormData({ ...formData, adminResponsibility: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <textarea
-                placeholder="Secondary Responsibilities (comma-separated)"
-                value={(formData.secondaryResponsibilities || []).join(', ')}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    secondaryResponsibilities: e.target.value.split(',').map((s) => s.trim()),
-                  })
-                }
-                rows={3}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none col-span-2"
-              />
-            </div>
-          </div>
-        )
-
-      case 6: // Class Assignment
+      case 5: // Class Assignment
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold mb-4">Class Assignment</h3>
@@ -622,7 +570,7 @@ export default function StaffRegisterPage() {
           </div>
         )
 
-      case 7: // Subject Assignment
+      case 6: // Subject Assignment
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold mb-4">Subject Assignment</h3>
@@ -665,7 +613,7 @@ export default function StaffRegisterPage() {
           </div>
         )
 
-      case 8: // Salary & Bank
+      case 7: // Salary & Bank
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold mb-4">Salary & Bank Information</h3>
@@ -721,7 +669,7 @@ export default function StaffRegisterPage() {
           </div>
         )
 
-      case 9: // Account & Security
+      case 8: // Account & Security
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold mb-4">Account & Security</h3>
@@ -772,7 +720,7 @@ export default function StaffRegisterPage() {
           </div>
         )
 
-      case 10: // Review & Confirmation
+      case 9: // Review & Confirmation
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold mb-4">Review & Confirmation</h3>
@@ -798,8 +746,7 @@ export default function StaffRegisterPage() {
               <hr />
               <div>
                 <p className="text-sm font-semibold text-gray-600">Employment</p>
-                <p className="text-sm">{formData.position} ({formData.role})</p>
-                <p className="text-sm">Employment Type: {formData.employmentType}</p>
+                <p className="text-sm">{formData.role} - {formData.department || 'No department'} ({formData.employmentType})</p>
                 <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(3)}>
                   ✏️ Edit
                 </p>
@@ -808,7 +755,7 @@ export default function StaffRegisterPage() {
               <div>
                 <p className="text-sm font-semibold text-gray-600">Assigned Subjects</p>
                 <p className="text-sm">{(formData.subjectIds || []).length} subjects</p>
-                <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(7)}>
+                <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(5)}>
                   ✏️ Edit
                 </p>
               </div>
