@@ -9,10 +9,10 @@ import { AuthService } from '@/services/auth.service'
 import { toast } from 'react-hot-toast'
 
 const STAGES = [
-  { number: 1, title: 'Personal Information', icon: '👤' },
-  { number: 2, title: 'Parent/Guardian & Admission', icon: '👨‍👩‍👧' },
-  { number: 3, title: 'Class, Session & Subjects', icon: '🏫' },
-  { number: 4, title: 'Medical & Documents', icon: '📄' },
+  { number: 1, title: 'Personal & Contact Information', icon: '👤' },
+  { number: 2, title: 'Academic & Guardian Information', icon: '👨‍👩‍👧' },
+  { number: 3, title: 'Class & Subject Assignment', icon: '📚' },
+  { number: 4, title: 'Account Security', icon: '🔐' },
   { number: 5, title: 'Review & Confirm', icon: '✓' },
 ]
 
