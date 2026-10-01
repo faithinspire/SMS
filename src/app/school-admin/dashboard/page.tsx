@@ -68,130 +68,113 @@ export default function SchoolAdminDashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Data loading timeout - please refresh')), 15000)
-      )
+      const currentUser = await AuthService.getCurrentUser()
+      
+      if (!currentUser || (currentUser.role !== 'SCHOOL_ADMIN' && currentUser.role !== 'ADMIN')) {
+        router.push('/landing')
+        return
+      }
 
-      const loadPromise = (async () => {
-        const currentUser = await AuthService.getCurrentUser()
-        
-        if (!currentUser || (currentUser.role !== 'SCHOOL_ADMIN' && currentUser.role !== 'ADMIN')) {
-          router.push('/landing')
-          return
-        }
+      setState(s => ({ ...s, user: currentUser }))
 
-        setState(s => ({ ...s, user: currentUser }))
+      if (!currentUser.school_id) {
+        setState(s => ({ ...s, error: '❌ School ID not found - contact support', loading: false }))
+        return
+      }
 
-        if (!currentUser.school_id) {
-          setState(s => ({ ...s, error: '❌ School ID not found - contact support', loading: false }))
-          return
-        }
+      const schoolData = await SchoolService.getSchoolById(currentUser.school_id)
+      setState(s => ({ ...s, school: schoolData }))
 
-        const schoolData = await SchoolService.getSchoolById(currentUser.school_id)
-        setState(s => ({ ...s, school: schoolData }))
+      // FIX: Sequential queries instead of Promise.all to avoid timeouts
+      try {
+        // 1. Load Staff
+        const staffResult = await supabase
+          .from('users')
+          .select('id, full_name, email, role, status, phone, gender, address, state, lga')
+          .eq('school_id', currentUser.school_id)
+          .in('role', ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'STAFF'])
+        const staffData = staffResult.error ? [] : (staffResult.data || [])
+        if (staffResult.error) console.error('[Staff Query Error]', staffResult.error.message)
 
-        // FIX: Use correct canonical table names and columns
-        const [staffData, studentsData, transactionsData, sessionsData, termsData, classesData] = await Promise.all([
-          // Staff: Users with role='STAFF'
-          supabase
+        // 2. Load Students
+        let studentsData: any[] = []
+        const studentsResult = await supabase
+          .from('students')
+          .select('id, admission_number, department, date_of_birth, user_id')
+          .eq('school_id', currentUser.school_id)
+          .limit(500)
+        if (studentsResult.error) {
+          console.error('[Students Query Error]', studentsResult.error.message)
+        } else if (studentsResult.data && studentsResult.data.length > 0) {
+          const userIds = studentsResult.data.map(s => s.user_id).filter(Boolean)
+          const usersResult = await supabase
             .from('users')
-            .select('id, full_name, email, role, status, phone, gender, address, state, lga')
-            .eq('school_id', currentUser.school_id)
-            .in('role', ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'STAFF'])
-            .then(r => {
-              if (r.error) console.error('[Staff Query Error]', r.error.message)
-              return r.data || []
-            }),
-          
-          // Students: Use students table + join users for full_name
-          supabase
-            .from('students')
-            .select('id, admission_number, department, date_of_birth, user_id')
-            .eq('school_id', currentUser.school_id)
-            .then(async r => {
-              if (r.error) {
-                console.error('[Students Query Error]', r.error.message)
-                return []
-              }
-              // Get user details for each student
-              if (!r.data || r.data.length === 0) return []
-              const userIds = r.data.map(s => s.user_id).filter(Boolean)
-              const { data: usersData } = await supabase
-                .from('users')
-                .select('id, full_name, email, phone, gender, address, state, lga')
-                .in('id', userIds)
-              const usersMap = Object.fromEntries((usersData || []).map(u => [u.id, u]))
-              return r.data.map(s => ({
-                ...s,
-                full_name: usersMap[s.user_id]?.full_name || 'Unknown',
-                email: usersMap[s.user_id]?.email || '',
-                phone: usersMap[s.user_id]?.phone || '',
-                gender: usersMap[s.user_id]?.gender || '',
-                address: usersMap[s.user_id]?.address || '',
-                state: usersMap[s.user_id]?.state || '',
-                lga: usersMap[s.user_id]?.lga || '',
-              }))
-            }),
-          
-          // Transactions: From transactions table
-          supabase
-            .from('transactions')
-            .select('id, type, recipient_id, recipient_name, amount, purpose, status, created_at')
-            .eq('school_id', currentUser.school_id)
-            .order('created_at', { ascending: false })
-            .limit(100)
-            .then(r => {
-              if (r.error) console.error('[Transactions Query Error]', r.error.message)
-              return r.data || []
-            }),
-          
-          // Academic Sessions: From academic_sessions table (CANONICAL - NOT terms)
-          supabase
-            .from('academic_sessions')
-            .select('id, session_year, is_active, start_year, end_year')
-            .eq('school_id', currentUser.school_id)
-            .order('start_year', { ascending: false })
-            .then(r => {
-              if (r.error) console.error('[Sessions Query Error]', r.error.message)
-              return r.data || []
-            }),
-          
-          // Academic Terms: From academic_terms table (CANONICAL - NOT terms)
-          supabase
-            .from('academic_terms')
-            .select('id, session_id, term_name, term_order, is_active, start_date, end_date')
-            .eq('school_id', currentUser.school_id)
-            .order('term_order', { ascending: true })
-            .then(r => {
-              if (r.error) console.error('[Terms Query Error]', r.error.message)
-              return r.data || []
-            }),
-          
-          // Class Arm Combos
-          supabase
-            .from('class_arm_combos')
-            .select('id, class_id, arm_id, class_teacher_id')
-            .eq('school_id', currentUser.school_id)
-            .then(r => {
-              if (r.error) console.error('[Classes Query Error]', r.error.message)
-              return r.data || []
-            }),
-        ])
+            .select('id, full_name, email, phone, gender, address, state, lga')
+            .in('id', userIds)
+          const usersMap = Object.fromEntries((usersResult.data || []).map(u => [u.id, u]))
+          studentsData = studentsResult.data.map(s => ({
+            ...s,
+            full_name: usersMap[s.user_id]?.full_name || 'Unknown',
+            email: usersMap[s.user_id]?.email || '',
+            phone: usersMap[s.user_id]?.phone || '',
+            gender: usersMap[s.user_id]?.gender || '',
+            address: usersMap[s.user_id]?.address || '',
+            state: usersMap[s.user_id]?.state || '',
+            lga: usersMap[s.user_id]?.lga || '',
+          }))
+        }
+
+        // 3. Load Transactions
+        const txResult = await supabase
+          .from('transactions')
+          .select('id, type, recipient_id, recipient_name, amount, purpose, status, created_at')
+          .eq('school_id', currentUser.school_id)
+          .order('created_at', { ascending: false })
+          .limit(100)
+        const transactionsData = txResult.error ? [] : (txResult.data || [])
+        if (txResult.error) console.error('[Transactions Query Error]', txResult.error.message)
+
+        // 4. Load Sessions
+        const sessionsResult = await supabase
+          .from('academic_sessions')
+          .select('id, session_year, is_active, start_year, end_year')
+          .eq('school_id', currentUser.school_id)
+          .order('start_year', { ascending: false })
+        const sessionsData = sessionsResult.error ? [] : (sessionsResult.data || [])
+        if (sessionsResult.error) console.error('[Sessions Query Error]', sessionsResult.error.message)
+
+        // 5. Load Terms
+        const termsResult = await supabase
+          .from('academic_terms')
+          .select('id, session_id, term_name, term_order, is_active, start_date, end_date')
+          .eq('school_id', currentUser.school_id)
+          .order('term_order', { ascending: true })
+        const termsData = termsResult.error ? [] : (termsResult.data || [])
+        if (termsResult.error) console.error('[Terms Query Error]', termsResult.error.message)
+
+        // 6. Load Classes
+        const classesResult = await supabase
+          .from('class_arm_combos')
+          .select('id, class_id, arm_id, class_teacher_id')
+          .eq('school_id', currentUser.school_id)
+        const classesData = classesResult.error ? [] : (classesResult.data || [])
+        if (classesResult.error) console.error('[Classes Query Error]', classesResult.error.message)
 
         setState(s => ({
           ...s,
-          staffMembers: staffData || [],
-          students: studentsData || [],
-          transactions: transactionsData || [],
-          sessions: sessionsData || [],
-          terms: termsData || [],
-          classes: classesData || [],
+          staffMembers: staffData,
+          students: studentsData,
+          transactions: transactionsData,
+          sessions: sessionsData,
+          terms: termsData,
+          classes: classesData,
           loading: false,
           selectedSession: sessionsData && sessionsData.length > 0 ? sessionsData[0].id : null,
         }))
-      })()
-
-      await Promise.race([loadPromise, timeoutPromise])
+      } catch (queryErr: any) {
+        console.error('[Dashboard] Query error:', queryErr)
+        setState(s => ({ ...s, error: `❌ ${queryErr.message}`, loading: false }))
+      }
     } catch (err: any) {
       console.error('[Dashboard] Error:', err)
       setState(s => ({ ...s, error: `❌ ${err.message}`, loading: false }))
