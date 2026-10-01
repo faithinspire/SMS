@@ -119,9 +119,9 @@ export class StaffRegistrationService {
         console.warn('[StaffRegistration] Warning checking existing user:', checkError)
       }
 
-      // Generate PIN for staff login (6 digits)
-      const pin = this.generatePin()
-      console.log('[StaffRegistration] Generated PIN for new staff')
+      // NOTE: PIN is NO LONGER generated. Staff login with email + password
+      // const pin = this.generatePin()
+      // console.log('[StaffRegistration] Generated PIN for new staff')
 
       // Step 1: Create user record (REQUIRED for all staff)
       // Generate proper UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
@@ -286,10 +286,9 @@ export class StaffRegistrationService {
         success: true,
         userId,
         staffId: staffId || `staff_${userId}`,
-        pin,
         email,
         fullName,
-        message: `Staff member ${fullName} registered successfully. PIN: ${pin}`,
+        message: `Staff member ${fullName} registered successfully. Please login with your email and password.`,
       }
     } catch (error: any) {
       console.error('[StaffRegistration] Registration failed:', error)

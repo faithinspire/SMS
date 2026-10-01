@@ -109,6 +109,7 @@ export class LetterGenerationService {
     class?: any
   } | null> {
     try {
+      // Step 1: Fetch student without nested users join (to avoid relationship conflict)
       const { data: student, error: studentError } = await this.supabase
         .from('students')
         .select(`
@@ -117,28 +118,7 @@ export class LetterGenerationService {
           date_of_birth,
           status,
           user_id,
-          class_arm_combo_id,
-          users (
-            id,
-            full_name,
-            email,
-            phone,
-            gender
-          ),
-          class_arm_combos (
-            id,
-            class_id,
-            arm_id,
-            classes (
-              id,
-              name,
-              level
-            ),
-            arms (
-              id,
-              name
-            )
-          )
+          class_arm_combo_id
         `)
         .eq('id', studentId)
         .eq('school_id', schoolId)
@@ -146,6 +126,35 @@ export class LetterGenerationService {
 
       if (studentError) throw studentError
 
+      // Step 2: Fetch user data separately
+      let userData = null
+      if (student.user_id) {
+        const { data: user } = await this.supabase
+          .from('users')
+          .select('id, full_name, email, phone, gender')
+          .eq('id', student.user_id)
+          .single()
+        userData = user
+      }
+
+      // Step 3: Fetch class/arm data
+      let classData = null
+      if (student.class_arm_combo_id) {
+        const { data: classArm } = await this.supabase
+          .from('class_arm_combos')
+          .select(`
+            id,
+            class_id,
+            arm_id,
+            classes (id, name, level),
+            arms (id, name)
+          `)
+          .eq('id', student.class_arm_combo_id)
+          .single()
+        classData = classArm
+      }
+
+      // Step 4: Fetch guardians
       const { data: guardians, error: guardiansError } = await this.supabase
         .from('guardians')
         .select('*')
@@ -155,9 +164,12 @@ export class LetterGenerationService {
       if (guardiansError) throw guardiansError
 
       return {
-        student,
+        student: {
+          ...student,
+          user: userData,
+        },
         guardians: guardians || [],
-        class: student.class_arm_combos,
+        class: classData,
       }
     } catch (error) {
       console.error('Error fetching student data:', error)

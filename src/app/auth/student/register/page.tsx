@@ -30,12 +30,13 @@ interface FormState extends Partial<StudentRegistrationData> {
 export default function StudentRegisterPage() {
   const router = useRouter()
   const [currentStage, setCurrentStage] = useState(1)
-  const [schools, setSchools] = useState<any[]>([])
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const [sessions, setSessions] = useState<any[]>([])
   const [terms, setTerms] = useState<any[]>([])
   const [classOptions, setClassOptions] = useState<any[]>([])
   const [subjects, setSubjects] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [authLoading, setAuthLoading] = useState(true)
 
   const [formData, setFormData] = useState<FormState>({
     // Stage 1: Student Personal
@@ -96,28 +97,34 @@ export default function StudentRegisterPage() {
     passportUrl: '',
     birthCertificateUrl: '',
     previousRecordsUrl: '',
-
-    // Common
-    schoolId: '',
   })
 
-  // Load schools
+  // Get current user and school on mount
   useEffect(() => {
-    const loadSchools = async () => {
+    const loadUserContext = async () => {
       try {
-        const list = await AuthService.getAllSchools()
-        setSchools(list)
+        const user = await AuthService.getCurrentUser()
+        if (!user || !user.school_id) {
+          toast.error('You must be logged in as a school admin to register students')
+          router.push('/auth/login')
+          return
+        }
+        setCurrentUser(user)
+        // Auto-populate schoolId from auth context
+        setFormData(prev => ({ ...prev, schoolId: user.school_id }))
       } catch (error) {
-        console.error('Error loading schools:', error)
-        toast.error('Failed to load schools')
+        console.error('Error loading user context:', error)
+        router.push('/auth/login')
+      } finally {
+        setAuthLoading(false)
       }
     }
-    loadSchools()
-  }, [])
+    loadUserContext()
+  }, [router])
 
-  // Load sessions and classes when school changes
+  // Load sessions and classes when school is set
   useEffect(() => {
-    if (!formData.schoolId) {
+    if (!formData.schoolId || !currentUser) {
       setSessions([])
       setTerms([])
       setClassOptions([])
@@ -146,7 +153,7 @@ export default function StudentRegisterPage() {
       }
     }
     loadSessionsAndClasses()
-  }, [formData.schoolId])
+  }, [formData.schoolId, currentUser])
 
   // Load terms when session changes
   useEffect(() => {
@@ -798,6 +805,33 @@ export default function StudentRegisterPage() {
       default:
         return null
     }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-indigo-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-semibold">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 font-semibold mb-4">You must be logged in as a school admin to register students.</p>
+          <button
+            onClick={() => router.push('/auth/login')}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

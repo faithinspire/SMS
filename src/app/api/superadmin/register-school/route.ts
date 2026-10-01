@@ -73,7 +73,24 @@ export async function POST(req: NextRequest) {
 
     console.log('Starting school registration for:', school_name)
 
-    // Create school record WITH admin credentials
+    // Check if school email already exists
+    const { data: existingSchool, error: checkError } = await supabaseAdmin
+      .from('schools')
+      .select('id, name')
+      .eq('email', school_email)
+      .maybeSingle()
+
+    if (existingSchool) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: `School with email ${school_email} already exists in the system`
+        },
+        { status: 400 }
+      )
+    }
+
+    // Create school record WITHOUT ON CONFLICT
     const { data: school, error: schoolError } = await supabaseAdmin
       .from('schools')
       .insert({
@@ -165,11 +182,14 @@ export async function POST(req: NextRequest) {
       }
 
       if (!existingUser) {
+        // Generate a UUID for the user if auth user wasn't created
+        const userId = authUser?.user?.id || Math.random().toString(36).substring(2, 15)
+        
         // Create user record in users table - this is REQUIRED for login to work
         const { data: newUser, error: insertError } = await supabaseAdmin
           .from('users')
           .insert({
-            id: authUser?.user?.id, // Use the auth user ID to link them
+            id: userId,
             school_id: school.id,
             email: admin_email,
             full_name: admin_name,
