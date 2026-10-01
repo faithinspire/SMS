@@ -242,6 +242,20 @@ export default function SchoolAdminResultsPage() {
         setSchool(schoolData)
         console.log('[Results] School loaded:', schoolData?.name)
 
+        // CRITICAL: Ensure school has academic sessions and terms
+        console.log('[Results] Ensuring school data exists...')
+        try {
+          const ensureResponse = await fetch(
+            `/api/results/ensure-school-data?schoolId=${currentUser.school_id}`,
+            { method: 'POST' }
+          )
+          const ensureData = await ensureResponse.json()
+          console.log('[Results] School data ensured:', ensureData)
+        } catch (err) {
+          console.warn('[Results] Warning ensuring school data:', err)
+          // Non-critical - proceed with loading existing data
+        }
+
         // Load sessions and terms in parallel
         const [sessionsResult, termsResult] = await Promise.all([
           getSupabaseClient()
@@ -272,8 +286,8 @@ export default function SchoolAdminResultsPage() {
           console.log('[Results] Auto-selecting session:', firstSession.session_year)
           setSelectedSession(firstSession.id)
         } else {
-          console.warn('[Results] No academic sessions found in database')
-          toast.error('No academic sessions found. Please create sessions in Academic Management.')
+          console.warn('[Results] No academic sessions found in database after ensure attempt')
+          toast.error('No academic sessions found. Please ensure migration 152 has been executed.')
         }
       } catch (error) {
         console.error('[Results] Load error:', error)

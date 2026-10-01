@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase-client'
+import { v4 as uuidv4 } from 'uuid'
 
 export interface Student {
   id: string
@@ -211,8 +212,9 @@ export class StudentService {
 
   /**
    * Generate unique admission number for a student
-   * Format: YEAR-CLASSNAME-SEQUENCE
-   * Example: 2026-SSA-0001
+   * Format: YEAR-CLASSPREFIX-SEQUENCE or YEAR-ADM-UUID (fallback)
+   * Example: 2026-SSA-0001 or 2026-ADM-A1B2C3D4 (if class data incomplete)
+   * CRITICAL: Fallback ensures admission_number is never 'undefined'
    */
   private static async generateAdmissionNumber(
     schoolId: string,
@@ -221,28 +223,60 @@ export class StudentService {
   ): Promise<string> {
     try {
       const year = new Date().getFullYear()
+      
+      // Validate className is not empty or 'undefined'
+      if (!className || className === 'undefined' || className.trim() === '') {
+        throw new Error('Class name is empty or undefined')
+      }
+      
       const classPrefix = className.substring(0, 3).toUpperCase().replace(/\s+/g, '')
       
-      // Get the count of existing students in this school to create sequence
-      const { data: existingStudents, error: countError } = await supabase
+      // Validate classPrefix is not empty
+      if (!classPrefix || classPrefix.length === 0) {
+        throw new Error('Class prefix generation failed')
+      }
+      
+      // Get the count of existing students in this class to create sequence
+      const { count: classStudentCount, error: countError } = await supabase
         .from('students')
-        .select('id', { count: 'exact' })
+        .select('id', { count: 'exact', head: true })
         .eq('school_id', schoolId)
+        .eq('class_arm_combo_id', classArmComboId)
 
       if (countError) {
-        console.warn('⚠️ Could not count existing students, using random sequence')
+        console.warn('⚠️ Could not count class students, using random sequence')
         const randomSeq = Math.floor(Math.random() * 9000) + 1000
         return `${year}-${classPrefix}-${randomSeq}`
       }
 
-      const sequence = ((existingStudents?.length || 0) + 1).toString().padStart(4, '0')
-      return `${year}-${classPrefix}-${sequence}`
+      const sequence = ((classStudentCount || 0) + 1).toString().padStart(4, '0')
+      const admissionNumber = `${year}-${classPrefix}-${sequence}`
+      
+      // Final validation: never return undefined
+      if (!admissionNumber || admissionNumber.includes('undefined')) {
+        throw new Error('Generated admission number contains undefined')
+      }
+      
+      return admissionNumber
     } catch (err) {
-      console.error('Error generating admission number:', err)
-      // Fallback: generate with random sequence
-      const year = new Date().getFullYear()
-      const randomSeq = Math.floor(Math.random() * 9000) + 1000
-      return `${year}-ADM-${randomSeq}`
+      console.error('❌ Error generating admission number:', err)
+      
+      // FALLBACK: Use UUID-based format when primary generation fails
+      // This ensures admission_number is NEVER 'undefined'
+      try {
+        const year = new Date().getFullYear()
+        const uuid = uuidv4().substring(0, 8).toUpperCase()
+        const fallbackNumber = `${year}-ADM-${uuid}`
+        
+        console.warn('⚠️ Using UUID fallback admission number:', fallbackNumber)
+        return fallbackNumber
+      } catch (fallbackErr) {
+        // Last resort: random number fallback
+        console.error('❌ UUID fallback failed:', fallbackErr)
+        const year = new Date().getFullYear()
+        const randomSeq = Math.floor(Math.random() * 9000000000) + 1000000000
+        return `${year}-ADM-${randomSeq}`
+      }
     }
   }
 

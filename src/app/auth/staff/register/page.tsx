@@ -1,58 +1,124 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
-import { TeacherService } from '@/services/teacher.service'
+import { StaffRegistrationService, StaffRegistrationData } from '@/services/staff-registration.service'
+import { RegistrationConfigService } from '@/services/registration-config.service'
 import { CanonicalSubjectService } from '@/services/canonical-subject.service'
-import { supabase } from '@/lib/supabase-client'
+import { toast } from 'react-hot-toast'
 
-interface ClassOption {
-  id: string
-  class_id: string
-  arm_id: string
-  classes: {id: string; name: string; level: string}
-  arms: {id: string; name: string}
-}
+const STAGES = [
+  { number: 1, title: 'Personal Information', icon: '👤' },
+  { number: 2, title: 'Contact & Address', icon: '📍' },
+  { number: 3, title: 'Employment Information', icon: '💼' },
+  { number: 4, title: 'Professional Information', icon: '🎓' },
+  { number: 5, title: 'Role & Responsibilities', icon: '⚙️' },
+  { number: 6, title: 'Class Assignment', icon: '🏫' },
+  { number: 7, title: 'Subject Assignment', icon: '📚' },
+  { number: 8, title: 'Salary & Bank', icon: '💰' },
+  { number: 9, title: 'Account & Security', icon: '🔐' },
+  { number: 10, title: 'Review & Confirm', icon: '✓' },
+]
 
-interface SubjectOption {
+interface Schools {
   id: string
   name: string
-  code: string
+}
+
+interface FormState extends Partial<StaffRegistrationData> {
+  confirmPassword?: string
 }
 
 export default function StaffRegisterPage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string>('')
-  const [success, setSuccess] = useState<string>('')
-  
-  const [schools, setSchools] = useState<any[]>([])
-  const [classes, setClasses] = useState<ClassOption[]>([])
-  const [subjects, setSubjects] = useState<SubjectOption[]>([])
-  
-  const [formData, setFormData] = useState({
-    fullName: '',
+  const [currentStage, setCurrentStage] = useState(1)
+  const [schools, setSchools] = useState<Schools[]>([])
+  const [classOptions, setClassOptions] = useState<any[]>([])
+  const [subjects, setSubjects] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [formData, setFormData] = useState<FormState>({
+    // Stage 1
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    gender: 'MALE',
+    dateOfBirth: '',
+    photoUrl: '',
+    nationality: '',
+    stateOfOrigin: '',
+    lga: '',
+    maritalStatus: '',
+
+    // Stage 2
+    phone: '',
     email: '',
-    schoolId: '',
-    classId: '',
-    subjectIds: [] as string[],
+    residentialAddress: '',
+    city: '',
+    state: '',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+
+    // Stage 3
+    staffId: '',
+    position: '',
+    role: 'TEACHER',
+    department: '',
+    employmentType: 'Full-time',
+    employmentStatus: 'Active',
+    dateEmployed: new Date().toISOString().split('T')[0],
+    dateAppointed: new Date().toISOString().split('T')[0],
+    reportingAuthority: '',
+
+    // Stage 4
+    highestQualification: '',
+    professionalQualification: '',
+    institution: '',
+    courseField: '',
+    graduationYear: new Date().getFullYear(),
+    teachingExperience: 0,
+    certifications: '',
+
+    // Stage 5
+    primaryRole: '',
+    secondaryResponsibilities: [],
+    adminResponsibility: '',
+
+    // Stage 6
+    classArmComboId: '',
+    isClassTeacher: false,
+
+    // Stage 7
+    subjectIds: [],
+
+    // Stage 8
+    salary: 0,
+    salaryFrequency: 'Monthly',
+    bankName: '',
+    accountName: '',
+    accountNumber: '',
+    paymentMethod: '',
+
+    // Stage 9
+    accountUsername: '',
+    accountRole: 'TEACHER',
+    pinGenerationRequired: true,
     password: '',
     confirmPassword: '',
+
+    // Common
+    schoolId: '',
   })
 
-  // Load schools
+  // Load schools on mount
   useEffect(() => {
     const loadSchools = async () => {
       try {
-        console.log('📚 Fetching schools...')
         const list = await AuthService.getAllSchools()
-        console.log('✅ Schools fetched:', list.length)
         setSchools(list)
-      } catch (err) {
-        console.error('❌ Error loading schools:', err)
-        setError('Failed to load schools')
+      } catch (error) {
+        console.error('Error loading schools:', error)
+        toast.error('Failed to load schools')
       }
     }
     loadSchools()
@@ -61,312 +127,774 @@ export default function StaffRegisterPage() {
   // Load classes when school changes
   useEffect(() => {
     if (!formData.schoolId) {
-      setClasses([])
-      setSubjects([])
+      setClassOptions([])
       return
     }
 
-    const loadClassesAndSubjects = async () => {
+    const loadClasses = async () => {
       try {
-        setError('')
-        console.log('🔄 Fetching classes for school:', formData.schoolId)
-        
-        // Fetch classes
-        const { data: classData, error: classError } = await supabase
-          .from('class_arm_combos')
-          .select('id, class_id, arm_id, classes(id, name, level), arms(id, name)')
-          .eq('school_id', formData.schoolId)
-          .limit(100)
-
-        if (classError) throw classError
-        
-        console.log('✅ Classes fetched:', classData?.length || 0)
-        setClasses(classData || [])
-
-        // NOTE: Subjects are loaded dynamically when class is selected (see useEffect for formData.classId)
-      } catch (err: any) {
-        console.error('❌ Error:', err)
-        setError(`Failed to load data: ${err.message}`)
+        const combos = await RegistrationConfigService.getClassArmCombos(formData.schoolId!)
+        setClassOptions(combos)
+      } catch (error) {
+        console.error('Error loading classes:', error)
+        toast.error('Failed to load classes')
       }
     }
-
-    loadClassesAndSubjects()
+    loadClasses()
   }, [formData.schoolId])
 
-  // Load subjects when class is selected (filtering by class level using CanonicalSubjectService)
+  // Load subjects when class changes
   useEffect(() => {
-    if (!formData.classId || !formData.schoolId) {
+    if (!formData.classArmComboId || !formData.schoolId) {
       setSubjects([])
       return
     }
 
-    const loadSubjectsForClass = async () => {
+    const loadSubjects = async () => {
       try {
-        setError('')
-        console.log('🔄 Fetching subjects for class:', formData.classId)
-        
-        // Use CanonicalSubjectService to get subjects filtered by class level
-        const applicableSubjects = await CanonicalSubjectService.getSubjectsForClass(
-          formData.classId,
-          formData.schoolId
+        const classCombo = classOptions.find((c) => c.id === formData.classArmComboId)
+        if (!classCombo?.classes?.level) return
+
+        const subjectList = await CanonicalSubjectService.getSubjectsForLevel(
+          formData.schoolId!,
+          classCombo.classes.level
         )
-        
-        console.log('✅ Subjects fetched with level filtering:', applicableSubjects.length)
-        setSubjects(applicableSubjects)
-      } catch (err: any) {
-        console.error('❌ Error loading subjects:', err)
-        setError(`Failed to load subjects: ${err.message}`)
+        setSubjects(subjectList)
+      } catch (error) {
+        console.error('Error loading subjects:', error)
+        toast.error('Failed to load subjects')
+      }
+    }
+    loadSubjects()
+  }, [formData.classArmComboId, formData.schoolId])
+
+  const validateStage = (): boolean => {
+    if (!StaffRegistrationService.validateStage(currentStage, formData)) {
+      toast.error('Please fill in all required fields')
+      return false
+    }
+
+    // Email validation
+    if (currentStage === 2 && formData.email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.email)) {
+        toast.error('Please enter a valid email address')
+        return false
       }
     }
 
-    loadSubjectsForClass()
-  }, [formData.classId, formData.schoolId])
+    // Phone validation
+    if (currentStage === 2 && formData.phone) {
+      const phoneRegex = /^\d{10,}$/
+      if (!phoneRegex.test(formData.phone.replace(/\D/g, ''))) {
+        toast.error('Please enter a valid phone number')
+        return false
+      }
+    }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    // Password validation
+    if (currentStage === 9 && formData.password) {
+      if (formData.password.length < 8) {
+        toast.error('Password must be at least 8 characters')
+        return false
+      }
+      if (formData.password !== formData.confirmPassword) {
+        toast.error('Passwords do not match')
+        return false
+      }
+    }
+
+    return true
   }
 
-  const handleSubjectToggle = (subjectId: string) => {
-    setFormData(prev => ({
-      ...prev,
-      subjectIds: prev.subjectIds.includes(subjectId)
-        ? prev.subjectIds.filter(id => id !== subjectId)
-        : [...prev.subjectIds, subjectId]
-    }))
+  const handleNext = () => {
+    if (validateStage()) {
+      if (currentStage < 10) {
+        setCurrentStage(currentStage + 1)
+      }
+    }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setSuccess('')
-
-    if (!formData.fullName || !formData.email || !formData.schoolId || !formData.classId) {
-      setError('Please fill in all required fields')
-      return
+  const handlePrevious = () => {
+    if (currentStage > 1) {
+      setCurrentStage(currentStage - 1)
     }
+  }
 
-    if (formData.subjectIds.length === 0) {
-      setError('Please select at least one subject')
-      return
-    }
+  const handleSubmit = async () => {
+    if (!validateStage()) return
 
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters')
-      return
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
-      return
-    }
-
-    setLoading(true)
-
+    setIsLoading(true)
     try {
-      // Register teacher
-      console.log('📝 Registering teacher...')
-      const user = await AuthService.registerTeacher({
-        fullName: formData.fullName,
-        email: formData.email,
-        school_id: formData.schoolId,
-        password: formData.password,
-      })
+      const result = await StaffRegistrationService.registerStaff(formData as StaffRegistrationData)
 
-      console.log('✅ Teacher registered:', user.id)
-
-      // Assign subjects
-      if (user.id) {
-        try {
-          const assignments = formData.subjectIds.map(subjectId => ({
-            subjectId,
-            classArmComboId: formData.classId,
-          }))
-
-          await TeacherService.assignSubjects(user.id, formData.schoolId, assignments)
-          console.log('✅ Subjects assigned')
-        } catch (err) {
-          console.warn('⚠️ Could not assign subjects, but registration succeeded')
-        }
+      if (result.success) {
+        toast.success(`Staff registered successfully! PIN: ${result.pin}`)
+        setTimeout(() => {
+          router.push('/auth/staff/login')
+        }, 2000)
+      } else {
+        toast.error(result.message)
       }
-
-      setSuccess('✅ Registration successful! Redirecting...')
-      setTimeout(() => router.push('/auth/staff/login'), 2000)
-    } catch (err: any) {
-      console.error('❌ Registration failed:', err)
-      setError(err.message || 'Registration failed')
+    } catch (error) {
+      console.error('Registration error:', error)
+      toast.error('Failed to register staff member')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
+    }
+  }
+
+  const handleJumpToStage = (stage: number) => {
+    setCurrentStage(stage)
+  }
+
+  // Render stage content
+  const renderStageContent = () => {
+    switch (currentStage) {
+      case 1: // Personal Information
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Personal Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="First Name *"
+                value={formData.firstName || ''}
+                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Middle Name"
+                value={formData.middleName || ''}
+                onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Last Name *"
+                value={formData.lastName || ''}
+                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <select
+                value={formData.gender || 'MALE'}
+                onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="MALE">Male</option>
+                <option value="FEMALE">Female</option>
+                <option value="OTHER">Other</option>
+              </select>
+              <input
+                type="date"
+                placeholder="Date of Birth"
+                value={formData.dateOfBirth || ''}
+                onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Nationality"
+                value={formData.nationality || ''}
+                onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="State of Origin"
+                value={formData.stateOfOrigin || ''}
+                onChange={(e) => setFormData({ ...formData, stateOfOrigin: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="LGA"
+                value={formData.lga || ''}
+                onChange={(e) => setFormData({ ...formData, lga: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <select
+                value={formData.maritalStatus || ''}
+                onChange={(e) => setFormData({ ...formData, maritalStatus: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">Select Marital Status</option>
+                <option value="Single">Single</option>
+                <option value="Married">Married</option>
+                <option value="Divorced">Divorced</option>
+                <option value="Widowed">Widowed</option>
+              </select>
+            </div>
+          </div>
+        )
+
+      case 2: // Contact & Address
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Contact & Address</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <select
+                value={formData.schoolId || ''}
+                onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">Select School *</option>
+                {schools.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="email"
+                placeholder="Email *"
+                value={formData.email || ''}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="tel"
+                placeholder="Phone *"
+                value={formData.phone || ''}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Residential Address *"
+                value={formData.residentialAddress || ''}
+                onChange={(e) => setFormData({ ...formData, residentialAddress: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="City"
+                value={formData.city || ''}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="State"
+                value={formData.state || ''}
+                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Emergency Contact Name *"
+                value={formData.emergencyContactName || ''}
+                onChange={(e) => setFormData({ ...formData, emergencyContactName: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="tel"
+                placeholder="Emergency Contact Phone *"
+                value={formData.emergencyContactPhone || ''}
+                onChange={(e) => setFormData({ ...formData, emergencyContactPhone: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+          </div>
+        )
+
+      case 3: // Employment Information
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Employment Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Staff ID"
+                value={formData.staffId || ''}
+                onChange={(e) => setFormData({ ...formData, staffId: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Position *"
+                value={formData.position || ''}
+                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <select
+                value={formData.role || 'TEACHER'}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="TEACHER">Teacher</option>
+                <option value="HEAD_TEACHER">Head Teacher</option>
+                <option value="PRINCIPAL">Principal</option>
+                <option value="ACCOUNTANT">Accountant</option>
+                <option value="STAFF">Support Staff</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Department"
+                value={formData.department || ''}
+                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <select
+                value={formData.employmentType || 'Full-time'}
+                onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="Full-time">Full-time</option>
+                <option value="Part-time">Part-time</option>
+                <option value="Contract">Contract</option>
+              </select>
+              <select
+                value={formData.employmentStatus || 'Active'}
+                onChange={(e) => setFormData({ ...formData, employmentStatus: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="Active">Active</option>
+                <option value="Probation">On Probation</option>
+                <option value="Leave">On Leave</option>
+              </select>
+              <input
+                type="date"
+                placeholder="Date Employed *"
+                value={formData.dateEmployed || ''}
+                onChange={(e) => setFormData({ ...formData, dateEmployed: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="date"
+                placeholder="Date Appointed *"
+                value={formData.dateAppointed || ''}
+                onChange={(e) => setFormData({ ...formData, dateAppointed: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Reporting Authority"
+                value={formData.reportingAuthority || ''}
+                onChange={(e) => setFormData({ ...formData, reportingAuthority: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+          </div>
+        )
+
+      case 4: // Professional Information
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Professional Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Highest Qualification"
+                value={formData.highestQualification || ''}
+                onChange={(e) => setFormData({ ...formData, highestQualification: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Professional Qualification"
+                value={formData.professionalQualification || ''}
+                onChange={(e) =>
+                  setFormData({ ...formData, professionalQualification: e.target.value })
+                }
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Institution"
+                value={formData.institution || ''}
+                onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Course/Field"
+                value={formData.courseField || ''}
+                onChange={(e) => setFormData({ ...formData, courseField: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="number"
+                placeholder="Graduation Year"
+                value={formData.graduationYear || new Date().getFullYear()}
+                onChange={(e) => setFormData({ ...formData, graduationYear: parseInt(e.target.value) })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="number"
+                placeholder="Teaching Experience (years)"
+                value={formData.teachingExperience || 0}
+                onChange={(e) => setFormData({ ...formData, teachingExperience: parseInt(e.target.value) })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <textarea
+                placeholder="Professional Certifications"
+                value={formData.certifications || ''}
+                onChange={(e) => setFormData({ ...formData, certifications: e.target.value })}
+                rows={3}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none col-span-2"
+              />
+            </div>
+          </div>
+        )
+
+      case 5: // Role & Responsibilities
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Role & Responsibilities</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Primary Role *"
+                value={formData.primaryRole || ''}
+                onChange={(e) => setFormData({ ...formData, primaryRole: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Admin Responsibility"
+                value={formData.adminResponsibility || ''}
+                onChange={(e) => setFormData({ ...formData, adminResponsibility: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <textarea
+                placeholder="Secondary Responsibilities (comma-separated)"
+                value={(formData.secondaryResponsibilities || []).join(', ')}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    secondaryResponsibilities: e.target.value.split(',').map((s) => s.trim()),
+                  })
+                }
+                rows={3}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none col-span-2"
+              />
+            </div>
+          </div>
+        )
+
+      case 6: // Class Assignment
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Class Assignment</h3>
+            {formData.role !== 'TEACHER' && formData.role !== 'HEAD_TEACHER' ? (
+              <p className="text-gray-600">This section only applies to teachers</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <select
+                  value={formData.classArmComboId || ''}
+                  onChange={(e) => setFormData({ ...formData, classArmComboId: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="">Select Class</option>
+                  {classOptions.map((combo) => (
+                    <option key={combo.id} value={combo.id}>
+                      {combo.classes?.name} {combo.arms?.name}
+                    </option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.isClassTeacher || false}
+                    onChange={(e) => setFormData({ ...formData, isClassTeacher: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span>Is Class Teacher</span>
+                </label>
+              </div>
+            )}
+          </div>
+        )
+
+      case 7: // Subject Assignment
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Subject Assignment</h3>
+            {formData.role !== 'TEACHER' && formData.role !== 'HEAD_TEACHER' ? (
+              <p className="text-gray-600">This section only applies to teachers</p>
+            ) : (
+              <div>
+                <p className="text-sm text-gray-600 mb-3">Select subjects this teacher will teach:</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto border border-gray-200 p-4 rounded">
+                  {subjects.map((subject) => (
+                    <label key={subject.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={(formData.subjectIds || []).includes(subject.id)}
+                        onChange={(e) => {
+                          const newSubjectIds = formData.subjectIds || []
+                          if (e.target.checked) {
+                            setFormData({
+                              ...formData,
+                              subjectIds: [...newSubjectIds, subject.id],
+                            })
+                          } else {
+                            setFormData({
+                              ...formData,
+                              subjectIds: newSubjectIds.filter((id) => id !== subject.id),
+                            })
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-gray-300"
+                      />
+                      <span className="text-sm">{subject.name}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-sm text-gray-600 mt-3">
+                  Selected: {(formData.subjectIds || []).length} subjects
+                </p>
+              </div>
+            )}
+          </div>
+        )
+
+      case 8: // Salary & Bank
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Salary & Bank Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="number"
+                placeholder="Salary"
+                value={formData.salary || 0}
+                onChange={(e) => setFormData({ ...formData, salary: parseFloat(e.target.value) })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <select
+                value={formData.salaryFrequency || 'Monthly'}
+                onChange={(e) => setFormData({ ...formData, salaryFrequency: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="Monthly">Monthly</option>
+                <option value="Bi-weekly">Bi-weekly</option>
+                <option value="Weekly">Weekly</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Bank Name"
+                value={formData.bankName || ''}
+                onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Account Name"
+                value={formData.accountName || ''}
+                onChange={(e) => setFormData({ ...formData, accountName: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Account Number"
+                value={formData.accountNumber || ''}
+                onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <select
+                value={formData.paymentMethod || ''}
+                onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">Select Payment Method</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Check">Check</option>
+                <option value="Cash">Cash</option>
+              </select>
+            </div>
+          </div>
+        )
+
+      case 9: // Account & Security
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Account & Security</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="email"
+                placeholder="Account Email (for login)"
+                value={formData.email || ''}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-100"
+                disabled
+              />
+              <select
+                value={formData.accountRole || 'TEACHER'}
+                onChange={(e) => setFormData({ ...formData, accountRole: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="TEACHER">Teacher</option>
+                <option value="HEAD_TEACHER">Head Teacher</option>
+                <option value="PRINCIPAL">Principal</option>
+              </select>
+              <input
+                type="password"
+                placeholder="Password (8+ chars) *"
+                value={formData.password || ''}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="password"
+                placeholder="Confirm Password *"
+                value={formData.confirmPassword || ''}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.pinGenerationRequired || true}
+                  onChange={(e) =>
+                    setFormData({ ...formData, pinGenerationRequired: e.target.checked })
+                  }
+                  className="w-4 h-4 rounded border-gray-300"
+                />
+                <span>Generate PIN for alternative login</span>
+              </label>
+            </div>
+          </div>
+        )
+
+      case 10: // Review & Confirmation
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Review & Confirmation</h3>
+            <div className="bg-gray-50 p-4 rounded-lg space-y-3 max-h-96 overflow-y-auto">
+              <div>
+                <p className="text-sm font-semibold text-gray-600">Personal Information</p>
+                <p className="text-sm">
+                  {formData.firstName} {formData.middleName} {formData.lastName} ({formData.gender})
+                </p>
+                <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(1)}>
+                  ✏️ Edit
+                </p>
+              </div>
+              <hr />
+              <div>
+                <p className="text-sm font-semibold text-gray-600">Contact Information</p>
+                <p className="text-sm">{formData.email}</p>
+                <p className="text-sm">{formData.phone}</p>
+                <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(2)}>
+                  ✏️ Edit
+                </p>
+              </div>
+              <hr />
+              <div>
+                <p className="text-sm font-semibold text-gray-600">Employment</p>
+                <p className="text-sm">{formData.position} ({formData.role})</p>
+                <p className="text-sm">Employment Type: {formData.employmentType}</p>
+                <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(3)}>
+                  ✏️ Edit
+                </p>
+              </div>
+              <hr />
+              <div>
+                <p className="text-sm font-semibold text-gray-600">Assigned Subjects</p>
+                <p className="text-sm">{(formData.subjectIds || []).length} subjects</p>
+                <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(7)}>
+                  ✏️ Edit
+                </p>
+              </div>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
+                ✓ All information has been entered and verified. Click Register to complete the registration process.
+              </p>
+            </div>
+          </div>
+        )
+
+      default:
+        return null
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow-xl p-8">
-          <h1 className="text-4xl font-bold text-center mb-2 text-blue-600">👨‍🏫 Teacher Registration</h1>
-          <p className="text-center text-gray-600 mb-8">Create your account and assign classes</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Staff Registration</h1>
+          <p className="text-gray-600">Complete all stages to register new staff member</p>
+        </div>
 
-          {error && (
-            <div className="mb-6 p-4 bg-red-100 border border-red-400 rounded text-red-700">
-              {error}
-            </div>
-          )}
-
-          {success && (
-            <div className="mb-6 p-4 bg-green-100 border border-green-400 rounded text-green-700">
-              {success}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Full Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
-              <input
-                type="text"
-                name="fullName"
-                value={formData.fullName}
-                onChange={handleChange}
-                placeholder="John Doe"
-                className="w-full px-4 py-2 border border-gray-300 rounded lg:focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            {/* Email */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="teacher@school.com"
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            {/* School */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">School *</label>
-              <select
-                name="schoolId"
-                value={formData.schoolId}
-                onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
+        {/* Progress Bar */}
+        <div className="mb-8">
+          <div className="flex justify-between mb-2">
+            {STAGES.map((stage) => (
+              <button
+                key={stage.number}
+                onClick={() => handleJumpToStage(stage.number)}
+                className={`flex flex-col items-center ${
+                  currentStage === stage.number
+                    ? 'text-blue-600'
+                    : currentStage > stage.number
+                    ? 'text-green-600'
+                    : 'text-gray-400'
+                }`}
               >
-                <option value="">-- Select School --</option>
-                {schools.map(school => (
-                  <option key={school.id} value={school.id}>{school.name}</option>
-                ))}
-              </select>
-            </div>
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center mb-1 font-semibold ${
+                    currentStage === stage.number
+                      ? 'bg-blue-600 text-white'
+                      : currentStage > stage.number
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-300 text-white'
+                  }`}
+                >
+                  {stage.number}
+                </div>
+                <span className="text-xs text-center hidden md:inline">{stage.title}</span>
+              </button>
+            ))}
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-blue-600 h-2 rounded-full transition-all"
+              style={{ width: `${(currentStage / STAGES.length) * 100}%` }}
+            />
+          </div>
+        </div>
 
-            {/* Classes */}
-            {formData.schoolId && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Class *</label>
-                {classes.length > 0 ? (
-                  <select
-                    name="classId"
-                    value={formData.classId}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">-- Select Class --</option>
-                    {classes.map(classItem => (
-                      <option key={classItem.id} value={classItem.id}>
-                        {classItem.classes.name} - Arm {classItem.arms.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="p-3 bg-yellow-100 border border-yellow-400 rounded text-yellow-800">
-                    ⏳ Loading classes...
-                  </div>
-                )}
-              </div>
-            )}
+        {/* Form */}
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+          {renderStageContent()}
+        </div>
 
-            {/* Subjects */}
-            {formData.classId && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Subjects * ({formData.subjectIds.length} selected)
-                </label>
-                {subjects.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto p-3 border border-gray-300 rounded bg-gray-50">
-                    {subjects.map(subject => (
-                      <label key={subject.id} className="flex items-center cursor-pointer p-2 hover:bg-blue-50 rounded">
-                        <input
-                          type="checkbox"
-                          checked={formData.subjectIds.includes(subject.id)}
-                          onChange={() => handleSubjectToggle(subject.id)}
-                          className="w-4 h-4 text-blue-600"
-                        />
-                        <span className="ml-2">
-                          <strong>{subject.name}</strong>
-                          <span className="text-gray-500 text-sm"> ({subject.code})</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-3 bg-yellow-100 border border-yellow-400 rounded text-yellow-800">
-                    ⏳ Loading subjects...
-                  </div>
-                )}
-              </div>
-            )}
+        {/* Navigation Buttons */}
+        <div className="flex justify-between gap-4">
+          <button
+            onClick={handlePrevious}
+            disabled={currentStage === 1}
+            className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            ← Previous
+          </button>
 
-            {/* Password */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Password *</label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="At least 6 characters"
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            {/* Confirm Password */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password *</label>
-              <input
-                type="password"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                placeholder="Confirm password"
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            {/* Submit */}
+          {currentStage === STAGES.length ? (
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700 disabled:bg-gray-400 transition"
+              onClick={handleSubmit}
+              disabled={isLoading}
+              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
             >
-              {loading ? '⏳ Registering...' : '✅ Register'}
+              {isLoading ? 'Registering...' : '✓ Register Staff'}
             </button>
-          </form>
+          ) : (
+            <button
+              onClick={handleNext}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Next →
+            </button>
+          )}
+        </div>
 
-          <p className="text-center mt-6 text-gray-600">
-            Already registered?{' '}
-            <Link href="/auth/staff/login" className="text-blue-600 font-semibold hover:underline">
-              Sign In
-            </Link>
-          </p>
+        {/* Stage Info */}
+        <div className="text-center mt-8 text-sm text-gray-600">
+          Stage {currentStage} of {STAGES.length}: {STAGES[currentStage - 1].title}
         </div>
       </div>
     </div>

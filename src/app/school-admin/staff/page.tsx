@@ -332,20 +332,33 @@ const StaffPage: React.FC = () => {
     const getCurrentSchool = async () => {
       try {
         const { data: { user } } = await getSupabaseClient().auth.getUser();
-        if (!user) return;
+        if (!user) {
+          console.log('[Staff Page] No authenticated user');
+          return;
+        }
 
-        const { data: userProfile } = await getSupabaseClient()
+        const { data: userProfile, error } = await getSupabaseClient()
           .from('users')
           .select('school_id')
           .eq('id', user.id)
           .single();
 
-        if (userProfile) {
+        if (error) {
+          console.error('[Staff Page] Error getting user profile:', error);
+          toast.error('Failed to load your school information');
+          return;
+        }
+
+        if (userProfile && userProfile.school_id) {
           console.log('[Staff Page] Setting schoolId:', userProfile.school_id);
           setSchoolId(userProfile.school_id);
+        } else {
+          console.warn('[Staff Page] No school_id in user profile');
+          toast.error('Your account is not linked to a school');
         }
       } catch (error) {
         console.error('[Staff Page] Error getting school:', error);
+        toast.error('Failed to load school information');
       }
     };
 

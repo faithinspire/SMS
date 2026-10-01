@@ -145,9 +145,9 @@ const StudentsPage: React.FC = () => {
       setIsLoading(true);
       console.log('[Students Page] Fetching students for school:', school);
 
-      // Add 15 second timeout for queries
+      // Add 30 second timeout for queries (increased from 15s for large datasets)
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Students query timeout after 15s')), 15000)
+        setTimeout(() => reject(new Error('Students query timeout after 30s')), 30000)
       );
 
       const queryPromise = (async (): Promise<Student[]> => {
@@ -181,7 +181,8 @@ const StudentsPage: React.FC = () => {
             )
           `)
           .eq('school_id', school)
-          .order('created_at', { ascending: false });
+          .not('class_arm_combo_id', 'is', null)  // Filter out incomplete registrations
+          .order('admission_number', { ascending: true });  // Sort by admission number (natural order)
 
         if (signal.aborted) throw new Error('Request was cancelled');
         if (error) {
@@ -237,19 +238,33 @@ const StudentsPage: React.FC = () => {
     const getCurrentSchool = async () => {
       try {
         const { data: { user } } = await getSupabaseClient().auth.getUser();
-        if (!user) return;
+        if (!user) {
+          console.log('[Students Page] No authenticated user');
+          return;
+        }
 
-        const { data: userProfile } = await getSupabaseClient()
+        const { data: userProfile, error } = await getSupabaseClient()
           .from('users')
           .select('school_id')
           .eq('id', user.id)
           .single();
 
-        if (userProfile) {
+        if (error) {
+          console.error('[Students Page] Error getting user profile:', error);
+          toast.error('Failed to load your school information');
+          return;
+        }
+
+        if (userProfile && userProfile.school_id) {
+          console.log('[Students Page] Setting schoolId:', userProfile.school_id);
           setSchoolId(userProfile.school_id);
+        } else {
+          console.warn('[Students Page] No school_id in user profile');
+          toast.error('Your account is not linked to a school');
         }
       } catch (error) {
         console.error('[Students Page] Error getting school:', error);
+        toast.error('Failed to load school information');
       }
     };
 
