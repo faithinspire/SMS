@@ -242,15 +242,81 @@ export default function SchoolAdminResultsPage() {
         setSchool(schoolData)
         console.log('[Results] School loaded:', schoolData?.name)
 
-        // CRITICAL: Ensure school has academic sessions and terms
+        // CRITICAL: Ensure school has academic sessions and terms - AUTO-CREATE if missing
         console.log('[Results] Ensuring school data exists...')
         try {
-          const ensureResponse = await fetch(
-            `/api/results/ensure-school-data?schoolId=${currentUser.school_id}`,
-            { method: 'POST' }
-          )
-          const ensureData = await ensureResponse.json()
-          console.log('[Results] School data ensured:', ensureData)
+          const currentYear = new Date().getFullYear()
+          
+          // Check if sessions exist
+          const { data: existingSessions } = await getSupabaseClient()
+            .from('academic_sessions')
+            .select('id')
+            .eq('school_id', currentUser.school_id)
+            .limit(1)
+
+          if (!existingSessions || existingSessions.length === 0) {
+            console.log('[Results] No sessions found - auto-creating...')
+            
+            // Create default session
+            const { data: newSession, error: sessionError } = await getSupabaseClient()
+              .from('academic_sessions')
+              .insert([{
+                school_id: currentUser.school_id,
+                session_year: `${currentYear}/${currentYear + 1}`,
+                start_year: currentYear,
+                end_year: currentYear + 1,
+                is_active: true,
+              }])
+              .select()
+
+            if (sessionError) {
+              console.error('[Results] Error creating session:', sessionError)
+            } else if (newSession && newSession.length > 0) {
+              console.log('[Results] Session created:', newSession[0].id)
+              
+              // Create default terms
+              const sessionId = newSession[0].id
+              const termsToCreate = [
+                {
+                  school_id: currentUser.school_id,
+                  session_id: sessionId,
+                  term_name: 'First Term',
+                  term_order: 1,
+                  is_active: true,
+                  start_date: new Date(currentYear, 8, 1).toISOString(),
+                  end_date: new Date(currentYear, 10, 30).toISOString(),
+                },
+                {
+                  school_id: currentUser.school_id,
+                  session_id: sessionId,
+                  term_name: 'Second Term',
+                  term_order: 2,
+                  is_active: false,
+                  start_date: new Date(currentYear, 11, 1).toISOString(),
+                  end_date: new Date(currentYear + 1, 1, 28).toISOString(),
+                },
+                {
+                  school_id: currentUser.school_id,
+                  session_id: sessionId,
+                  term_name: 'Third Term',
+                  term_order: 3,
+                  is_active: false,
+                  start_date: new Date(currentYear + 1, 2, 1).toISOString(),
+                  end_date: new Date(currentYear + 1, 4, 31).toISOString(),
+                },
+              ]
+              
+              const { error: termsError } = await getSupabaseClient()
+                .from('academic_terms')
+                .insert(termsToCreate)
+              
+              if (termsError) {
+                console.error('[Results] Error creating terms:', termsError)
+              } else {
+                console.log('[Results] Default terms created')
+              }
+            }
+          }
         } catch (err) {
           console.warn('[Results] Warning ensuring school data:', err)
           // Non-critical - proceed with loading existing data
@@ -287,7 +353,7 @@ export default function SchoolAdminResultsPage() {
           setSelectedSession(firstSession.id)
         } else {
           console.warn('[Results] No academic sessions found in database after ensure attempt')
-          toast.error('No academic sessions found. Please ensure migration 152 has been executed.')
+          toast.error('No academic sessions found. Please refresh the page.')
         }
       } catch (error) {
         console.error('[Results] Load error:', error)
