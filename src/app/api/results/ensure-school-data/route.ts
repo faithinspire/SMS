@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
           const { error: termError } = await supabase
             .from('academic_terms')
             .insert({
+              school_id: schoolId,
               session_id: sessionData.id,
               term_name: term.term_name,
               term_order: term.term_order,
