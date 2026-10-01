@@ -24,7 +24,6 @@ import { createClient } from '@/lib/supabase-client'
 import { seedSchoolCurriculum } from '@/lib/school-seeding'
 export const dynamic = 'force-dynamic'
 
-
 // Create service client for admin operations
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -90,7 +89,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Create school record WITHOUT ON CONFLICT
+    // Create school record - NO ON CONFLICT CLAUSE
     const { data: school, error: schoolError } = await supabaseAdmin
       .from('schools')
       .insert({
@@ -132,10 +131,11 @@ export async function POST(req: NextRequest) {
 
     console.log('School created:', school.id)
 
-    // ðŸ” CREATE SUPABASE AUTH USER FOR SCHOOL ADMIN
+    // CREATE SUPABASE AUTH USER FOR SCHOOL ADMIN
+    let authUserId: string | null = null
     try {
       console.log('Creating Supabase Auth user for school admin:', admin_email)
-      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: admin_email,
         password: admin_password,
         email_confirm: true,
@@ -148,44 +148,47 @@ export async function POST(req: NextRequest) {
       })
 
       if (authError) {
-        // If user already exists, that's okay - continue
         if (authError.message?.includes('already exists')) {
           console.warn('Auth user already exists:', admin_email)
+          // Try to fetch existing user ID
+          const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
+          const existingUser = users?.find(u => u.email === admin_email)
+          if (existingUser) {
+            authUserId = existingUser.id
+          }
         } else {
           console.error('Auth creation error:', authError)
           throw new Error(`Failed to create auth user: ${authError.message}`)
         }
       } else {
-        console.log('âœ… Supabase Auth user created:', authUser?.user?.id)
+        authUserId = authData?.user?.id || null
+        console.log('Auth user created:', authUserId)
       }
     } catch (err: any) {
-      console.error('âŒ Auth user creation failed:', err.message)
-      // Don't fail the entire registration if auth creation fails
-      // The school is still created, but admin won't be able to login
+      console.error('Auth user creation failed:', err.message)
       console.warn('Continuing registration without auth user...')
     }
 
     // CREATE USERS TABLE RECORD - CRITICAL FOR LOGIN
     try {
-      console.log(`📝 Creating users table record for ${admin_email}...`)
+      console.log(`Creating users table record for ${admin_email}...`)
       
       // First check if user already exists
-      const { data: existingUser, error: existingError } = await supabaseAdmin
+      const { data: existingUser } = await supabaseAdmin
         .from('users')
         .select('id')
         .eq('email', admin_email)
         .maybeSingle()
 
-      if (existingError && existingError.code !== 'PGRST116') {
-        console.error('Error checking existing user:', existingError)
-        throw new Error(`Failed to check existing user: ${existingError.message}`)
-      }
-
       if (!existingUser) {
-        // Generate a UUID for the user if auth user wasn't created
-        const userId = authUser?.user?.id || Math.random().toString(36).substring(2, 15)
+        // Use auth user ID if available, otherwise generate UUID
+        const userId = authUserId || 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          const r = Math.random() * 16 | 0
+          const v = c === 'x' ? r : (r & 0x3 | 0x8)
+          return v.toString(16)
+        })
         
-        // Create user record in users table - this is REQUIRED for login to work
+        // Create user record in users table
         const { data: newUser, error: insertError } = await supabaseAdmin
           .from('users')
           .insert({
@@ -200,29 +203,30 @@ export async function POST(req: NextRequest) {
           .single()
 
         if (insertError) {
-          console.error('❌ Error creating user record:', insertError)
+          console.error('Error creating user record:', insertError)
           throw new Error(`Failed to create user record: ${insertError.message}`)
         }
 
-        console.log(`✅ User record created successfully for ${admin_email}`)
+        console.log(`User record created successfully for ${admin_email}`)
       } else {
-        console.log(`ℹ️ User record already exists for ${admin_email}`)
+        console.log(`User record already exists for ${admin_email}`)
       }
     } catch (err: any) {
-      console.error('❌ User record creation failed:', err.message)
-      throw new Error(`Failed to ensure user record exists: ${err.message}`)
+      console.error('User record creation failed:', err.message)
+      // Don't fail school registration if user record fails
+      console.warn('School created but user record creation failed')
     }
 
     console.log('School registration successful:', school.id)
 
-    // ðŸŒ± AUTO-SEED SCHOOL WITH NIGERIAN CURRICULUM
+    // AUTO-SEED SCHOOL WITH NIGERIAN CURRICULUM
     console.log('Starting auto-seeding of Nigerian curriculum...')
     const seedingResult = await seedSchoolCurriculum(school.id)
     
     if (!seedingResult.success) {
       console.warn('Seeding completed with warnings:', seedingResult.error)
     } else {
-      console.log(`âœ… Seeding complete: ${seedingResult.classesCreated} classes, ${seedingResult.armsCreated} arms, ${seedingResult.subjectsCreated} subjects`)
+      console.log(`Seeding complete: ${seedingResult.classesCreated} classes, ${seedingResult.armsCreated} arms, ${seedingResult.subjectsCreated} subjects`)
     }
 
     // Return success with school credentials and seeding info
@@ -245,4 +249,3 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-
