@@ -15,7 +15,9 @@ VALUES (
   'premium',
   'ACTIVE'
 )
-ON CONFLICT DO NOTHING;
+WHERE NOT EXISTS (
+  SELECT 1 FROM schools WHERE id = '18459a61-7e93-494c-b951-6cef5d589a88'::UUID
+);
 
 -- ============================================================================
 -- CREATE PRIMARY CLASSES
@@ -29,7 +31,9 @@ VALUES
   (gen_random_uuid(), '18459a61-7e93-494c-b951-6cef5d589a88'::UUID, 'Primary 4', 4, 'PRIMARY'),
   (gen_random_uuid(), '18459a61-7e93-494c-b951-6cef5d589a88'::UUID, 'Primary 5', 5, 'PRIMARY'),
   (gen_random_uuid(), '18459a61-7e93-494c-b951-6cef5d589a88'::UUID, 'Primary 6', 6, 'PRIMARY')
-ON CONFLICT DO NOTHING;
+WHERE NOT EXISTS (
+  SELECT 1 FROM classes WHERE school_id = '18459a61-7e93-494c-b951-6cef5d589a88'::UUID AND name IN ('Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6')
+);
 
 -- ============================================================================
 -- CREATE SECONDARY CLASSES (JSS & SSS)
@@ -43,7 +47,9 @@ VALUES
   (gen_random_uuid(), '18459a61-7e93-494c-b951-6cef5d589a88'::UUID, 'SSS 1', 10, 'SECONDARY'),
   (gen_random_uuid(), '18459a61-7e93-494c-b951-6cef5d589a88'::UUID, 'SSS 2', 11, 'SECONDARY'),
   (gen_random_uuid(), '18459a61-7e93-494c-b951-6cef5d589a88'::UUID, 'SSS 3', 12, 'SECONDARY')
-ON CONFLICT DO NOTHING;
+WHERE NOT EXISTS (
+  SELECT 1 FROM classes WHERE school_id = '18459a61-7e93-494c-b951-6cef5d589a88'::UUID AND name IN ('JSS 1', 'JSS 2', 'JSS 3', 'SSS 1', 'SSS 2', 'SSS 3')
+);
 
 -- ============================================================================
 -- CREATE ARMS (A, B, C)
@@ -52,6 +58,11 @@ ON CONFLICT DO NOTHING;
 -- Get all class IDs and create arms for each
 WITH class_ids AS (
   SELECT id FROM classes WHERE school_id = '18459a61-7e93-494c-b951-6cef5d589a88'::UUID
+),
+arm_names AS (
+  SELECT 'A' AS name
+  UNION ALL SELECT 'B'
+  UNION ALL SELECT 'C'
 )
 INSERT INTO arms (id, class_id, school_id, name, capacity)
 SELECT 
@@ -61,12 +72,10 @@ SELECT
   arm.name,
   40
 FROM class_ids c
-CROSS JOIN (
-  SELECT 'A' AS name
-  UNION ALL SELECT 'B'
-  UNION ALL SELECT 'C'
-) arm
-ON CONFLICT DO NOTHING;
+CROSS JOIN arm_names arm
+WHERE NOT EXISTS (
+  SELECT 1 FROM arms WHERE class_id = c.id AND name = arm.name
+);
 
 -- ============================================================================
 -- CREATE CLASS-ARM COMBINATIONS
@@ -82,7 +91,9 @@ WITH class_arm_pairs AS (
 INSERT INTO class_arm_combos (id, school_id, class_id, arm_id)
 SELECT gen_random_uuid(), '18459a61-7e93-494c-b951-6cef5d589a88'::UUID, class_id, arm_id
 FROM class_arm_pairs
-ON CONFLICT DO NOTHING;
+WHERE NOT EXISTS (
+  SELECT 1 FROM class_arm_combos WHERE class_id = class_arm_pairs.class_id AND arm_id = class_arm_pairs.arm_id
+);
 
 -- ============================================================================
 -- CREATE NIGERIAN SUBJECTS - PRIMARY (Levels 1-6)
@@ -120,7 +131,9 @@ VALUES
   (gen_random_uuid(), '18459a61-7e93-494c-b951-6cef5d589a88'::UUID, 'Government', 'GOV', ARRAY[10,11,12]),
   (gen_random_uuid(), '18459a61-7e93-494c-b951-6cef5d589a88'::UUID, 'Literature In English', 'LIT', ARRAY[10,11,12]),
   (gen_random_uuid(), '18459a61-7e93-494c-b951-6cef5d589a88'::UUID, 'Further Mathematics', 'FM', ARRAY[10,11,12])
-ON CONFLICT (school_id, name) DO NOTHING;
+WHERE NOT EXISTS (
+  SELECT 1 FROM subjects WHERE school_id = '18459a61-7e93-494c-b951-6cef5d589a88'::UUID AND name IN ('Economics', 'Accounting', 'Government', 'Literature In English', 'Further Mathematics')
+);
 
 -- ============================================================================
 -- VERIFICATION QUERIES (Run these to verify data was inserted)

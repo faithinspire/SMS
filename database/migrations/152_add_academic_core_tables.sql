@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS academic_sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   session_year TEXT NOT NULL,
-  start_year INTEGER,
+  start_year INTEGER NOT NULL,
+  end_year INTEGER NOT NULL DEFAULT 2025,
   is_active BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -40,20 +41,19 @@ CREATE INDEX IF NOT EXISTS idx_academic_terms_is_active ON academic_terms(is_act
 ALTER TABLE academic_sessions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE academic_terms DISABLE ROW LEVEL SECURITY;
 
--- Step 5: Populate initial data - use simple INSERT with existence check
+-- Step 5: Populate initial data - NO ON CONFLICT (use safe INSERT SELECT)
 -- Only insert if no sessions exist for the school
 DO $$
 BEGIN
-  INSERT INTO academic_sessions (school_id, session_year, start_year, is_active)
-  SELECT id, '2024/2025', 2024, true FROM schools
-  WHERE id NOT IN (SELECT DISTINCT school_id FROM academic_sessions)
-  ON CONFLICT DO NOTHING;
+  INSERT INTO academic_sessions (school_id, session_year, start_year, end_year, is_active)
+  SELECT id, '2024/2025', 2024, 2025, true FROM schools
+  WHERE id NOT IN (SELECT DISTINCT school_id FROM academic_sessions);
 EXCEPTION WHEN others THEN
   NULL;
 END;
 $$;
 
--- Step 6: Populate terms - wait for sessions to exist
+-- Step 6: Populate terms - NO ON CONFLICT (use safe INSERT with WHERE NOT EXISTS)
 DO $$
 DECLARE
   v_school_id UUID;
@@ -66,10 +66,16 @@ BEGIN
     LIMIT 1;
     
     IF v_session_id IS NULL THEN
-      INSERT INTO academic_sessions (school_id, session_year, start_year, is_active)
-      VALUES (v_school_id, '2024/2025', 2024, true)
-      ON CONFLICT DO NOTHING
-      RETURNING id INTO v_session_id;
+      INSERT INTO academic_sessions (school_id, session_year, start_year, end_year, is_active)
+      SELECT v_school_id, '2024/2025', 2024, 2025, true
+      WHERE NOT EXISTS (
+        SELECT 1 FROM academic_sessions 
+        WHERE school_id = v_school_id AND session_year = '2024/2025'
+      );
+      
+      SELECT id INTO v_session_id FROM academic_sessions 
+      WHERE school_id = v_school_id 
+      LIMIT 1;
     END IF;
     
     -- Only insert if term doesn't exist
@@ -79,24 +85,21 @@ BEGIN
       WHERE NOT EXISTS (
         SELECT 1 FROM academic_terms 
         WHERE school_id = v_school_id AND session_id = v_session_id AND term_order = 1
-      )
-      ON CONFLICT DO NOTHING;
+      );
       
       INSERT INTO academic_terms (school_id, session_id, term_name, term_order, start_date, end_date, is_active)
       SELECT v_school_id, v_session_id, 'Second Term', 2, MAKE_DATE(2024, 12, 1), MAKE_DATE(2025, 2, 28), false
       WHERE NOT EXISTS (
         SELECT 1 FROM academic_terms 
         WHERE school_id = v_school_id AND session_id = v_session_id AND term_order = 2
-      )
-      ON CONFLICT DO NOTHING;
+      );
       
       INSERT INTO academic_terms (school_id, session_id, term_name, term_order, start_date, end_date, is_active)
       SELECT v_school_id, v_session_id, 'Third Term', 3, MAKE_DATE(2025, 3, 1), MAKE_DATE(2025, 5, 31), false
       WHERE NOT EXISTS (
         SELECT 1 FROM academic_terms 
         WHERE school_id = v_school_id AND session_id = v_session_id AND term_order = 3
-      )
-      ON CONFLICT DO NOTHING;
+      );
     END IF;
   END LOOP;
 EXCEPTION WHEN others THEN

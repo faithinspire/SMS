@@ -132,7 +132,10 @@ BEGIN
       (gen_random_uuid(), p_school_id, 'Commercial'),
       (gen_random_uuid(), p_school_id, 'Humanities'),
       (gen_random_uuid(), p_school_id, 'Technical')
-    ON CONFLICT (school_id, name) DO NOTHING;
+    WHERE NOT EXISTS (
+      SELECT 1 FROM streams 
+      WHERE school_id = p_school_id AND name IN ('Science', 'Commercial', 'Humanities', 'Technical')
+    );
   EXCEPTION WHEN undefined_table THEN
     -- Table doesn't exist yet, skip silently
     NULL;
@@ -153,7 +156,10 @@ BEGIN
     (gen_random_uuid(), p_school_id, 'Music', 'MUS', ARRAY[1,2,3,4,5,6]),
     (gen_random_uuid(), p_school_id, 'Home Economics', 'HE', ARRAY[1,2,3,4,5,6]),
     (gen_random_uuid(), p_school_id, 'Information Technology', 'ICT', ARRAY[3,4,5,6])
-  ON CONFLICT (school_id, name) DO NOTHING;
+  WHERE NOT EXISTS (
+    SELECT 1 FROM subjects 
+    WHERE school_id = p_school_id AND name IN ('English Language', 'Mathematics', 'Science', 'Social Studies', 'Civic Education', 'Physical Education', 'Art & Craft', 'Music', 'Home Economics', 'Information Technology')
+  );
 
   -- ====================================================================
   -- Create SECONDARY SUBJECTS
@@ -173,7 +179,10 @@ BEGIN
     (gen_random_uuid(), p_school_id, 'Agricultural Science', 'AGR', ARRAY[9,10,11,12,13,14]),
     (gen_random_uuid(), p_school_id, 'Technical Drawing', 'TD', ARRAY[9,10,11,12,13,14]),
     (gen_random_uuid(), p_school_id, 'Computer Science', 'CS', ARRAY[9,10,11,12,13,14])
-  ON CONFLICT (school_id, name) DO NOTHING;
+  WHERE NOT EXISTS (
+    SELECT 1 FROM subjects 
+    WHERE school_id = p_school_id AND name IN ('English', 'Mathematics', 'Biology', 'Chemistry', 'Physics', 'History', 'Geography', 'Civic Education', 'Physical Education', 'Agricultural Science', 'Technical Drawing', 'Computer Science')
+  );
 
   -- For SSS only (12-14)
   INSERT INTO subjects (id, school_id, name, code, applicable_to_levels)
@@ -183,7 +192,10 @@ BEGIN
     (gen_random_uuid(), p_school_id, 'Government', 'GOV', ARRAY[12,13,14]),
     (gen_random_uuid(), p_school_id, 'Literature In English', 'LIT', ARRAY[12,13,14]),
     (gen_random_uuid(), p_school_id, 'Further Mathematics', 'FM', ARRAY[12,13,14])
-  ON CONFLICT (school_id, name) DO NOTHING;
+  WHERE NOT EXISTS (
+    SELECT 1 FROM subjects 
+    WHERE school_id = p_school_id AND name IN ('Economics', 'Accounting', 'Government', 'Literature In English', 'Further Mathematics')
+  );
 
   -- Log success
   RAISE NOTICE 'Default data created for school: %', p_school_id;

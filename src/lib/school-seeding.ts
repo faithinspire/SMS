@@ -1,12 +1,11 @@
 /**
  * School Seeding Service
- * Automatically creates classes and arms for new schools
- * NOTE: Subjects are now seeded automatically via migration 049
+ * Automatically creates classes, arms, and academic sessions for new schools
  */
 
 import { createClient } from '@/lib/supabase-client'
 
-// Standard Nigerian school classes (replaces deleted nigerian-subjects.ts)
+// Standard Nigerian school classes
 const SCHOOL_CLASSES = [
   { name: 'Primary 1', level: 'Primary', type: 'Primary' },
   { name: 'Primary 2', level: 'Primary', type: 'Primary' },
@@ -34,26 +33,64 @@ export interface SeedingResult {
   armsCreated: number
   combosCreated: number
   subjectsCreated: number
+  sessionsCreated: number
   error?: string
 }
 
 /**
- * Auto-seed a new school with standard Nigerian curriculum classes and arms
- * NOTE: Subjects are seeded automatically via migration 049 for all schools
+ * Auto-seed a new school with standard Nigerian curriculum classes, arms, and academic sessions
  */
 export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingResult> {
-  console.log(`🌱 Starting to seed school ${schoolId} with classes and arms...`)
+  console.log(`🌱 Starting to seed school ${schoolId} with classes, arms, and academic sessions...`)
 
   try {
     let classesCreated = 0
     let armsCreated = 0
     let combosCreated = 0
+    let sessionsCreated = 0
 
-    // 1. Create all classes
+    // 1. Create default academic session first
+    console.log(`📅 Creating default academic session...`)
+    try {
+      // Check if session already exists
+      const { data: existingSession } = await supabase
+        .from('academic_sessions')
+        .select('id')
+        .eq('school_id', schoolId)
+        .eq('session_year', '2024/2025')
+        .single()
+
+      if (!existingSession) {
+        const { data: newSession, error: sessionError } = await supabase
+          .from('academic_sessions')
+          .insert([{
+            school_id: schoolId,
+            session_year: '2024/2025',
+            start_year: 2024,
+            end_year: 2025,
+            is_active: true,
+          }])
+          .select()
+          .single()
+
+        if (sessionError) {
+          console.error(`❌ Error creating academic session:`, sessionError)
+        } else {
+          console.log(`✅ Created academic session: 2024/2025`)
+          sessionsCreated++
+        }
+      } else {
+        console.log(`⏭️  Academic session already exists`)
+      }
+    } catch (err) {
+      console.error(`❌ Exception creating academic session:`, err)
+    }
+
+    // 2. Create all classes
     console.log(`📚 Creating ${SCHOOL_CLASSES.length} classes...`)
     for (const classItem of SCHOOL_CLASSES) {
       try {
-        const { data: existingClass, error: checkError } = await supabase
+        const { data: existingClass } = await supabase
           .from('classes')
           .select('id')
           .eq('school_id', schoolId)
@@ -88,7 +125,7 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
         const armNames = ['A', 'B', 'C']
         for (const armName of armNames) {
           try {
-            const { data: existingArm, error: checkArmError } = await supabase
+            const { data: existingArm } = await supabase
               .from('arms')
               .select('id')
               .eq('class_id', newClass.id)
@@ -119,7 +156,7 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
             console.log(`    ✅ Created arm: ${classItem.name}-${armName}`)
             armsCreated++
 
-            // 🔥 CRITICAL: Create class_arm_combo entry
+            // Create class_arm_combo entry
             try {
               const { error: comboError } = await supabase
                 .from('class_arm_combos')
@@ -151,14 +188,15 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
     console.log(`  📚 Classes created: ${classesCreated}`)
     console.log(`  🔗 Arms created: ${armsCreated}`)
     console.log(`  🔀 Combos created: ${combosCreated}`)
-    console.log(`  📖 Subjects: Created automatically via migration 049`)
+    console.log(`  📅 Academic sessions created: ${sessionsCreated}`)
 
     return {
       success: true,
       classesCreated,
       armsCreated,
       combosCreated,
-      subjectsCreated: 0, // Subjects are now seeded by migration
+      subjectsCreated: 0,
+      sessionsCreated,
     }
   } catch (error: any) {
     const errorMsg = error.message || 'Unknown error during seeding'
@@ -169,6 +207,7 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
       armsCreated: 0,
       combosCreated: 0,
       subjectsCreated: 0,
+      sessionsCreated: 0,
       error: errorMsg,
     }
   }

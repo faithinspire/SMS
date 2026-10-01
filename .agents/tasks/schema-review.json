@@ -1,0 +1,22 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "label": "Uncertain exception handler in migrations 155-156",
+      "description": "Both migrations use `WHEN duplicate_object THEN` to catch constraint duplication errors in ALTER TABLE ADD CONSTRAINT blocks. Migration 157 uses `WHEN duplicate_table THEN` instead. The correct PL/pgSQL exception handler for constraint name duplicates in Supabase is not verified by the migration tests themselves. If `duplicate_table` is correct (as migration 157 assumes), then migrations 155-156 will fail with unhandled exceptions on re-run. Test empirically on Supabase or use `WHEN OTHERS THEN` with SQLERRM logging for guaranteed safety."
+    },
+    {
+      "label": "Redundant constraint definitions between migrations 152 and 155-157",
+      "description": "Migration 152 defines `UNIQUE(school_id, session_year)` in the CREATE TABLE academic_sessions statement, while migrations 155-157 attempt to add the same constraint again with ALTER TABLE ADD CONSTRAINT. This creates confusion about which migration is canonical. Clarify the migration ordering or consolidate constraint definitions into a single source. If migration 152 is guaranteed to run before 155-157, these migrations are unnecessary for new systems but may be needed for legacy deployments."
+    },
+    {
+      "label": "Migration 157 tests ON CONFLICT without verifying constraint presence",
+      "description": "The test in PHASE 5 inserts into academic_sessions with `ON CONFLICT (school_id, session_year) DO NOTHING`. If the constraint doesn't exist (because earlier steps failed), this test will fail with error 42P10, masking whether the constraint actually exists. Add a verification query before the test to confirm the constraint is present in information_schema.table_constraints, so test failures clearly indicate schema state."
+    },
+    {
+      "label": "Migration 156 data migration lacks transaction protection",
+      "description": "Step 2 migrates data from a legacy 'name' column to 'session_year', then Step 3 drops 'name'. If a concurrent read occurs during migration, the process sees inconsistent state. While risk is low in a migration context, wrap the column migration and drop in a single transaction or disable table access during the operation for explicit safety."
+    }
+  ],
+  "reviewDoc": "c:\\Users\\OLU\\Desktop\\SMS\\.agents\\tasks\\schema-review.md"
+}

@@ -1,22 +1,29 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase-client'
 import { AuthService } from '@/services/auth.service'
-import { createClient } from '@/lib/supabase-client'
-import StaffHeader from '@/components/StaffHeader'
 import { toast } from 'react-hot-toast'
+import StaffHeader from '@/components/StaffHeader'
 
-let supabase: any = null
-
-function getSupabaseClient() {
-  if (!supabase) {
-    supabase = createClient()
-  }
-  return supabase
+interface AcademicSession {
+  id: string
+  session_year: string
+  start_year: number
+  end_year: number
+  is_active: boolean
 }
 
-interface ClassWithStudents {
+interface AcademicTerm {
+  id: string
+  session_id: string
+  term_name: string
+  term_order: number
+  is_active: boolean
+}
+
+interface ClassData {
   id: string
   class_name: string
   arm_name: string
@@ -29,564 +36,414 @@ interface StudentResult {
   full_name: string
   admission_number: string
   overall_score: number
+  overall_grade: string
   performance_rating: string
 }
 
-interface Session {
-  id: string
-  session_year: string
-  is_active: boolean
+interface ResultsState {
+  user: any
+  school: any
+  loading: boolean
+  error: string
+  sessions: AcademicSession[]
+  terms: AcademicTerm[]
+  classes: ClassData[]
+  selectedSession: string | null
+  selectedTerm: string | null
+  loadingTerms: boolean
+  loadingClasses: boolean
 }
 
-interface Term {
-  id: string
-  session_id: string
-  term_name: string
-  term_order: number
-  is_active: boolean
-}
-
-export default function SchoolAdminResultsPage() {
+export default function ResultsPage() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [school, setSchool] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [classes, setClasses] = useState<ClassWithStudents[]>([])
-  const [selectedClass, setSelectedClass] = useState<string | null>(null)
-  const [selectedClassData, setSelectedClassData] = useState<ClassWithStudents | null>(null)
   
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [terms, setTerms] = useState<Term[]>([])
-  const [selectedSession, setSelectedSession] = useState<string | null>(null)
-  const [selectedTerm, setSelectedTerm] = useState<string | null>(null)
-  const [loadingClasses, setLoadingClasses] = useState(false)
-  const [schoolId, setSchoolId] = useState<string | null>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
+  const [state, setState] = useState<ResultsState>({
+    user: null,
+    school: null,
+    loading: true,
+    error: '',
+    sessions: [],
+    terms: [],
+    classes: [],
+    selectedSession: null,
+    selectedTerm: null,
+    loadingTerms: false,
+    loadingClasses: false,
+  })
 
-  // Load classes function - REAL-TIME with proper class fetching
-  const loadClassesForTerm = useCallback(async (schoolIdParam: string, termId: string) => {
-    if (!schoolIdParam || !termId) {
-      console.log('[Results] Skipping class load - missing schoolId or termId')
-      setClasses([])
-      return
+  // Load initial data on mount
+  useEffect(() => {
+    loadInitialData()
+  }, [])
+
+  // Load sessions when user is authenticated
+  useEffect(() => {
+    if (state.user?.school_id) {
+      loadSessions()
     }
+  }, [state.user?.school_id])
 
-    // Cancel any previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
+  // Load terms when session changes
+  useEffect(() => {
+    if (state.selectedSession) {
+      loadTerms()
     }
+  }, [state.selectedSession])
 
-    abortControllerRef.current = new AbortController()
-    const signal = abortControllerRef.current.signal
+  // Load classes when term changes
+  useEffect(() => {
+    if (state.selectedTerm && state.user?.school_id) {
+      loadClasses()
+    }
+  }, [state.selectedTerm, state.user?.school_id])
 
+  const loadInitialData = async () => {
     try {
-      setLoadingClasses(true)
-      console.log('[Results] Loading classes for term:', termId, 'school:', schoolIdParam)
-
-      // STEP 1: Fetch all class/arm combos for the school with real data
-      const { data: classArmsData, error: classArmsError } = await getSupabaseClient()
-        .from('class_arm_combos')
-        .select(`
-          id,
-          school_id,
-          class:class_id (id, name),
-          arm:arm_id (id, name)
-        `)
-        .eq('school_id', schoolIdParam)
-        .order('created_at', { ascending: true })
-
-      if (signal.aborted) throw new Error('Request was cancelled')
-      if (classArmsError) {
-        console.error('[Results] Class/arms query error:', classArmsError)
-        throw classArmsError
-      }
-
-      console.log('[Results] Fetched class combos:', classArmsData?.length || 0)
-
-      if (!classArmsData || classArmsData.length === 0) {
-        console.warn('[Results] No class/arm combos found for school')
-        setClasses([])
-        setSelectedClass(null)
-        setSelectedClassData(null)
+      const currentUser = await AuthService.getCurrentUser()
+      
+      if (!currentUser || (currentUser.role !== 'SCHOOL_ADMIN' && currentUser.role !== 'ADMIN')) {
+        router.push('/landing')
         return
       }
 
-      // STEP 2: For each class, fetch students with their scores in parallel
-      const classesWithStudents: ClassWithStudents[] = []
-
-      const studentPromises = (classArmsData || []).map(async (classArm: any) => {
-        try {
-          if (signal.aborted) throw new Error('Request was cancelled')
-
-          // Fetch students in this class with their scores for this term
-          const { data: scoresData, error: scoresError } = await getSupabaseClient()
-            .from('score_sheets')
-            .select(`
-              student:student_id (
-                id,
-                user:user_id (full_name),
-                admission_number
-              ),
-              total_score
-            `)
-            .eq('class_arm_combo_id', classArm.id)
-            .eq('term_id', termId)
-            .not('student', 'is', null)
-
-          if (scoresError) {
-            console.error(`[Results] Error loading scores for class ${classArm.id}:`, scoresError)
-            return null
-          }
-
-          if (signal.aborted) throw new Error('Request was cancelled')
-
-          // Transform score data into StudentResult format
-          const students: StudentResult[] = (scoresData || [])
-            .filter((score: any) => score.student)
-            .map((score: any) => {
-              const totalScore = score.total_score || 0
-              let rating = 'Poor'
-              if (totalScore >= 80) rating = 'Excellent'
-              else if (totalScore >= 70) rating = 'Very Good'
-              else if (totalScore >= 60) rating = 'Good'
-              else if (totalScore >= 50) rating = 'Fair'
-              else if (totalScore >= 40) rating = 'Poor'
-              else rating = 'Very Poor'
-
-              return {
-                id: score.student.id,
-                full_name: score.student.user?.full_name || 'Unknown',
-                admission_number: score.student.admission_number || 'N/A',
-                overall_score: totalScore,
-                performance_rating: rating,
-              }
-            })
-            .sort((a: any, b: any) => b.overall_score - a.overall_score)
-
-          return {
-            id: classArm.id,
-            class_name: classArm.class?.name || 'Unknown',
-            arm_name: classArm.arm?.name || 'N/A',
-            student_count: students.length,
-            students,
-          }
-        } catch (error) {
-          console.error(`[Results] Error processing class ${classArm.id}:`, error)
-          return null
-        }
-      })
-
-      const results = await Promise.all(studentPromises)
-      const validResults = results.filter((r): r is ClassWithStudents => r !== null)
-
-      if (signal.aborted) throw new Error('Request was cancelled')
-
-      console.log('[Results] Classes loaded with students:', validResults.length)
-      setClasses(validResults)
-      
-      // Auto-select first class if available
-      if (validResults.length > 0 && !selectedClass) {
-        console.log('[Results] Auto-selecting first class')
-        setSelectedClass(validResults[0].id)
-        setSelectedClassData(validResults[0])
-      }
-    } catch (error) {
-      if ((error as Error).message === 'Request was cancelled') {
-        console.log('[Results] Request was cancelled')
+      if (!currentUser.school_id) {
+        setState(s => ({ ...s, error: '❌ School ID not found', loading: false }))
         return
       }
-      
-      console.error('[Results] Error loading classes:', error)
-      let errorMsg = 'Failed to load class results'
-      if (error instanceof Error) {
-        errorMsg = error.message
-      }
-      toast.error(errorMsg)
-      setClasses([])
-      setSelectedClass(null)
-      setSelectedClassData(null)
-    } finally {
-      setLoadingClasses(false)
-    }
-  }, [selectedClass])
 
-  // Load on mount
-  useEffect(() => {
-    const initData = async () => {
-      try {
-        setLoading(true)
-        console.log('[Results] Loading initial data...')
-
-        const currentUser = await AuthService.getCurrentUser()
-
-        if (!currentUser || currentUser.role !== 'SCHOOL_ADMIN') {
-          router.push('/landing')
-          return
-        }
-
-        setUser(currentUser)
-
-        if (!currentUser.school_id) {
-          console.error('[Results] No school ID found')
-          return
-        }
-
-        setSchoolId(currentUser.school_id)
-
-        const { data: schoolData } = await getSupabaseClient()
-          .from('schools')
-          .select('id, name, logo_url')
-          .eq('id', currentUser.school_id)
-          .single()
-
-        setSchool(schoolData)
-        console.log('[Results] School loaded:', schoolData?.name)
-
-        // CRITICAL: Ensure school has academic sessions and terms - AUTO-CREATE if missing
-        console.log('[Results] Ensuring school data exists...')
-        try {
-          const currentYear = new Date().getFullYear()
-          
-          // Check if sessions exist
-          const { data: existingSessions } = await getSupabaseClient()
-            .from('academic_sessions')
-            .select('id')
-            .eq('school_id', currentUser.school_id)
-            .limit(1)
-
-          if (!existingSessions || existingSessions.length === 0) {
-            console.log('[Results] No sessions found - auto-creating...')
-            
-            // Create default session
-            const { data: newSession, error: sessionError } = await getSupabaseClient()
-              .from('academic_sessions')
-              .insert([{
-                school_id: currentUser.school_id,
-                session_year: `${currentYear}/${currentYear + 1}`,
-                start_year: currentYear,
-                end_year: currentYear + 1,
-                is_active: true,
-              }])
-              .select()
-
-            if (sessionError) {
-              console.error('[Results] Error creating session:', sessionError)
-            } else if (newSession && newSession.length > 0) {
-              console.log('[Results] Session created:', newSession[0].id)
-              
-              // Create default terms
-              const sessionId = newSession[0].id
-              const termsToCreate = [
-                {
-                  school_id: currentUser.school_id,
-                  session_id: sessionId,
-                  term_name: 'First Term',
-                  term_order: 1,
-                  is_active: true,
-                  start_date: new Date(currentYear, 8, 1).toISOString(),
-                  end_date: new Date(currentYear, 10, 30).toISOString(),
-                },
-                {
-                  school_id: currentUser.school_id,
-                  session_id: sessionId,
-                  term_name: 'Second Term',
-                  term_order: 2,
-                  is_active: false,
-                  start_date: new Date(currentYear, 11, 1).toISOString(),
-                  end_date: new Date(currentYear + 1, 1, 28).toISOString(),
-                },
-                {
-                  school_id: currentUser.school_id,
-                  session_id: sessionId,
-                  term_name: 'Third Term',
-                  term_order: 3,
-                  is_active: false,
-                  start_date: new Date(currentYear + 1, 2, 1).toISOString(),
-                  end_date: new Date(currentYear + 1, 4, 31).toISOString(),
-                },
-              ]
-              
-              const { error: termsError } = await getSupabaseClient()
-                .from('academic_terms')
-                .insert(termsToCreate)
-              
-              if (termsError) {
-                console.error('[Results] Error creating terms:', termsError)
-              } else {
-                console.log('[Results] Default terms created')
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('[Results] Warning ensuring school data:', err)
-          // Non-critical - proceed with loading existing data
-        }
-
-        // Load sessions and terms in parallel
-        const [sessionsResult, termsResult] = await Promise.all([
-          getSupabaseClient()
-            .from('academic_sessions')
-            .select('id, session_year, is_active, created_at')
-            .eq('school_id', currentUser.school_id)
-            .order('session_year', { ascending: false }),
-          getSupabaseClient()
-            .from('academic_terms')
-            .select('id, session_id, term_name, term_order, is_active, school_id')
-            .eq('school_id', currentUser.school_id)
-            .order('term_order', { ascending: true }),
-        ])
-
-        const sessionsData = sessionsResult.data || []
-        const termsData = termsResult.data || []
-
-        console.log('[Results] Data loaded:', {
-          sessions: sessionsData.length,
-          terms: termsData.length,
-        })
-
-        setSessions(sessionsData)
-        setTerms(termsData)
-
-        if (sessionsData && sessionsData.length > 0) {
-          const firstSession = sessionsData[0]
-          console.log('[Results] Auto-selecting session:', firstSession.session_year)
-          setSelectedSession(firstSession.id)
-        } else {
-          console.warn('[Results] No academic sessions found in database after ensure attempt')
-          toast.error('No academic sessions found. Please refresh the page.')
-        }
-      } catch (error) {
-        console.error('[Results] Load error:', error)
-        toast.error('Failed to load results page')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    initData()
-  }, [router])
-
-  // When session changes, select first term
-  useEffect(() => {
-    if (selectedSession && terms.length > 0) {
-      const sessionTerms = terms.filter((t) => t.session_id === selectedSession)
-      if (sessionTerms.length > 0) {
-        setSelectedTerm(sessionTerms[0].id)
-      }
-    }
-  }, [selectedSession, terms])
-
-  // When term changes, load classes with REAL-TIME data
-  useEffect(() => {
-    if (selectedTerm && schoolId) {
-      console.log('[Results] Loading classes - term selected:', selectedTerm)
-      loadClassesForTerm(schoolId, selectedTerm)
-    } else {
-      console.log('[Results] Not loading classes - term or schoolId missing')
-      setClasses([])
-    }
-  }, [selectedTerm, schoolId, loadClassesForTerm])
-
-  // When class data loads, update selected class data
-  useEffect(() => {
-    if (selectedClass && classes.length > 0) {
-      const classData = classes.find(c => c.id === selectedClass)
-      if (classData) {
-        setSelectedClassData(classData)
-      }
-    }
-  }, [selectedClass, classes])
-
-  const getPerformanceColor = (rating: string) => {
-    switch (rating) {
-      case 'Excellent':
-        return 'bg-green-100 text-green-800'
-      case 'Very Good':
-        return 'bg-blue-100 text-blue-800'
-      case 'Good':
-        return 'bg-cyan-100 text-cyan-800'
-      case 'Fair':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'Poor':
-        return 'bg-orange-100 text-orange-800'
-      case 'Very Poor':
-        return 'bg-red-100 text-red-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
+      setState(s => ({ ...s, user: currentUser, loading: false }))
+    } catch (err: any) {
+      console.error('[Results] Error loading user:', err)
+      setState(s => ({ ...s, error: `❌ ${err.message}`, loading: false }))
     }
   }
 
-  if (loading) {
+  const loadSessions = async () => {
+    try {
+      if (!state.user?.school_id) return
+
+      console.log('[Results] Loading sessions for school:', state.user.school_id)
+
+      const { data, error } = await supabase
+        .from('academic_sessions')
+        .select('id, session_year, start_year, end_year, is_active')
+        .eq('school_id', state.user.school_id)
+        .order('start_year', { ascending: false })
+
+      if (error) throw error
+
+      console.log('[Results] Sessions loaded:', data?.length || 0)
+
+      setState(s => ({
+        ...s,
+        sessions: data || [],
+        selectedSession: data && data.length > 0 ? data[0].id : null,
+      }))
+    } catch (err: any) {
+      console.error('[Results] Error loading sessions:', err)
+      setState(s => ({ ...s, error: `❌ Failed to load sessions: ${err.message}` }))
+    }
+  }
+
+  const loadTerms = async () => {
+    try {
+      if (!state.selectedSession) return
+
+      setState(s => ({ ...s, loadingTerms: true, error: '' }))
+
+      console.log('[Results] Loading terms for session:', state.selectedSession)
+
+      const { data, error } = await supabase
+        .from('academic_terms')
+        .select('id, session_id, term_name, term_order, is_active')
+        .eq('session_id', state.selectedSession)
+        .eq('school_id', state.user.school_id)
+        .order('term_order', { ascending: true })
+
+      if (error) throw error
+
+      console.log('[Results] Terms loaded:', data?.length || 0)
+
+      setState(s => ({
+        ...s,
+        terms: data || [],
+        selectedTerm: data && data.length > 0 ? data[0].id : null,
+        loadingTerms: false,
+      }))
+    } catch (err: any) {
+      console.error('[Results] Error loading terms:', err)
+      setState(s => ({ 
+        ...s, 
+        error: `❌ Failed to load terms: ${err.message}`,
+        loadingTerms: false,
+      }))
+    }
+  }
+
+  const loadClasses = async () => {
+    try {
+      if (!state.selectedTerm || !state.user?.school_id) return
+
+      setState(s => ({ ...s, loadingClasses: true, error: '' }))
+
+      console.log('[Results] Loading classes for term:', state.selectedTerm)
+
+      const response = await fetch(
+        `/api/results/school-classes-and-students?schoolId=${state.user.school_id}&termId=${state.selectedTerm}`
+      )
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
+
+      const result = await response.json()
+
+      console.log('[Results] Classes loaded:', result.classes?.length || 0)
+
+      setState(s => ({
+        ...s,
+        classes: result.classes || [],
+        loadingClasses: false,
+      }))
+    } catch (err: any) {
+      console.error('[Results] Error loading classes:', err)
+      setState(s => ({ 
+        ...s, 
+        error: `❌ Failed to load classes: ${err.message}`,
+        loadingClasses: false,
+      }))
+    }
+  }
+
+  const getSelectedSessionYear = () => {
+    const session = state.sessions.find(s => s.id === state.selectedSession)
+    return session ? session.session_year : 'Select a session'
+  }
+
+  const getSelectedTermName = () => {
+    const term = state.terms.find(t => t.id === state.selectedTerm)
+    return term ? term.term_name : 'Select a term'
+  }
+
+  if (state.loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-indigo-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading results...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-purple-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-semibold">Loading results page...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 pb-32">
-      <StaffHeader
-        staffName={user?.full_name || 'School Admin'}
-        schoolName={school?.name || 'School'}
-        section="Student Results"
-      />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pb-20">
+      {/* Header */}
+      <div className="sticky top-0 z-50">
+        <StaffHeader
+          staffName={state.user?.full_name || 'School Administrator'}
+          schoolName={state.school?.name || 'School'}
+          section="Results Management"
+        />
+      </div>
 
+      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-8">📊 Student Results & Performance</h1>
+        {/* Error Message */}
+        {state.error && (
+          <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+            {state.error}
+          </div>
+        )}
 
-        {/* Session and Term Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow-lg p-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Session:</label>
-            {sessions.length === 0 ? (
-              <div className="w-full px-4 py-2 border-2 border-yellow-300 bg-yellow-50 rounded-lg text-yellow-700 text-sm">
-                ⚠️ No academic sessions found
-              </div>
-            ) : (
-              <select
-                value={selectedSession || ''}
-                onChange={(e) => setSelectedSession(e.target.value)}
-                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
-              >
-                <option value="">-- Select Session --</option>
-                {sessions.map((session) => (
-                  <option key={session.id} value={session.id}>
-                    {session.session_year} {session.is_active ? '(Active)' : ''}
-                  </option>
-                ))}
-              </select>
+        {/* Selectors Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* Session Selector */}
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <label className="block text-sm font-bold text-gray-700 mb-3">
+              📅 Academic Session
+            </label>
+            <select
+              value={state.selectedSession || ''}
+              onChange={(e) => {
+                setState(s => ({ 
+                  ...s, 
+                  selectedSession: e.target.value || null,
+                  selectedTerm: null,
+                  terms: [],
+                  classes: [],
+                }))
+              }}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none bg-white"
+            >
+              <option value="">Select a session</option>
+              {state.sessions.map(session => (
+                <option key={session.id} value={session.id}>
+                  {session.session_year} 
+                  {session.is_active ? ' (Active)' : ''}
+                </option>
+              ))}
+            </select>
+            {state.sessions.length === 0 && (
+              <p className="text-sm text-gray-500 mt-2">📭 No sessions available</p>
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow-lg p-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Term:</label>
-            {selectedSession && terms.filter(t => t.session_id === selectedSession).length === 0 ? (
-              <div className="w-full px-4 py-2 border-2 border-yellow-300 bg-yellow-50 rounded-lg text-yellow-700 text-sm">
-                ⚠️ No terms found for this session
-              </div>
-            ) : (
-              <select
-                value={selectedTerm || ''}
-                onChange={(e) => setSelectedTerm(e.target.value)}
-                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
-                disabled={!selectedSession}
-              >
-                <option value="">-- Select Term --</option>
-                {selectedSession && terms
-                  .filter(t => t.session_id === selectedSession)
-                  .map((term) => (
-                    <option key={term.id} value={term.id}>
-                      {term.term_name}
-                    </option>
-                  ))}
-              </select>
+          {/* Term Selector */}
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <label className="block text-sm font-bold text-gray-700 mb-3">
+              📋 Term
+            </label>
+            <select
+              value={state.selectedTerm || ''}
+              onChange={(e) => {
+                setState(s => ({ 
+                  ...s, 
+                  selectedTerm: e.target.value || null,
+                  classes: [],
+                }))
+              }}
+              disabled={!state.selectedSession || state.loadingTerms}
+              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+            >
+              <option value="">
+                {state.loadingTerms ? '⏳ Loading terms...' : 'Select a term'}
+              </option>
+              {state.terms.map(term => (
+                <option key={term.id} value={term.id}>
+                  {term.term_name} 
+                  {term.is_active ? ' (Active)' : ''}
+                </option>
+              ))}
+            </select>
+            {!state.selectedSession && (
+              <p className="text-sm text-gray-500 mt-2">👆 Select a session first</p>
+            )}
+            {state.selectedSession && state.terms.length === 0 && !state.loadingTerms && (
+              <p className="text-sm text-gray-500 mt-2">📭 No terms available</p>
             )}
           </div>
         </div>
 
-        {/* Main Content Area */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Left Sidebar - Classes List */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-lg p-4">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">📚 Classes</h2>
-              {loadingClasses ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent mx-auto mb-2"></div>
-                  <p className="text-sm text-gray-600">Loading...</p>
-                </div>
-              ) : classes.length === 0 ? (
-                <div className="text-center py-8 text-gray-600">
-                  <p className="text-sm">No classes found</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {classes.map((cls) => (
-                    <button
-                      key={cls.id}
-                      onClick={() => {
-                        setSelectedClass(cls.id)
-                        setSelectedClassData(cls)
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                        selectedClass === cls.id
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
-                      }`}
-                    >
-                      <div className="font-semibold text-sm">{cls.class_name}</div>
-                      <div className="text-xs opacity-75">{cls.arm_name}</div>
-                      <div className="text-xs opacity-75">{cls.student_count} students</div>
-                    </button>
-                  ))}
-                </div>
-              )}
+        {/* Results Section */}
+        {state.selectedTerm && (
+          <div>
+            <div className="mb-6">
+              <h2 className="text-3xl font-bold text-gray-900">
+                📊 Results - {getSelectedSessionYear()} • {getSelectedTermName()}
+              </h2>
+              <p className="text-gray-600 mt-2">
+                {state.loadingClasses ? '⏳ Loading classes and students...' : `${state.classes.length} classes`}
+              </p>
             </div>
-          </div>
 
-          {/* Right Content - Class Results */}
-          <div className="lg:col-span-3">
-            {selectedClassData ? (
-              <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-                <div className="p-6 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {selectedClassData.class_name} ({selectedClassData.arm_name})
-                  </h2>
-                  <p className="text-sm text-gray-600 mt-2">
-                    {selectedClassData.students.length} students with results
-                  </p>
-                </div>
-
-                {selectedClassData.students.length === 0 ? (
-                  <div className="p-8 text-center text-gray-600">
-                    <p>No results yet for this class in the selected term</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="px-6 py-3 text-left font-semibold text-gray-900">#</th>
-                          <th className="px-6 py-3 text-left font-semibold text-gray-900">Student Name</th>
-                          <th className="px-6 py-3 text-left font-semibold text-gray-900">Admission #</th>
-                          <th className="px-6 py-3 text-center font-semibold text-gray-900">Score</th>
-                          <th className="px-6 py-3 text-left font-semibold text-gray-900">Performance</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {selectedClassData.students.map((student, idx) => (
-                          <tr key={student.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 font-bold text-gray-900">{idx + 1}</td>
-                            <td className="px-6 py-4 text-gray-900 font-semibold">{student.full_name}</td>
-                            <td className="px-6 py-4 text-gray-600">{student.admission_number}</td>
-                            <td className="px-6 py-4 text-center">
-                              <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full font-bold">
-                                {student.overall_score.toFixed(1)}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPerformanceColor(student.performance_rating)}`}>
-                                {student.performance_rating}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+            {state.loadingClasses ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-purple-500 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading classes and student results...</p>
+              </div>
+            ) : state.classes.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+                <p className="text-gray-600">📭 No classes found for this term</p>
               </div>
             ) : (
-              <div className="bg-white rounded-lg shadow-lg p-12 text-center">
-                <p className="text-gray-600">Select a class to view results</p>
+              <div className="space-y-6">
+                {state.classes.map(cls => (
+                  <div key={cls.id} className="bg-white rounded-lg shadow-lg overflow-hidden">
+                    {/* Class Header */}
+                    <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4">
+                      <h3 className="text-xl font-bold">
+                        {cls.class_name} {cls.arm_name}
+                      </h3>
+                      <p className="text-blue-100 text-sm mt-1">
+                        👥 {cls.student_count} student{cls.student_count !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+
+                    {/* Students Table */}
+                    {cls.students.length === 0 ? (
+                      <div className="p-6 text-center text-gray-600">
+                        No students enrolled in this class
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-100 border-b-2 border-gray-300">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">
+                                Admission #
+                              </th>
+                              <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">
+                                Student Name
+                              </th>
+                              <th className="px-6 py-3 text-center text-sm font-bold text-gray-700">
+                                Score
+                              </th>
+                              <th className="px-6 py-3 text-center text-sm font-bold text-gray-700">
+                                Grade
+                              </th>
+                              <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">
+                                Performance
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {cls.students.map((student, idx) => (
+                              <tr 
+                                key={student.id} 
+                                className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                              >
+                                <td className="px-6 py-4 text-sm font-semibold text-gray-700">
+                                  {student.admission_number}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-700">
+                                  {student.full_name}
+                                </td>
+                                <td className="px-6 py-4 text-center text-sm font-bold text-gray-900">
+                                  {student.overall_score}
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                  <span className={`px-3 py-1 rounded-full text-sm font-bold text-white ${
+                                    student.overall_grade === 'A' ? 'bg-green-600' :
+                                    student.overall_grade === 'B' ? 'bg-blue-600' :
+                                    student.overall_grade === 'C' ? 'bg-yellow-600' :
+                                    student.overall_grade === 'D' ? 'bg-orange-600' :
+                                    'bg-red-600'
+                                  }`}>
+                                    {student.overall_grade}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 text-sm">
+                                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                    student.performance_rating === 'Excellent' ? 'bg-green-100 text-green-800' :
+                                    student.performance_rating === 'Very Good' ? 'bg-blue-100 text-blue-800' :
+                                    student.performance_rating === 'Good' ? 'bg-cyan-100 text-cyan-800' :
+                                    student.performance_rating === 'Fair' ? 'bg-yellow-100 text-yellow-800' :
+                                    student.performance_rating === 'Poor' ? 'bg-orange-100 text-orange-800' :
+                                    'bg-red-100 text-red-800'
+                                  }`}>
+                                    {student.performance_rating}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
-        </div>
+        )}
+
+        {/* No Selection Message */}
+        {!state.selectedTerm && state.selectedSession && (
+          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+            <p className="text-gray-600">👆 Select a term to view results</p>
+          </div>
+        )}
       </div>
     </div>
   )

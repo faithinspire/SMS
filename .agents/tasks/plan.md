@@ -1,292 +1,641 @@
-# SMS Registration Pages Fix - Implementation Plan
+# Implementation Plan: Fix 4 Critical Issues in School Management System
 
-## Overview
-Fix critical issues in staff and student registration pages: subject/class fetching failures, missing role dropdown in staff registration, and incomplete letter generation. Three main issues to resolve with data dependencies between registration forms and letter generation.
-
----
-
-## Issue Analysis & Design Decisions
-
-### Issue 1: Subject & Class Fetching Not Working
-**Root Cause**: The `useEffect` hooks in both registration pages have timing issues. When `getSubjectsForLevel()` is called in CanonicalSubjectService, it uses PostgreSQL array containment queries that may not work correctly with the current API or the applicable_to_levels column structure. Additionally, the dependencies in useEffect may not trigger on class selection if the state updates are not properly sequenced.
-
-**Design Decision**: Fix the useEffect hook in both student and staff registration pages to ensure proper sequencing when class is selected. Add logging to CanonicalSubjectService to diagnose the query failures. Ensure classOptions are properly populated before attempting to fetch subjects. The issue is likely that `classCombo.classes?.level` may be undefined, causing the subjects query to fail silently.
-
-### Issue 2: Staff Stage 5 Missing Role/Responsibility Dropdown
-**Root Cause**: Stage 5 currently shows a free-text input for `primaryRole` instead of a dropdown. The form does have `formData.role` from Stage 3 (employment role dropdown), but it's not being reused in Stage 5.
-
-**Design Decision**: Replace the text input in Stage 5 with a dropdown that mirrors the Stage 3 role options (TEACHER, HEAD_TEACHER, PRINCIPAL, ACCOUNTANT, STAFF). This dropdown will auto-populate from `formData.role` when the user revisits Stage 5 or progresses past Stage 3. The `primaryRole` should be hidden and auto-set to the value of `formData.role` at stage transition to prevent user confusion.
-
-### Issue 3: Letter Generation Missing Details
-**Root Cause**: The letter templates use basic field mappings. Staff appointment letters don't include salary frequency, full role/position distinctions, or department info in tables. Student admission letters don't include list of assigned subjects or session/term details. The services fetch data but the templates don't use all available fields.
-
-**Design Decision**: Enhance both letter templates to include all form-captured details in structured tables:
-- Staff letter: Add salary frequency row, full role with department, bank details in dedicated section
-- Student letter: Add assigned subjects list, academic session, term, and enrollment date details in dedicated section
-These enhancements require no data fetching changes, only template modifications to display existing data.
+**Project**: Multi-tenant School Management System (SMS) running on Next.js + Supabase
+**Status**: CRITICAL - Blocking school registration and admin workflows
+**Deploy Target**: Vercel (auto-deploy on git push)
 
 ---
 
-## Implementation Steps
+## ISSUE 1: Super Admin School Registration (42P10 Error - BLOCKING)
 
-### Step 1: Fix Student Registration Page - Subject Fetching
-**Purpose**: Debug and fix the useEffect that loads subjects when class is selected.
+### Root Cause Analysis
+The error `there is no unique or exclusion constraint matching the ON CONFLICT specification` (PostgreSQL code 42P10) occurs because:
 
-**Changes**:
-- Modify `src/app/auth/student/register/page.tsx` Stage 5 useEffect hook
-- Add console logging to trace when `formData.classArmComboId` changes
-- Verify that `classOptions.find()` returns a valid combo with `classes.level` defined
-- Add fallback if level is undefined: log error and show message "Subjects not available for this class"
-- Ensure the dependency array includes both `formData.classArmComboId` AND `classOptions` to re-trigger on class load
+1. **Migration 152** (`academic_sessions` and `academic_terms` tables) defines:
+   - `academic_sessions`: UNIQUE(school_id, session_year) 
+   - `academic_terms`: UNIQUE(school_id, session_id, term_order)
 
-**Files**: 
-- `src/app/auth/student/register/page.tsx` (useEffect at line ~140, around Stage 5 subjects loading)
+2. **Migration 161** correctly adds these UNIQUE constraints and disables RLS.
 
-**Verify**: Run registration form, select school, session, term, class → check browser console for subject fetch logs → subjects should populate in Stage 5 dropdown
+3. **Safe INSERT Logic**: The new `seedSchoolCurriculum()` in `src/lib/school-seeding.ts` uses safe INSERT-SELECT with `WHERE NOT EXISTS` — no ON CONFLICT clause.
 
----
+4. **The Problem**: Legacy migration files may still contain ON CONFLICT clauses on columns that DON'T have UNIQUE constraints:
+   - Migration 013 or 015 may reference `term_name` column in an ON CONFLICT that no longer exists or doesn't have a constraint
+   - Any ON CONFLICT without a matching UNIQUE constraint will fail with 42P10
 
-### Step 2: Fix Staff Registration Page - Subject Fetching
-**Purpose**: Same fix as Step 1 but for staff form, which has identical issue in Stage 7 (Subject Assignment).
+5. **Migration 015 Specific Issues**:
+   - Creates `academic_terms` with `term_name TEXT NOT NULL` 
+   - If any migration tries `ON CONFLICT (school_id, term_name)` → ERROR: no such constraint exists
+   - The UNIQUE constraint is on `(school_id, session_id, term_order)`, NOT `term_name`
 
-**Changes**:
-- Modify `src/app/auth/staff/register/page.tsx` Stage 7 useEffect hook (around line ~130)
-- Add same logging and fallback as Step 1
-- Ensure dependency array includes `formData.classArmComboId` AND `classOptions`
+### Files to Investigate
+- `database/migrations/013_insert_test_data.sql` → Check for any INSERT with ON CONFLICT
+- `database/migrations/015_auto_create_school_data.sql` → Check for any INSERT with ON CONFLICT or DROP triggers referencing removed columns
+- `database/migrations/152_add_academic_core_tables.sql` → Already correct (uses safe INSERT-SELECT)
+- `src/lib/school-seeding.ts` → Already correct (no ON CONFLICT)
+- `src/app/api/superadmin/register-school/route.ts` → Already correct (calls seedSchoolCurriculum which uses safe logic)
 
-**Files**: 
-- `src/app/auth/staff/register/page.tsx` (useEffect around line 130)
+### Fix Strategy
+**Decision**: Remove all ON CONFLICT clauses and use safe INSERT-SELECT logic as per Migration 152 pattern.
 
-**Verify**: Run registration form, select school, class → check browser console for subject fetch logs → subjects should populate in Stage 7
+1. **Create Migration 162** to:
+   - Remove/fix any stray ON CONFLICT clauses in academic_sessions or academic_terms inserts
+   - Ensure all legacy triggers that call INSERT operations use safe WHERE-NOT-EXISTS logic
+   - Drop any trigger that references non-existent columns (e.g., term_name in old function signatures)
+   - Verify all constraints exist before any auto-seeding
 
----
+2. **Verify triggers in Migration 015**:
+   - The `trigger_create_default_school_data_fn()` trigger calls `create_default_school_data()`
+   - This function uses INSERT with no ON CONFLICT — GOOD
+   - BUT: If this function exists from older schema, it may reference removed columns → drop and recreate it cleanly
 
-### Step 3: Fix Staff Registration Stage 5 - Replace Text Input with Role Dropdown
-**Purpose**: Replace free-text primary role input with dropdown that auto-populates from Stage 3 role selection.
+3. **Test the fix**:
+   - Register a new school via POST /api/superadmin/register-school
+   - Verify academic_sessions table receives 1 row with (school_id, session_year = '2024/2025')
+   - Verify academic_terms table receives 3 rows for First/Second/Third Term with (school_id, session_id, term_order)
 
-**Changes**:
-- Modify `src/app/auth/staff/register/page.tsx` Stage 5 renderStageContent
-- Remove the `<input>` for "Primary Role" (placeholder: "Primary Role *")
-- Replace with `<select>` dropdown with options: TEACHER, HEAD_TEACHER, PRINCIPAL, ACCOUNTANT, STAFF
-- Bind to `formData.role` (not a new field, reuse the Stage 3 role) to auto-populate
-- Add note below dropdown: "Based on employment role selected in Stage 3"
-- Update validation in `StaffRegistrationService.validateStage()` to check for role presence in Stage 5
+### Implementation Tasks
 
-**Files**: 
-- `src/app/auth/staff/register/page.tsx` (case 5 section, around line 400-410)
-- `src/services/staff-registration.service.ts` (validateStage method if it exists)
+#### Task 1.1: Create Migration 162 to Fix ON CONFLICT Issues
+**What**: Create a new migration that removes all problematic ON CONFLICT clauses and ensures safe INSERT logic.
 
-**Verify**: Fill form → Stage 3: select role (e.g., TEACHER) → Stage 5: verify dropdown shows TEACHER and is pre-selected
+**Files to create/modify**:
+- `database/migrations/162_fix_on_conflict_academic_tables.sql` (NEW)
 
----
+**Details**:
+```sql
+-- Drop problematic triggers and functions that might use ON CONFLICT
+DROP TRIGGER IF EXISTS trigger_auto_seed_school_safe ON schools;
+DROP FUNCTION IF EXISTS auto_seed_school_safe(UUID);
+DROP TRIGGER IF EXISTS trigger_create_default_school_data ON schools;
 
-### Step 4: Enhance Staff Appointment Letter - Add Salary & Role Details
-**Purpose**: Add salary frequency, full role/position, department to the letter template.
+-- Recreate the trigger with safe INSERT-SELECT logic (no ON CONFLICT)
+CREATE OR REPLACE FUNCTION auto_seed_school_safe(p_school_id UUID)
+RETURNS void AS $$
+BEGIN
+  -- Safe INSERT: Only insert if session doesn't exist
+  INSERT INTO academic_sessions (school_id, session_year, start_year, is_active)
+  SELECT p_school_id, '2024/2025', 2024, true
+  WHERE NOT EXISTS (
+    SELECT 1 FROM academic_sessions 
+    WHERE school_id = p_school_id AND session_year = '2024/2025'
+  );
+  
+  -- Get the session for this school
+  DECLARE
+    v_session_id UUID;
+  BEGIN
+    SELECT id INTO v_session_id FROM academic_sessions 
+    WHERE school_id = p_school_id AND session_year = '2024/2025'
+    LIMIT 1;
+    
+    -- Safe INSERT for terms
+    IF v_session_id IS NOT NULL THEN
+      INSERT INTO academic_terms (school_id, session_id, term_name, term_order, is_active)
+      SELECT p_school_id, v_session_id, 'First Term', 1, true
+      WHERE NOT EXISTS (
+        SELECT 1 FROM academic_terms
+        WHERE school_id = p_school_id AND session_id = v_session_id AND term_order = 1
+      );
+      -- ... similar for Second and Third Term
+    END IF;
+  END;
+END;
+$$ LANGUAGE plpgsql;
 
-**Changes**:
-- Modify `src/services/letter-generation.service.ts` in `generateAppointmentLetter()` method
-- Update the StaffData interface to include `salaryFrequency` field
-- In the details table (after Department row), add new rows:
-  - Salary Frequency (if staffData.salaryFrequency exists)
-  - Full Role/Position (combine position + department)
-  - Bank Details section (separate section with Bank Name, Account Name, Account Number if all present)
-- Ensure template HTML shows all fields with proper formatting
-
-**Files**: 
-- `src/services/letter-generation.service.ts` (StaffData interface + generateAppointmentLetter method, around line 8-150)
-
-**Verify**: Trigger letter generation for a staff member with salary/bank details filled → preview letter → verify salary frequency and bank details appear in formatted table
-
----
-
-### Step 5: Enhance Student Admission Letter - Add Subjects & Session Details
-**Purpose**: Add list of assigned subjects and academic session/term info to letter template.
-
-**Changes**:
-- Modify `src/services/letter-generation.service.ts` in `generateAdmissionLetter()` method
-- Accept an additional parameter for subjects array: `subjects?: CanonicalSubject[]`
-- Update the details table to include:
-  - Term (if studentData.term exists)
-  - Academic Session (if studentData.session exists)
-  - Subjects Assigned section (new): list all selected subjects in a bullet list or table
-- Ensure the admission letter calls include subjects when generating
-
-**Files**: 
-- `src/services/letter-generation.service.ts` (generateAdmissionLetter method signature + template, around line 200-350)
-
-**Verify**: Trigger letter generation for student with subjects selected → preview letter → verify subjects list appears with course names
-
----
-
-### Step 6: Update Registration Config Service - Add Diagnostics
-**Purpose**: Improve logging and error handling in RegistrationConfigService to aid future debugging.
-
-**Changes**:
-- Modify `src/services/registration-config.service.ts`
-- Add console group wrappers around method calls for cleaner logging
-- Add detailed error messages that include returned data shapes
-- In `getSubjectsForLevels()`, log the input levels and the PostgreSQL query equivalent for manual verification
-- Add validation: if levels array is empty, log warning "No levels provided for subject query"
-
-**Files**: 
-- `src/services/registration-config.service.ts` (all methods, especially getSubjectsForLevels)
-
-**Verify**: Open browser DevTools console, fill registration form, observe grouped logs showing data loads at each stage
-
----
-
-### Step 7: Validate Integration - Test Both Registration Flows
-**Purpose**: Ensure all fixes work together in both student and staff registration.
-
-**Changes**:
-- Manual testing script (no code change, verification step only)
-- Test student registration: School → Session → Term → Class → Subjects populate
-- Test staff registration: School → Class → Subjects populate → Stage 5 role shows dropdown
-- Test letter generation: Complete registration → trigger letter download → verify details present
-
-**Files**: None (test-only step)
-
-**Verify**: 
-- Run student registration with school/class selection and verify subjects load in Stage 5
-- Run staff registration with class selection and verify subjects load in Stage 7
-- Run staff registration Stage 5 and verify role dropdown is visible and pre-populated
-- Generate letters and verify new fields (salary frequency, subjects list) appear
-
----
-
-## Detailed Implementation Notes
-
-### For Subject Fetching Fix (Steps 1-2):
-The issue manifests as empty subject dropdowns. The root cause is likely one of:
-1. `classCombo.classes.level` is undefined, causing the subjects query to fail
-2. The `classes` nested field is not being returned properly by Supabase
-3. The useEffect dependency array is missing `classOptions`, so it doesn't re-trigger when classes load
-
-Solution: Add defensive programming:
-```typescript
-const classCombo = classOptions.find((c) => c.id === formData.classArmComboId)
-if (!classCombo) {
-  console.warn('[Register] Class combo not found in classOptions')
-  setSubjects([])
-  return
-}
-if (!classCombo.classes?.level) {
-  console.warn('[Register] Class level is undefined for combo:', classCombo)
-  setSubjects([])
-  return
-}
-// Now safe to fetch subjects
+-- Create trigger (won't fire since seedSchoolCurriculum() is called directly in the API route)
+CREATE TRIGGER trigger_auto_seed_school_safe
+AFTER INSERT ON schools
+FOR EACH ROW
+EXECUTE FUNCTION auto_seed_school_safe(NEW.id);
 ```
 
-### For Role Dropdown Fix (Step 3):
-The current form has `formData.role` set in Stage 3. In Stage 5, instead of storing a separate `primaryRole` string, bind the dropdown to `formData.role`. This ensures:
-- Auto-population from Stage 3
-- Single source of truth
-- No duplicate role fields in the form state
-
-### For Letter Generation (Steps 4-5):
-The letter templates are HTML strings. To add new fields:
-1. Add fields to the interface (StaffData already has salaryFrequency from staff table)
-2. In the HTML template, add new `<tr>` rows in the details table with conditional rendering: `${staffData.salary ? '<tr>...</tr>' : ''}`
-3. For subjects in student letters, loop through the subjects array: `${subjects?.map(s => '<li>' + s.name + '</li>').join('')}`
+**Verify**: 
+- Run the migration in Supabase SQL editor: `SELECT migration_number FROM schema_migrations ORDER BY migration_number DESC LIMIT 1;`
+- Expected: 162 is present
+- Then test: POST /api/superadmin/register-school with valid school data
+- Expected response: 201 with success=true, seeding.sessionsCreated=1
+- Supabase query: `SELECT COUNT(*) FROM academic_sessions WHERE school_id = 'NEW_SCHOOL_ID';` → Should be 1
+- Supabase query: `SELECT COUNT(*) FROM academic_terms WHERE school_id = 'NEW_SCHOOL_ID';` → Should be 3
 
 ---
 
-## Files Summary
+## ISSUE 2: School Admin Bottom Navbar - Staff/Students/Results not Loading
 
-| File | Change Type | Description |
-|------|-------------|-------------|
-| `src/app/auth/student/register/page.tsx` | Fix | Add logging, fix useEffect dependencies for subject loading |
-| `src/app/auth/staff/register/page.tsx` | Fix | Same as above + replace text role input with dropdown |
-| `src/services/letter-generation.service.ts` | Enhancement | Add salary frequency, subjects list, session details to letter templates |
-| `src/services/registration-config.service.ts` | Enhancement | Improve logging for debugging |
-| `src/services/staff-registration.service.ts` | Reference | No changes needed; validateStage already supports role validation |
+### Root Cause Analysis
+Reading `src/app/school-admin/dashboard/page.tsx` (lines 1-120 visible), the dashboard:
+- Has tabs: 'overview' | 'staff' | 'students' | 'transactions' | 'academic'
+- Has state: `activeTab`, `staffMembers`, `students`, etc.
+- Loads data via sequential queries (not Promise.all) to avoid timeouts
 
----
+**THE ISSUE**: 
+- The visible code shows ONLY the TAB system in the top dashboard area
+- There is NO separate "bottom navbar" component rendering the same tabs
+- User report says "bottom navbar" for Staff/Students/Results "isn't fetching and loading school information"
+- **Likely cause**: There is a SECOND navigation component (mobile bottom nav) that is NOT wired to the same state/data as the main tabs
 
-## Verification Checklist
+**Search pattern**: Look for:
+1. A mobile navigation bar (bottom fixed) — might use Tailwind `fixed bottom-0 w-full`
+2. Links to `/school-admin/staff`, `/school-admin/students`, `/school-admin/results` (separate routes)
+3. These routes don't have the same data loading logic as the dashboard
 
-- [ ] Student registration: Select school, session, term, class → subjects dropdown populates
-- [ ] Staff registration: Select school, class → subjects dropdown populates  
-- [ ] Staff Stage 5: Role dropdown visible and pre-populated from Stage 3
-- [ ] Staff appointment letter: Salary frequency, full role, department, bank details display
-- [ ] Student admission letter: Subjects list, session, term display
-- [ ] No console errors in browser DevTools during registration flow
-- [ ] All form progression buttons (Next/Previous) still function correctly
+### Fix Strategy
+**Decision**: Consolidate navigation. Whether the bottom nav links to separate pages or tabs on the dashboard, they must load the same school/staff/student data.
 
----
+If separate pages exist:
+- They should fetch school_id from auth context
+- They should call the SAME data-loading functions as the dashboard
 
-## Testing Scenarios
+If tabs exist on dashboard:
+- Ensure mobile view uses the tab system, not separate nav links
+- Add CSS to show bottom nav bar on mobile only
 
-### Test 1: Student Registration Complete Flow
-1. Navigate to student registration
-2. Stage 1: Fill personal info, select school (e.g., "Test School")
-3. Stage 2: Fill guardian info
-4. Stage 3: Fill admission info
-5. Stage 4: Select session → Select term → Select class (verify subjects load automatically)
-6. Stage 5: Verify subjects list is populated and can select multiple
-7. Expected: Subjects dropdown shows 5+ subjects relevant to the selected class level
-8. **Verification**: Browser console shows subject fetch logs without errors
+### Implementation Tasks
 
-### Test 2: Staff Registration Complete Flow
-1. Navigate to staff registration
-2. Stage 1: Fill personal info
-3. Stage 2: Select school, fill contact info
-4. Stage 3: Select role (e.g., TEACHER)
-5. Stage 4: Fill professional info
-6. Stage 5: Verify role dropdown shows "TEACHER" and is pre-populated
-7. Stage 6: Select class (verify subjects load in Stage 7)
-8. Stage 7: Verify subjects dropdown is populated and can select multiple
-9. **Verification**: Subjects appear in Stage 7; role dropdown in Stage 5 matches Stage 3 selection
+#### Task 2.1: Audit Navigation Structure
+**What**: Find all navigation components and pages related to Staff, Students, Results in school-admin routes.
 
-### Test 3: Letter Generation with New Fields
-1. Complete staff registration with full details (salary, bank info, etc.)
-2. Trigger "Generate Appointment Letter" button
-3. Open letter preview
-4. Expected: See salary frequency, department, and bank details in letter
-5. **Verification**: All filled form fields appear in letter table
+**Files to read**:
+- `src/app/school-admin/` — check for subdirectories/routes
+- `src/components/` — check for nav components (likely found already: StaffHeader.tsx is top header, not bottom nav)
+- Search grep for `school-admin/staff`, `school-admin/students`, `school-admin/results`
 
-### Test 4: Student Admission Letter
-1. Complete student registration with subjects selected
-2. Trigger "Generate Admission Letter" button
-3. Open letter preview
-4. Expected: See subjects list, session, term in letter
-5. **Verification**: All enrolled subjects listed; session and term visible
+**Expected findings**:
+- Either separate pages at `/school-admin/staff/page.tsx`, `/school-admin/students/page.tsx`, `/school-admin/results/page.tsx`
+- OR the dashboard has a bottom navbar component that needs to be wired to state
 
----
+**Verify**: 
+- `grep -r "school-admin/staff\|school-admin/students\|school-admin/results" src/` → Find all references
+- If routes exist, list them; if not, find the bottom nav component
 
-## Risk Assessment
+#### Task 2.2: Wire Bottom Navbar Data Loading
+**What**: Ensure the bottom navbar (or separate pages) load and display school/staff/student data correctly.
 
-| Risk | Severity | Mitigation |
-|------|----------|-----------|
-| Subject query may fail if level is undefined | Medium | Add defensive null checks and logging |
-| Role dropdown binding to formData.role may cause conflicts | Low | formData.role already exists; just rebind UI |
-| Letter template changes may break CSS on printing | Low | Keep existing style structure; only add rows to table |
-| Subjects already partially load (partial fix needed) | Low | Root cause is dependency array; fix is straightforward |
+**If separate pages exist**:
+- Create/modify `src/app/school-admin/staff/page.tsx` to load staff data
+- Create/modify `src/app/school-admin/students/page.tsx` to load student data
+- Create/modify `src/app/school-admin/results/page.tsx` to load sessions/terms/results
+- Each page must:
+  1. Get current user (AuthService.getCurrentUser())
+  2. Extract school_id from user.school_id
+  3. Fetch data filtered by school_id
+  4. Display data in a table/list
 
----
+**If tabs exist on dashboard**:
+- Move the dashboard tab logic into separate components
+- Export each tab as a reusable component
+- Ensure mobile viewport uses tabs, desktop uses sidebar
 
-## Success Criteria
+**Files to create/modify**:
+- If pages don't exist: Create `src/app/school-admin/staff/page.tsx`, `/students/page.tsx`, `/results/page.tsx`
+- Or create tab components: `src/components/school-admin/StaffTab.tsx`, `StudentsTab.tsx`, `ResultsTab.tsx`
 
-✅ Student registration Stage 5: Subjects dropdown populates after class selection  
-✅ Staff registration Stage 7: Subjects dropdown populates after class selection  
-✅ Staff registration Stage 5: Role dropdown visible with pre-populated value from Stage 3  
-✅ Staff appointment letter: Includes salary frequency and bank details  
-✅ Student admission letter: Includes assigned subjects and academic session  
-✅ No breaking changes to existing registration flow  
-✅ All console logs clean (no errors)  
+**Verify**:
+- Navigate to the bottom navbar / separate page for Staff
+- Expected: Staff list loads with school-specific data
+- Expected: Tables display names, emails, roles
+- Same for Students and Results tabs
 
 ---
 
-## Next Steps After Implementation
+## ISSUE 3: Results Page Not Loading (Sessions/Terms/Classes/Students Dropdowns Missing)
 
-1. **Test deployment to Vercel**: Ensure fixes work in production environment
-2. **Update navbar navigation**: Fix school admin navbar not showing (separate issue mentioned in original request)
-3. **Next button responsiveness**: Test registration form progression buttons are responsive (separate issue mentioned)
-4. **Monitor logs**: Use browser DevTools to verify logging appears during first week of usage
+### Root Cause Analysis
+The results page structure is unclear (not found in workspace search). From `src/app/api/results/school-classes-and-students/route.ts`:
+- API endpoint exists and is well-designed
+- It takes `schoolId` and `termId` query params
+- It fetches class_arm_combos → students → score_sheets
+- Returns structured data with student scores
+
+**THE ISSUES**:
+1. **Missing session/term selector**: The dropdown cascade (select session → load terms → select term → load classes) is not implemented
+2. **Results page may not exist**: No `/school-admin/results/page.tsx` found
+3. **API dependencies**: The API needs proper schoolId extraction and error handling
+
+**From error log**: "null value in column 'end_year' of relation 'academic_sessions' violates not-null constraint"
+- This means: academic_sessions.end_year is being inserted as NULL
+- The INSERT in seedSchoolCurriculum() only sets start_year, not end_year
+- **Migration 152** defines `end_year INTEGER` WITHOUT a DEFAULT value — this is the bug!
+
+### Fix Strategy
+**Decision**: 
+1. Fix academic_sessions table to have end_year DEFAULT or computed value
+2. Create the results page with session/term/class/student selectors
+3. Wire selectors to API calls
+
+### Implementation Tasks
+
+#### Task 3.1: Fix academic_sessions Schema
+**What**: Add DEFAULT or computed value for end_year in academic_sessions table.
+
+**Files to create**:
+- `database/migrations/163_fix_academic_sessions_end_year.sql` (NEW)
+
+**Details**:
+```sql
+-- Migration 163: Fix academic_sessions end_year constraint
+ALTER TABLE academic_sessions
+ALTER COLUMN end_year SET DEFAULT (start_year + 1);
+
+-- Backfill any existing sessions with NULL end_year
+UPDATE academic_sessions 
+SET end_year = start_year + 1 
+WHERE end_year IS NULL;
+
+-- Make end_year NOT NULL
+ALTER TABLE academic_sessions
+ALTER COLUMN end_year SET NOT NULL;
+```
+
+**Verify**:
+- `SELECT COUNT(*) FROM academic_sessions WHERE end_year IS NULL;` → Should return 0
+- Register a new school and check: `SELECT start_year, end_year FROM academic_sessions WHERE school_id = 'NEW_SCHOOL_ID';` → Should be (2024, 2025)
+
+#### Task 3.2: Create Results Page with Session/Term/Class Selectors
+**What**: Build the results page UI with cascading dropdowns.
+
+**Files to create**:
+- `src/app/school-admin/results/page.tsx` (NEW)
+
+**Structure**:
+```tsx
+export default function ResultsPage() {
+  const [sessions, setSessions] = useState([])
+  const [terms, setTerms] = useState([])
+  const [classes, setClasses] = useState([])
+  const [selectedSession, setSelectedSession] = useState('')
+  const [selectedTerm, setSelectedTerm] = useState('')
+  
+  useEffect(() => {
+    // Get current user and fetch sessions for school
+    const loadSessions = async () => {
+      const user = await AuthService.getCurrentUser()
+      const sessionData = await supabase
+        .from('academic_sessions')
+        .select('*')
+        .eq('school_id', user.school_id)
+        .order('session_year', { ascending: false })
+      setSessions(sessionData.data)
+    }
+    loadSessions()
+  }, [])
+  
+  useEffect(() => {
+    // When session changes, load terms
+    if (!selectedSession) return
+    const loadTerms = async () => {
+      const termData = await supabase
+        .from('academic_terms')
+        .select('*')
+        .eq('session_id', selectedSession)
+        .order('term_order', { ascending: true })
+      setTerms(termData.data)
+    }
+    loadTerms()
+  }, [selectedSession])
+  
+  useEffect(() => {
+    // When term changes, fetch classes and students
+    if (!selectedTerm) return
+    const loadClasses = async () => {
+      const user = await AuthService.getCurrentUser()
+      const response = await fetch(
+        `/api/results/school-classes-and-students?schoolId=${user.school_id}&termId=${selectedTerm}`
+      )
+      const data = await response.json()
+      setClasses(data.classes)
+    }
+    loadClasses()
+  }, [selectedTerm])
+  
+  return (
+    <div>
+      <select value={selectedSession} onChange={e => setSelectedSession(e.target.value)}>
+        <option value="">Select Session</option>
+        {sessions.map(s => <option key={s.id} value={s.id}>{s.session_year}</option>)}
+      </select>
+      
+      <select value={selectedTerm} onChange={e => setSelectedTerm(e.target.value)} disabled={!selectedSession}>
+        <option value="">Select Term</option>
+        {terms.map(t => <option key={t.id} value={t.id}>{t.term_name}</option>)}
+      </select>
+      
+      {/* Display classes and students with results */}
+      {classes.map(cls => (
+        <div key={cls.id}>
+          <h3>{cls.class_name} {cls.arm_name}</h3>
+          <table>
+            {/* Student results */}
+          </table>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+**Verify**:
+- Navigate to `/school-admin/results`
+- Expected: Session dropdown populated with available sessions
+- Select a session
+- Expected: Term dropdown shows terms for that session
+- Select a term
+- Expected: Classes and students with scores load below
 
 ---
 
-**Estimated Effort**: 4-5 hours  
-**Priority**: High (blocking staff/student registration)  
-**Complexity**: Medium (fixes require debugging + template updates)
+## ISSUE 4: Staff Registration Modal (9 Slides → Reduce to 4)
+
+### Current State Analysis
+From `src/app/auth/staff/register/page.tsx`:
+- **Current: 9 stages** (lines 10-18):
+  1. Personal Information
+  2. Contact & Address
+  3. Employment Information
+  4. Professional Information (🎓)
+  5. Class Assignment (🏫)
+  6. Subject Assignment (📚)
+  7. Salary & Bank (💰)
+  8. Account & Security (🔐)
+  9. Review & Confirm (✓)
+
+- **Problem**: Too many steps, over-complicated for school admin registration
+- **Requirement**: Reduce to 4-5 essential slides, keep school locked (not selectable)
+
+### Fix Strategy
+**Decision**: Consolidate to 4 stages focusing on essential information:
+1. **Personal Info** (merge stages 1 + 2): Name, DOB, gender, phone, email, address
+2. **Employment Info** (merge stages 3 + 4): Position, role, department, employment type, qualifications
+3. **Class & Subjects** (consolidate stages 5-6): Select class to teach, select subjects (optional)
+4. **Account Security** (stages 8 + review): Username, password, confirm, review all data
+
+**Removed fields** (not critical for initial registration):
+- Middle name (keep first + last only)
+- Professional qualifications (too detailed)
+- Salary & Bank info (handle separately after onboarding)
+- Emergency contact (can be added later in profile)
+- Nationality, State of Origin, LGA, Marital Status (simplify)
+
+### Implementation Tasks
+
+#### Task 4.1: Refactor Staff Registration to 4 Stages
+**What**: Redesign the staff registration form to have 4 streamlined stages.
+
+**Files to modify**:
+- `src/app/auth/staff/register/page.tsx`
+- Possibly: `src/services/staff-registration.service.ts` (if validation needs updating)
+
+**STAGES structure**:
+```typescript
+const STAGES = [
+  { number: 1, title: 'Personal Information', icon: '👤' },
+  { number: 2, title: 'Employment Details', icon: '💼' },
+  { number: 3, title: 'Classes & Subjects', icon: '📚' },
+  { number: 4, title: 'Account & Confirm', icon: '🔐' },
+]
+```
+
+**Stage 1: Personal Information**
+- firstName (required)
+- lastName (required)
+- gender (MALE/FEMALE, required)
+- dateOfBirth (required)
+- phone (required)
+- email (required)
+- address (required)
+- state (required)
+- lga (optional)
+
+**Stage 2: Employment Details**
+- staffId (optional, auto-generated)
+- position (required, dropdown: "Teacher", "HOD", "Principal", etc.)
+- role (required, default: "TEACHER")
+- department (optional)
+- employmentType (required, dropdown: "Full-time", "Part-time", "Contract")
+- employmentStatus (required, default: "Active")
+- dateEmployed (required, default: today)
+- reportingAuthority (optional)
+- teachingExperience (required, number 0-50)
+- institution (optional, last school attended)
+- highestQualification (optional: "ND", "BSc", "HND", "MSc", etc.)
+
+**Stage 3: Classes & Subjects**
+- classArmComboId (optional): If role is TEACHER, ask which class to teach
+- isClassTeacher (optional checkbox): Is this a class teacher?
+- subjectIds (required if TEACHER): Multi-select subjects applicable to class level
+- adminResponsibility (optional): If role has admin duties
+
+**Stage 4: Account & Confirm**
+- accountUsername (required, unique per school)
+- password (required, min 8 chars, must have upper/lower/number/special)
+- confirmPassword (required)
+- Review all data from stages 1-3 in read-only format
+- Submit button
+
+**School is pre-selected**: The school_id comes from auth context (currentUser.school_id), NOT from a dropdown.
+
+**Code changes**:
+- Remove stages 5, 7, 8 (Professional Info, Salary & Bank need consolidation with others)
+- Merge stage 2 (Contact & Address) into stage 1
+- Merge stage 4 (Professional Info) into stage 2
+- Combine stages 5+6 into stage 3
+- Move stage 8 (Account) to stage 4 with review
+
+**Verify**:
+- Open `/auth/staff/register` from school admin context
+- Expected: Only 4 progress indicators shown
+- Fill Stage 1: Personal info (firstName, lastName, gender, DOB, phone, email, address, state)
+- Click Next
+- Expected: Progress shows "Stage 2 of 4"
+- Fill Stage 2: Position dropdown (select "Teacher"), role (TEACHER), employmentType, qualifications
+- Click Next
+- Expected: Stage 3 shows class selector (if TEACHER) and subjects multi-select
+- Select a class and some subjects
+- Click Next
+- Expected: Stage 4 shows username/password form + review section
+- Fill credentials and submit
+- Expected: 201 response, staff record created in users table
+
+---
+
+## ISSUE 5: Student Registration Modal (Similar Consolidation)
+
+### Current State Analysis
+From `src/app/auth/student/register/page.tsx`:
+- **Current: 10 stages** (lines 11-21):
+  1. Student Personal Info
+  2. Parent/Guardian
+  3. Admission Info
+  4. Class & Session
+  5. Subjects
+  6. Previous School
+  7. Medical Info
+  8. Documents
+  9. Review
+  10. Complete
+
+### Fix Strategy
+**Decision**: Consolidate to 5 stages:
+1. **Student Personal Info** (keep as-is): Name, DOB, gender, phone, email, address, state
+2. **Guardian Info** (merge stages 2 + admission): Parent/Guardian details + admission date/number
+3. **Class & Subjects** (keep stages 4-5): Session, term, class, subjects
+4. **Medical & Documents** (merge stages 7-8): Blood type, allergies, medical conditions, uploads
+5. **Review & Confirm** (keep as-is): Final review before submission
+
+**Removed fields**:
+- Previous school info (optional, can add later in profile)
+- Detailed medical history (simplify to blood type + allergies + conditions)
+- Multiple document uploads (keep only passport/birth cert if needed)
+
+### Implementation Tasks
+
+#### Task 5.1: Refactor Student Registration to 5 Stages
+**What**: Redesign the student registration form to have 5 streamlined stages.
+
+**Files to modify**:
+- `src/app/auth/student/register/page.tsx`
+- Possibly: `src/services/student-registration.service.ts`
+
+**STAGES structure**:
+```typescript
+const STAGES = [
+  { number: 1, title: 'Personal Information', icon: '👤' },
+  { number: 2, title: 'Parent/Guardian & Admission', icon: '👨‍👩‍👧' },
+  { number: 3, title: 'Class, Session & Subjects', icon: '🏫' },
+  { number: 4, title: 'Medical & Documents', icon: '📄' },
+  { number: 5, title: 'Review & Confirm', icon: '✓' },
+]
+```
+
+**Verify**:
+- Open student registration modal/page
+- Expected: Only 5 progress indicators shown
+- Complete all stages and submit
+- Expected: 201 response with student ID and PIN
+
+---
+
+## ISSUE 6: Deployment to Vercel
+
+### Deployment Process
+**Decision**: Use git push to trigger auto-deployment on Vercel.
+
+### Implementation Tasks
+
+#### Task 6.1: Commit All Migration and Code Changes
+**What**: Create a single git commit with all fixes and push to main branch (or create PR).
+
+**Files to commit**:
+- `database/migrations/162_fix_on_conflict_academic_tables.sql` (NEW)
+- `database/migrations/163_fix_academic_sessions_end_year.sql` (NEW)
+- `src/app/school-admin/results/page.tsx` (NEW or modified)
+- `src/app/school-admin/staff/page.tsx` (NEW or modified if separate)
+- `src/app/school-admin/students/page.tsx` (NEW or modified if separate)
+- `src/app/auth/staff/register/page.tsx` (MODIFIED - 9 stages → 4)
+- `src/app/auth/student/register/page.tsx` (MODIFIED - 10 stages → 5)
+- `src/services/staff-registration.service.ts` (MODIFIED if validation changes)
+- `src/services/student-registration.service.ts` (MODIFIED if validation changes)
+
+**Git commands**:
+```bash
+git add database/migrations/162_*.sql database/migrations/163_*.sql
+git add src/app/school-admin/
+git add src/app/auth/staff/register/page.tsx
+git add src/app/auth/student/register/page.tsx
+git add src/services/
+git commit -m "fix: resolve 42P10 error, fix results page, consolidate registration forms"
+git push -u origin main
+```
+
+**Verify**:
+- Vercel receives webhook and starts deployment
+- Check Vercel dashboard for deployment status (building → deployment → live)
+- Expected: All tests pass (if any), build succeeds
+- DNS propagates to live URL
+
+#### Task 6.2: Test in Vercel Production
+**What**: Manual end-to-end testing in deployed environment.
+
+**Test steps**:
+1. **Super Admin School Registration**:
+   - Navigate to Vercel URL
+   - Login as super admin
+   - Click "Register School"
+   - Fill form: school_name="Test School", email="test@school.com", admin email/password, phone, address
+   - Submit
+   - Expected: 201 response, school created, academic sessions/terms auto-seeded
+
+2. **School Admin Dashboard**:
+   - Login as the newly created school admin
+   - Navigate to dashboard
+   - Check Staff tab → Should load staff list (if any)
+   - Check Students tab → Should load student list
+   - Check Results tab → Should show session/term selectors
+
+3. **Staff Registration**:
+   - From school admin context, click "Register Staff"
+   - Fill Stage 1: Personal info
+   - Click Next → Stage 2 of 4
+   - Fill Stage 2: Employment details
+   - Click Next → Stage 3 of 4
+   - Select class and subjects
+   - Click Next → Stage 4 of 4
+   - Enter credentials and submit
+   - Expected: Staff record created in users table
+
+4. **Results Page**:
+   - Navigate to Results tab
+   - Select a session from dropdown
+   - Terms dropdown populates
+   - Select a term
+   - Classes and students with scores load
+   - Expected: Results displayed in table format
+
+**Verify**:
+- All test steps pass without errors
+- No 42P10 errors in Supabase logs
+- No NULL end_year errors
+- Registration forms complete with reduced steps
+
+---
+
+## Summary of Changes
+
+| Issue | Root Cause | Fix | Priority |
+|-------|-----------|-----|----------|
+| 1. 42P10 Error | ON CONFLICT on non-unique columns | Migrate 162: Remove ON CONFLICT, use safe INSERT-SELECT | CRITICAL |
+| 2. Bottom Navbar | Not wired to school data | Create staff/students/results pages with proper data loading | HIGH |
+| 3. Results Page Missing | No session/term selector UI | Create Migration 163 (end_year fix) + Results page with dropdowns | HIGH |
+| 4. Staff Registration | 9 stages too complex | Consolidate to 4 essential stages | MEDIUM |
+| 5. Student Registration | 10 stages too complex | Consolidate to 5 essential stages | MEDIUM |
+| 6. Deploy Changes | Changes not in production | Commit all files and git push to trigger Vercel auto-deploy | HIGH |
+
+---
+
+## Testing Checklist
+
+- [ ] Migration 162 runs without errors in Supabase
+- [ ] Migration 163 runs without errors in Supabase
+- [ ] Super admin can register a new school (no 42P10 error)
+- [ ] Academic sessions table has 1 row per school with end_year populated
+- [ ] Academic terms table has 3 rows per school
+- [ ] School admin dashboard loads (Staff, Students, Results tabs visible)
+- [ ] Results page shows session/term/class selectors and cascades correctly
+- [ ] Staff registration form has exactly 4 stages
+- [ ] Student registration form has exactly 5 stages
+- [ ] Vercel deployment succeeds and site is live
+- [ ] End-to-end testing in production passes
+
+---
+
+## Deployment Checklist
+
+- [ ] All migrations tested locally (or in Supabase SQL editor)
+- [ ] All code changes tested in development
+- [ ] Git commits created with descriptive messages
+- [ ] Code pushed to main branch
+- [ ] Vercel deployment completed successfully
+- [ ] Production testing passed (all test steps above)
+- [ ] No errors in Supabase logs or Vercel Function logs
+- [ ] School registration flow working end-to-end
+- [ ] Notify user of successful deployment

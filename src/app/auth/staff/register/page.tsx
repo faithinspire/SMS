@@ -10,20 +10,10 @@ import { toast } from 'react-hot-toast'
 
 const STAGES = [
   { number: 1, title: 'Personal Information', icon: '👤' },
-  { number: 2, title: 'Contact & Address', icon: '📍' },
-  { number: 3, title: 'Employment Information', icon: '💼' },
-  { number: 4, title: 'Professional Information', icon: '🎓' },
-  { number: 5, title: 'Class Assignment', icon: '🏫' },
-  { number: 6, title: 'Subject Assignment', icon: '📚' },
-  { number: 7, title: 'Salary & Bank', icon: '💰' },
-  { number: 8, title: 'Account & Security', icon: '🔐' },
-  { number: 9, title: 'Review & Confirm', icon: '✓' },
+  { number: 2, title: 'Employment Details', icon: '💼' },
+  { number: 3, title: 'Classes & Subjects', icon: '📚' },
+  { number: 4, title: 'Account & Confirm', icon: '🔐' },
 ]
-
-interface Schools {
-  id: string
-  name: string
-}
 
 interface FormState extends Partial<StaffRegistrationData> {
   confirmPassword?: string
@@ -39,28 +29,17 @@ export default function StaffRegisterPage() {
   const [authLoading, setAuthLoading] = useState(true)
   
   const [formData, setFormData] = useState<FormState>({
-    // Stage 1
+    // Stage 1: Personal Information
     firstName: '',
-    middleName: '',
     lastName: '',
     gender: 'MALE',
     dateOfBirth: '',
-    photoUrl: '',
-    nationality: '',
-    stateOfOrigin: '',
-    lga: '',
-    maritalStatus: '',
-
-    // Stage 2
     phone: '',
     email: '',
-    residentialAddress: '',
-    city: '',
+    address: '',
     state: '',
-    emergencyContactName: '',
-    emergencyContactPhone: '',
 
-    // Stage 3
+    // Stage 2: Employment Information
     staffId: '',
     position: '',
     role: 'TEACHER',
@@ -68,41 +47,16 @@ export default function StaffRegisterPage() {
     employmentType: 'Full-time',
     employmentStatus: 'Active',
     dateEmployed: new Date().toISOString().split('T')[0],
-    dateAppointed: new Date().toISOString().split('T')[0],
-    reportingAuthority: '',
-
-    // Stage 4
-    highestQualification: '',
-    professionalQualification: '',
-    institution: '',
-    courseField: '',
-    graduationYear: new Date().getFullYear(),
     teachingExperience: 0,
-    certifications: '',
+    highestQualification: '',
 
-    // Stage 5
-    primaryRole: '',
-    secondaryResponsibilities: [],
-    adminResponsibility: '',
-
-    // Stage 6
+    // Stage 3: Classes & Subjects
     classArmComboId: '',
     isClassTeacher: false,
-
-    // Stage 7
     subjectIds: [],
 
-    // Stage 8
-    salary: 0,
-    salaryFrequency: 'Monthly',
-    bankName: '',
-    accountName: '',
-    accountNumber: '',
-    paymentMethod: '',
-
-    // Stage 9
+    // Stage 4: Account & Confirm
     accountUsername: '',
-    accountRole: 'TEACHER',
     password: '',
     confirmPassword: '',
   })
@@ -118,8 +72,12 @@ export default function StaffRegisterPage() {
           return
         }
         setCurrentUser(user)
-        // Auto-populate schoolId from auth context
-        setFormData(prev => ({ ...prev, schoolId: user.school_id }))
+        // Auto-populate schoolId and email from auth context
+        setFormData(prev => ({
+          ...prev,
+          schoolId: user.school_id,
+          email: user.email || ''
+        }))
       } catch (error) {
         console.error('Error loading user context:', error)
         router.push('/auth/login')
@@ -130,9 +88,9 @@ export default function StaffRegisterPage() {
     loadUserContext()
   }, [router])
 
-  // Load classes when school changes
+  // Load classes when school changes or stage 3 is needed
   useEffect(() => {
-    if (!formData.schoolId) {
+    if (!formData.schoolId || currentStage < 3) {
       setClassOptions([])
       return
     }
@@ -147,60 +105,56 @@ export default function StaffRegisterPage() {
       }
     }
     loadClasses()
-  }, [formData.schoolId])
+  }, [formData.schoolId, currentStage])
 
   // Load subjects when class changes
   useEffect(() => {
-    if (!formData.classArmComboId || !formData.schoolId) {
+    if (!formData.classArmComboId || !formData.schoolId || formData.role !== 'TEACHER') {
       setSubjects([])
       return
     }
 
     const loadSubjects = async () => {
       try {
-        console.log('[StaffRegister] Loading subjects for classArmComboId:', formData.classArmComboId)
-        console.log('[StaffRegister] Available classOptions:', classOptions)
-        
         const classCombo = classOptions.find((c) => c.id === formData.classArmComboId)
         
-        if (!classCombo) {
-          console.warn('[StaffRegister] Class combo not found in classOptions')
+        if (!classCombo || !classCombo?.classes?.level) {
           setSubjects([])
-          toast.error('Selected class not found. Please reselect.')
-          return
-        }
-        
-        if (!classCombo?.classes?.level) {
-          console.warn('[StaffRegister] Class level is undefined for combo:', classCombo)
-          setSubjects([])
-          toast.error('Class level information not available. Please reselect class.')
           return
         }
 
-        console.log('[StaffRegister] Fetching subjects for level:', classCombo.classes.level)
         const subjectList = await CanonicalSubjectService.getSubjectsForLevel(
           formData.schoolId!,
           classCombo.classes.level
         )
-        console.log('[StaffRegister] Subjects loaded:', subjectList)
         setSubjects(subjectList)
       } catch (error) {
-        console.error('[StaffRegister] Error loading subjects:', error)
-        toast.error('Failed to load subjects')
+        console.error('Error loading subjects:', error)
         setSubjects([])
       }
     }
     loadSubjects()
-  }, [formData.classArmComboId, formData.schoolId, classOptions])
+  }, [formData.classArmComboId, formData.schoolId, formData.role, classOptions])
 
   const validateStage = (): boolean => {
-    if (!StaffRegistrationService.validateStage(currentStage, formData)) {
-      toast.error('Please fill in all required fields')
-      return false
+    const required = {
+      1: ['firstName', 'lastName', 'gender', 'dateOfBirth', 'phone', 'email', 'address', 'state'],
+      2: ['position', 'employmentType', 'employmentStatus', 'dateEmployed'],
+      3: [], // Classes & subjects optional for non-teachers
+      4: ['password', 'confirmPassword'],
+    }
+
+    const requiredFields = required[currentStage as keyof typeof required] || []
+    for (const field of requiredFields) {
+      const value = formData[field as keyof FormState]
+      if (!value || (typeof value === 'string' && value.trim() === '')) {
+        toast.error(`Please fill in all required fields for this stage`)
+        return false
+      }
     }
 
     // Email validation
-    if (currentStage === 2 && formData.email) {
+    if (currentStage === 1 && formData.email) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(formData.email)) {
         toast.error('Please enter a valid email address')
@@ -209,22 +163,32 @@ export default function StaffRegisterPage() {
     }
 
     // Phone validation
-    if (currentStage === 2 && formData.phone) {
+    if (currentStage === 1 && formData.phone) {
       const phoneRegex = /^\d{10,}$/
       if (!phoneRegex.test(formData.phone.replace(/\D/g, ''))) {
-        toast.error('Please enter a valid phone number')
+        toast.error('Please enter a valid phone number (at least 10 digits)')
         return false
       }
     }
 
     // Password validation
-    if (currentStage === 9 && formData.password) {
-      if (formData.password.length < 8) {
+    if (currentStage === 4) {
+      if (!formData.password || formData.password.length < 8) {
         toast.error('Password must be at least 8 characters')
         return false
       }
       if (formData.password !== formData.confirmPassword) {
         toast.error('Passwords do not match')
+        return false
+      }
+      // Check password strength
+      const hasUpper = /[A-Z]/.test(formData.password)
+      const hasLower = /[a-z]/.test(formData.password)
+      const hasNumber = /\d/.test(formData.password)
+      const hasSpecial = /[!@#$%^&*]/.test(formData.password)
+      
+      if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+        toast.error('Password must include uppercase, lowercase, number, and special character')
         return false
       }
     }
@@ -251,10 +215,15 @@ export default function StaffRegisterPage() {
 
     setIsLoading(true)
     try {
-      const result = await StaffRegistrationService.registerStaff(formData as StaffRegistrationData)
+      // Build submission data
+      const submissionData: StaffRegistrationData = {
+        ...formData,
+        password: formData.password || '',
+      } as StaffRegistrationData
+
+      const result = await StaffRegistrationService.registerStaff(submissionData)
 
       if (result.success) {
-        // NO PIN - use email and password to login
         toast.success(`Staff member ${result.fullName} registered successfully!`)
         setTimeout(() => {
           router.push('/auth/staff/login')
@@ -280,20 +249,13 @@ export default function StaffRegisterPage() {
       case 1: // Personal Information
         return (
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Personal Information</h3>
+            <h3 className="text-lg font-semibold mb-6">Personal Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <input
                 type="text"
                 placeholder="First Name *"
                 value={formData.firstName || ''}
                 onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Middle Name"
-                value={formData.middleName || ''}
-                onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
               <input
@@ -320,58 +282,12 @@ export default function StaffRegisterPage() {
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
               <input
-                type="text"
-                placeholder="Nationality"
-                value={formData.nationality || ''}
-                onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                type="tel"
+                placeholder="Phone *"
+                value={formData.phone || ''}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
-              <input
-                type="text"
-                placeholder="State of Origin"
-                value={formData.stateOfOrigin || ''}
-                onChange={(e) => setFormData({ ...formData, stateOfOrigin: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="LGA"
-                value={formData.lga || ''}
-                onChange={(e) => setFormData({ ...formData, lga: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <select
-                value={formData.maritalStatus || ''}
-                onChange={(e) => setFormData({ ...formData, maritalStatus: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="">Select Marital Status</option>
-                <option value="Single">Single</option>
-                <option value="Married">Married</option>
-                <option value="Divorced">Divorced</option>
-                <option value="Widowed">Widowed</option>
-              </select>
-            </div>
-          </div>
-        )
-
-      case 2: // Contact & Address
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Contact & Address</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select
-                value={formData.schoolId || ''}
-                onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="">Select School *</option>
-                {schools.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
               <input
                 type="email"
                 placeholder="Email *"
@@ -380,56 +296,48 @@ export default function StaffRegisterPage() {
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
               <input
-                type="tel"
-                placeholder="Phone *"
-                value={formData.phone || ''}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                type="text"
+                placeholder="Address *"
+                value={formData.address || ''}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
               <input
                 type="text"
-                placeholder="Residential Address *"
-                value={formData.residentialAddress || ''}
-                onChange={(e) => setFormData({ ...formData, residentialAddress: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="City"
-                value={formData.city || ''}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="State"
+                placeholder="State *"
                 value={formData.state || ''}
                 onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Emergency Contact Name *"
-                value={formData.emergencyContactName || ''}
-                onChange={(e) => setFormData({ ...formData, emergencyContactName: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="tel"
-                placeholder="Emergency Contact Phone *"
-                value={formData.emergencyContactPhone || ''}
-                onChange={(e) => setFormData({ ...formData, emergencyContactPhone: e.target.value })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
           </div>
         )
 
-      case 3: // Employment Information
+      case 2: // Employment Information
         return (
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Employment Information</h3>
+            <h3 className="text-lg font-semibold mb-6">Employment Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Staff ID (Optional)"
+                value={formData.staffId || ''}
+                onChange={(e) => setFormData({ ...formData, staffId: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <select
+                value={formData.position || ''}
+                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">Select Position *</option>
+                <option value="Teacher">Teacher</option>
+                <option value="Head of Department">Head of Department</option>
+                <option value="Principal">Principal</option>
+                <option value="Vice Principal">Vice Principal</option>
+                <option value="Accountant">Accountant</option>
+                <option value="Admin Staff">Admin Staff</option>
+              </select>
               <select
                 value={formData.role || 'TEACHER'}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
@@ -443,7 +351,7 @@ export default function StaffRegisterPage() {
               </select>
               <input
                 type="text"
-                placeholder="Department"
+                placeholder="Department (Optional)"
                 value={formData.department || ''}
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -453,7 +361,7 @@ export default function StaffRegisterPage() {
                 onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
-                <option value="Full-time">Full-time</option>
+                <option value="Full-time">Full-time *</option>
                 <option value="Part-time">Part-time</option>
                 <option value="Contract">Contract</option>
               </select>
@@ -462,313 +370,185 @@ export default function StaffRegisterPage() {
                 onChange={(e) => setFormData({ ...formData, employmentStatus: e.target.value })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
-                <option value="Active">Active</option>
+                <option value="Active">Active *</option>
                 <option value="Probation">On Probation</option>
                 <option value="Leave">On Leave</option>
               </select>
               <input
                 type="date"
-                placeholder="Date Employed *"
+                placeholder="Date Employed"
                 value={formData.dateEmployed || ''}
                 onChange={(e) => setFormData({ ...formData, dateEmployed: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="date"
-                placeholder="Date Appointed *"
-                value={formData.dateAppointed || ''}
-                onChange={(e) => setFormData({ ...formData, dateAppointed: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-          </div>
-        )
-
-      case 4: // Professional Information
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Professional Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="Highest Qualification"
-                value={formData.highestQualification || ''}
-                onChange={(e) => setFormData({ ...formData, highestQualification: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Professional Qualification"
-                value={formData.professionalQualification || ''}
-                onChange={(e) =>
-                  setFormData({ ...formData, professionalQualification: e.target.value })
-                }
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Institution"
-                value={formData.institution || ''}
-                onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Course/Field"
-                value={formData.courseField || ''}
-                onChange={(e) => setFormData({ ...formData, courseField: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="number"
-                placeholder="Graduation Year"
-                value={formData.graduationYear || new Date().getFullYear()}
-                onChange={(e) => setFormData({ ...formData, graduationYear: parseInt(e.target.value) })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
               <input
                 type="number"
                 placeholder="Teaching Experience (years)"
                 value={formData.teachingExperience || 0}
-                onChange={(e) => setFormData({ ...formData, teachingExperience: parseInt(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, teachingExperience: parseInt(e.target.value) || 0 })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
-              <textarea
-                placeholder="Professional Certifications"
-                value={formData.certifications || ''}
-                onChange={(e) => setFormData({ ...formData, certifications: e.target.value })}
-                rows={3}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none col-span-2"
+              <input
+                type="text"
+                placeholder="Highest Qualification (Optional)"
+                value={formData.highestQualification || ''}
+                onChange={(e) => setFormData({ ...formData, highestQualification: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
           </div>
         )
 
-      case 5: // Class Assignment
+      case 3: // Classes & Subjects
         return (
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Class Assignment</h3>
+            <h3 className="text-lg font-semibold mb-6">Classes & Subjects</h3>
             {formData.role !== 'TEACHER' && formData.role !== 'HEAD_TEACHER' ? (
-              <p className="text-gray-600">This section only applies to teachers</p>
+              <p className="text-gray-600 bg-blue-50 p-4 rounded-lg">This section only applies to teachers. You can skip this stage.</p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <select
-                  value={formData.classArmComboId || ''}
-                  onChange={(e) => setFormData({ ...formData, classArmComboId: e.target.value })}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  <option value="">Select Class</option>
-                  {classOptions.map((combo) => (
-                    <option key={combo.id} value={combo.id}>
-                      {combo.classes?.name} {combo.arms?.name}
-                    </option>
-                  ))}
-                </select>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.isClassTeacher || false}
-                    onChange={(e) => setFormData({ ...formData, isClassTeacher: e.target.checked })}
-                    className="w-4 h-4 rounded border-gray-300"
-                  />
-                  <span>Is Class Teacher</span>
-                </label>
-              </div>
-            )}
-          </div>
-        )
-
-      case 6: // Subject Assignment
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Subject Assignment</h3>
-            {formData.role !== 'TEACHER' && formData.role !== 'HEAD_TEACHER' ? (
-              <p className="text-gray-600">This section only applies to teachers</p>
-            ) : (
-              <div>
-                <p className="text-sm text-gray-600 mb-3">Select subjects this teacher will teach:</p>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto border border-gray-200 p-4 rounded">
-                  {subjects.map((subject) => (
-                    <label key={subject.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={(formData.subjectIds || []).includes(subject.id)}
-                        onChange={(e) => {
-                          const newSubjectIds = formData.subjectIds || []
-                          if (e.target.checked) {
-                            setFormData({
-                              ...formData,
-                              subjectIds: [...newSubjectIds, subject.id],
-                            })
-                          } else {
-                            setFormData({
-                              ...formData,
-                              subjectIds: newSubjectIds.filter((id) => id !== subject.id),
-                            })
-                          }
-                        }}
-                        className="w-4 h-4 rounded border-gray-300"
-                      />
-                      <span className="text-sm">{subject.name}</span>
-                    </label>
-                  ))}
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2">Select Class (Optional)</label>
+                    <select
+                      value={formData.classArmComboId || ''}
+                      onChange={(e) => setFormData({ ...formData, classArmComboId: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    >
+                      <option value="">Select Class</option>
+                      {classOptions.map((combo) => (
+                        <option key={combo.id} value={combo.id}>
+                          {combo.classes?.name} {combo.arms?.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <label className="flex items-center gap-3 pt-8">
+                    <input
+                      type="checkbox"
+                      checked={formData.isClassTeacher || false}
+                      onChange={(e) => setFormData({ ...formData, isClassTeacher: e.target.checked })}
+                      className="w-4 h-4 rounded border-gray-300"
+                    />
+                    <span className="text-gray-700 font-semibold">Is Class Teacher</span>
+                  </label>
                 </div>
-                <p className="text-sm text-gray-600 mt-3">
-                  Selected: {(formData.subjectIds || []).length} subjects
-                </p>
+
+                {formData.classArmComboId && subjects.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-semibold mb-3">Select Subjects (Optional)</label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto border border-gray-200 p-4 rounded-lg bg-gray-50">
+                      {subjects.map((subject) => (
+                        <label key={subject.id} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={(formData.subjectIds || []).includes(subject.id)}
+                            onChange={(e) => {
+                              const newSubjectIds = formData.subjectIds || []
+                              if (e.target.checked) {
+                                setFormData({
+                                  ...formData,
+                                  subjectIds: [...newSubjectIds, subject.id],
+                                })
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  subjectIds: newSubjectIds.filter((id) => id !== subject.id),
+                                })
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-gray-300"
+                          />
+                          <span className="text-sm">{subject.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-2">
+                      Selected: <span className="font-semibold">{(formData.subjectIds || []).length} subject(s)</span>
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )
 
-      case 7: // Salary & Bank
+      case 4: // Account & Confirm
         return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Salary & Bank Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="number"
-                placeholder="Salary"
-                value={formData.salary || 0}
-                onChange={(e) => setFormData({ ...formData, salary: parseFloat(e.target.value) })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <select
-                value={formData.salaryFrequency || 'Monthly'}
-                onChange={(e) => setFormData({ ...formData, salaryFrequency: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="Monthly">Monthly</option>
-                <option value="Bi-weekly">Bi-weekly</option>
-                <option value="Weekly">Weekly</option>
-              </select>
-              <input
-                type="text"
-                placeholder="Bank Name"
-                value={formData.bankName || ''}
-                onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Account Name"
-                value={formData.accountName || ''}
-                onChange={(e) => setFormData({ ...formData, accountName: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Account Number"
-                value={formData.accountNumber || ''}
-                onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <select
-                value={formData.paymentMethod || ''}
-                onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="">Select Payment Method</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-                <option value="Check">Check</option>
-                <option value="Cash">Cash</option>
-              </select>
-            </div>
-          </div>
-        )
-
-      case 8: // Account & Security
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Account & Security</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="email"
-                placeholder="Account Email (for login)"
-                value={formData.email || ''}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-100"
-                disabled
-              />
-              <select
-                value={formData.accountRole || 'TEACHER'}
-                onChange={(e) => setFormData({ ...formData, accountRole: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="TEACHER">Teacher</option>
-                <option value="HEAD_TEACHER">Head Teacher</option>
-                <option value="PRINCIPAL">Principal</option>
-              </select>
-              <input
-                type="password"
-                placeholder="Password (8+ chars) *"
-                value={formData.password || ''}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <input
-                type="password"
-                placeholder="Confirm Password *"
-                value={formData.confirmPassword || ''}
-                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <label className="flex items-center gap-2">
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold mb-6">Account Credentials</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input
-                  type="checkbox"
-                  disabled
-                  checked={true}
-                  className="w-4 h-4 rounded border-gray-300"
+                  type="password"
+                  placeholder="Password (8+ chars) *"
+                  value={formData.password || ''}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
-                <span className="text-gray-700">✓ Use email and password for login (PIN not generated)</span>
-              </label>
+                <input
+                  type="password"
+                  placeholder="Confirm Password *"
+                  value={formData.confirmPassword || ''}
+                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+              <p className="text-xs text-gray-600 mt-2">
+                Password must include: uppercase, lowercase, number, and special character
+              </p>
             </div>
-          </div>
-        )
 
-      case 9: // Review & Confirmation
-        return (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Review & Confirmation</h3>
-            <div className="bg-gray-50 p-4 rounded-lg space-y-3 max-h-96 overflow-y-auto">
-              <div>
-                <p className="text-sm font-semibold text-gray-600">Personal Information</p>
-                <p className="text-sm">
-                  {formData.firstName} {formData.middleName} {formData.lastName} ({formData.gender})
-                </p>
-                <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(1)}>
-                  ✏️ Edit
-                </p>
-              </div>
-              <hr />
-              <div>
-                <p className="text-sm font-semibold text-gray-600">Contact Information</p>
-                <p className="text-sm">{formData.email}</p>
-                <p className="text-sm">{formData.phone}</p>
-                <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(2)}>
-                  ✏️ Edit
-                </p>
-              </div>
-              <hr />
-              <div>
-                <p className="text-sm font-semibold text-gray-600">Employment</p>
-                <p className="text-sm">{formData.role} - {formData.department || 'No department'} ({formData.employmentType})</p>
-                <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(3)}>
-                  ✏️ Edit
-                </p>
-              </div>
-              <hr />
-              <div>
-                <p className="text-sm font-semibold text-gray-600">Assigned Subjects</p>
-                <p className="text-sm">{(formData.subjectIds || []).length} subjects</p>
-                <p className="text-sm text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => handleJumpToStage(5)}>
-                  ✏️ Edit
-                </p>
+            <hr />
+
+            {/* Review Summary */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Registration Summary</h3>
+              <div className="bg-gray-50 p-4 rounded-lg space-y-3 max-h-96 overflow-y-auto">
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 uppercase">School</p>
+                  <p className="text-sm font-bold text-blue-700">{currentUser?.school_name || 'Your School'}</p>
+                </div>
+                <hr />
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 uppercase">Personal Information</p>
+                  <p className="text-sm">
+                    {formData.firstName} {formData.lastName}
+                  </p>
+                  <p className="text-xs text-gray-600">{formData.gender} • DOB: {formData.dateOfBirth}</p>
+                  <p className="text-xs text-gray-600">{formData.email} • {formData.phone}</p>
+                </div>
+                <hr />
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 uppercase">Employment</p>
+                  <p className="text-sm">
+                    {formData.position || 'Position'} • {formData.role}
+                  </p>
+                  <p className="text-xs text-gray-600">{formData.employmentType} • {formData.employmentStatus}</p>
+                  {formData.department && <p className="text-xs text-gray-600">Dept: {formData.department}</p>}
+                </div>
+                {formData.classArmComboId && (
+                  <>
+                    <hr />
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600 uppercase">Class Assignment</p>
+                      <p className="text-sm">
+                        {classOptions.find(c => c.id === formData.classArmComboId)?.classes?.name}{' '}
+                        {classOptions.find(c => c.id === formData.classArmComboId)?.arms?.name}
+                        {formData.isClassTeacher && ' (Class Teacher)'}
+                      </p>
+                      {(formData.subjectIds || []).length > 0 && (
+                        <p className="text-xs text-gray-600 mt-1">{(formData.subjectIds || []).length} subject(s) assigned</p>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                ✓ All information has been entered and verified. Click Register to complete the registration process.
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-sm text-green-800">
+                ✓ All information has been verified. Click "Register Staff" to complete.
               </p>
             </div>
           </div>
@@ -812,7 +592,8 @@ export default function StaffRegisterPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Staff Registration</h1>
-          <p className="text-gray-600">Complete all stages to register new staff member</p>
+          <p className="text-gray-600">Registering for: <span className="font-semibold text-blue-700">{currentUser?.school_name || 'Your School'}</span></p>
+          <p className="text-sm text-gray-500 mt-2">Complete all {STAGES.length} stages to register new staff member</p>
         </div>
 
         {/* Progress Bar */}

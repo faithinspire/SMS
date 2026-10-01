@@ -379,19 +379,15 @@ export class StaffRegistrationService {
 
   /**
    * Validate that all required fields for a stage are present
-   * Stages: 1=Personal, 2=Contact, 3=Employment, 4=Professional, 5=Class, 6=Subjects, 7=Salary, 8=Account, 9=Review
+   * Stages: 1=Personal&Contact, 2=Employment&Professional, 3=Class&Subjects, 4=Salary&Security, 5=Review
    */
   static validateStage(stage: number, data: Partial<StaffRegistrationData>): boolean {
     const requirements: Record<number, string[]> = {
-      1: ['firstName', 'lastName'],
-      2: ['email', 'phone', 'emergencyContact', 'emergencyContactPhone', 'residentialAddress'],
-      3: ['role', 'dateEmployed', 'dateAppointed'],
-      4: [],
+      1: ['firstName', 'lastName', 'email', 'phone', 'emergencyContactName', 'emergencyContactPhone', 'residentialAddress'],
+      2: ['role', 'dateEmployed', 'dateAppointed'],
+      3: [],
+      4: ['password'],
       5: [],
-      6: [],
-      7: [],
-      8: ['password'],
-      9: [],
     }
 
     const required = requirements[stage] || []
