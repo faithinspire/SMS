@@ -471,6 +471,13 @@ export default function SchoolAdminDashboard() {
                             ✏️ Edit
                           </button>
                           <button
+                            onClick={() => generateStaffLetter(member)}
+                            className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 font-semibold"
+                            title="Generate appointment letter"
+                          >
+                            📄 Letter
+                          </button>
+                          <button
                             onClick={() => deleteStaff(member.id)}
                             className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 font-semibold"
                           >
