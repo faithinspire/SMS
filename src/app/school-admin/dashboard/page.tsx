@@ -326,14 +326,17 @@ export default function SchoolAdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      <StaffHeader
-        staffName={state.user?.full_name || 'School Administrator'}
-        schoolName={state.school?.name || 'School'}
-        section="Administration Center"
-      />
+      {/* Main Header */}
+      <div className="sticky top-0 z-50">
+        <StaffHeader
+          staffName={state.user?.full_name || 'School Administrator'}
+          schoolName={state.school?.name || 'School'}
+          section="Administration Center"
+        />
+      </div>
 
-      {/* Navigation Tabs */}
-      <div className="sticky top-16 z-30 bg-white shadow-md border-b border-gray-200 overflow-x-auto">
+      {/* Navigation Tabs - Sticky below header */}
+      <div className="sticky top-16 z-40 bg-white shadow-md border-b border-gray-200 overflow-x-auto">
         <div className="min-w-max md:max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
           <div className="flex gap-1">
             {[

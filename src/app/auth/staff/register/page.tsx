@@ -207,11 +207,25 @@ export default function StaffRegisterPage() {
     return true
   }
 
-  const handleNext = () => {
-    if (validateStage()) {
-      if (currentStage < 10) {
-        setCurrentStage(currentStage + 1)
+  const handleNext = async () => {
+    // Don't proceed if already loading or validation is stuck
+    if (isLoading) return
+    
+    try {
+      const isValid = validateStage()
+      if (!isValid) {
+        console.log('[Register] Stage validation failed for stage:', currentStage)
+        return
       }
+
+      // Allow progression even if some optional fields are missing
+      if (currentStage < STAGES.length) {
+        setCurrentStage(currentStage + 1)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    } catch (error) {
+      console.error('[Register] handleNext error:', error)
+      toast.error('An error occurred while progressing to next stage')
     }
   }
 
@@ -885,9 +899,11 @@ export default function StaffRegisterPage() {
           ) : (
             <button
               onClick={handleNext}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={isLoading}
+              type="button"
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
             >
-              Next →
+              {isLoading ? 'Loading...' : 'Next →'}
             </button>
           )}
         </div>
