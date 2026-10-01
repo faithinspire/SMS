@@ -66,7 +66,7 @@ export function LetterPreviewModal({
 
         // Format student data for letter generation
         const studentData = {
-          full_name: studentDataInfo.student.users?.full_name || '',
+          full_name: studentDataInfo.student.user?.full_name || '',
           admission_number: studentDataInfo.student.admission_number,
           date_of_birth: studentDataInfo.student.date_of_birth,
           session: new Date().getFullYear() + '/' + (new Date().getFullYear() + 1),
