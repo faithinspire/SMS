@@ -266,6 +266,66 @@ export default function SchoolAdminDashboard() {
     }
   }
 
+  const generateStaffLetter = async (staff: any) => {
+    try {
+      setState(s => ({ ...s, error: '⏳ Generating appointment letter...' }))
+      
+      // Fetch staff data with all details
+      const staffData = await LetterGenerationService.fetchStaffData(staff.id, state.user?.school_id || '')
+      if (!staffData) {
+        throw new Error('Could not fetch staff details')
+      }
+
+      // Fetch school data
+      const schoolData = await LetterGenerationService.fetchSchoolData(state.user?.school_id || '')
+      if (!schoolData) {
+        throw new Error('Could not fetch school details')
+      }
+
+      // Generate appointment letter
+      const letterHTML = await LetterGenerationService.generateAppointmentLetter(staffData, schoolData)
+
+      // Download as PDF
+      await LetterGenerationService.downloadLetterAsPDF(letterHTML, `${staff.full_name}_appointment_letter.pdf`)
+
+      setState(s => ({ ...s, error: '✅ Appointment letter generated and downloaded!' }))
+      setTimeout(() => setState(s => ({ ...s, error: '' })), 3000)
+    } catch (err: any) {
+      console.error('Error generating staff letter:', err)
+      setState(s => ({ ...s, error: `❌ Error: ${err.message}` }))
+    }
+  }
+
+  const generateStudentLetter = async (student: any) => {
+    try {
+      setState(s => ({ ...s, error: '⏳ Generating admission letter...' }))
+      
+      // Fetch student data with all details
+      const studentData = await LetterGenerationService.fetchStudentData(student.id, state.user?.school_id || '')
+      if (!studentData) {
+        throw new Error('Could not fetch student details')
+      }
+
+      // Fetch school data
+      const schoolData = await LetterGenerationService.fetchSchoolData(state.user?.school_id || '')
+      if (!schoolData) {
+        throw new Error('Could not fetch school details')
+      }
+
+      // Generate admission letter
+      const letterHTML = await LetterGenerationService.generateAdmissionLetter(studentData, schoolData)
+
+      // Download as PDF
+      await LetterGenerationService.downloadLetterAsPDF(letterHTML, `${student.full_name}_admission_letter.pdf`)
+
+      setState(s => ({ ...s, error: '✅ Admission letter generated and downloaded!' }))
+      setTimeout(() => setState(s => ({ ...s, error: '' })), 3000)
+    } catch (err: any) {
+      console.error('Error generating student letter:', err)
+      setState(s => ({ ...s, error: `❌ Error: ${err.message}` }))
+    }
+  }
+
   const handleSendBroadcast = async () => {
     if (!state.user?.school_id || !state.broadcastMessage.trim()) {
       setState(s => ({ ...s, error: 'Missing info' }))
