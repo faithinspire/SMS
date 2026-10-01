@@ -380,6 +380,16 @@ const StudentsPage: React.FC = () => {
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-2xl font-bold mb-6">Students Management</h2>
 
+      {/* Action Buttons */}
+      <div className="mb-6 flex flex-wrap gap-3">
+        <button
+          onClick={() => router.push('/auth/student/register')}
+          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center gap-2 transition-colors"
+        >
+          ➕ Register New Student
+        </button>
+      </div>
+
       {/* Search and Filter */}
       <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
         <input

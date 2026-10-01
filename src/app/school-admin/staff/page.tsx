@@ -497,6 +497,16 @@ const StaffPage: React.FC = () => {
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-2xl font-bold mb-6">Staff Management</h2>
 
+      {/* Action Buttons */}
+      <div className="mb-6 flex flex-wrap gap-3">
+        <button
+          onClick={() => router.push('/auth/staff/register')}
+          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center gap-2 transition-colors"
+        >
+          ➕ Register New Staff
+        </button>
+      </div>
+
       {/* Search and Filter */}
       <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
         <input

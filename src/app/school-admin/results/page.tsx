@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
-import { AcademicService } from '@/services/academic.service'
 import { createClient } from '@/lib/supabase-client'
 import StaffHeader from '@/components/StaffHeader'
 import { toast } from 'react-hot-toast'
@@ -243,9 +242,7 @@ export default function SchoolAdminResultsPage() {
         setSchool(schoolData)
         console.log('[Results] School loaded:', schoolData?.name)
 
-        // Load sessions and terms in parallel with abort support
-        const abortCtrl = new AbortController()
-
+        // Load sessions and terms in parallel
         const [sessionsResult, termsResult] = await Promise.all([
           getSupabaseClient()
             .from('academic_sessions')
@@ -367,7 +364,7 @@ export default function SchoolAdminResultsPage() {
             <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Session:</label>
             {sessions.length === 0 ? (
               <div className="w-full px-4 py-2 border-2 border-yellow-300 bg-yellow-50 rounded-lg text-yellow-700 text-sm">
-                ⚠️ No academic sessions found. Admin needs to create sessions.
+                ⚠️ No academic sessions found
               </div>
             ) : (
               <select
@@ -389,7 +386,7 @@ export default function SchoolAdminResultsPage() {
             <label className="block text-sm font-semibold text-gray-700 mb-2">Academic Term:</label>
             {selectedSession && terms.filter(t => t.session_id === selectedSession).length === 0 ? (
               <div className="w-full px-4 py-2 border-2 border-yellow-300 bg-yellow-50 rounded-lg text-yellow-700 text-sm">
-                ⚠️ No terms found for this session.
+                ⚠️ No terms found for this session
               </div>
             ) : (
               <select
@@ -506,146 +503,6 @@ export default function SchoolAdminResultsPage() {
             ) : (
               <div className="bg-white rounded-lg shadow-lg p-12 text-center">
                 <p className="text-gray-600">Select a class to view results</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-            {!selectedSession ? (
-              <div className="w-full px-4 py-2 border-2 border-gray-300 bg-gray-50 rounded-lg text-gray-600 text-sm">
-                👆 Select a session first
-              </div>
-            ) : terms.filter((t) => t.session_id === selectedSession).length === 0 ? (
-              <div className="w-full px-4 py-2 border-2 border-yellow-300 bg-yellow-50 rounded-lg text-yellow-700 text-sm">
-                ⚠️ No terms in this session. Admin needs to add terms.
-              </div>
-            ) : (
-              <select
-                value={selectedTerm || ''}
-                onChange={(e) => setSelectedTerm(e.target.value)}
-                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
-                disabled={!selectedSession}
-              >
-                <option value="">-- Select Term --</option>
-                {terms
-                  .filter((t) => t.session_id === selectedSession)
-                  .map((term) => (
-                    <option key={term.id} value={term.id}>
-                      {term.term_name}
-                    </option>
-                  ))}
-              </select>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Classes List */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-              <div className="bg-blue-600 text-white px-6 py-4">
-                <h2 className="text-xl font-bold">Classes ({classes.length})</h2>
-              </div>
-              {loadingClasses ? (
-                <div className="p-6 text-center text-gray-600">
-                  <p>Loading classes...</p>
-                </div>
-              ) : classes.length === 0 ? (
-                <div className="p-6 text-center text-gray-600">
-                  <p>No classes found</p>
-                </div>
-              ) : (
-                <div className="max-h-96 overflow-y-auto">
-                  <div className="divide-y">
-                    {classes.map((cls) => (
-                      <button
-                        key={cls.id}
-                        onClick={() => {
-                          setSelectedClass(cls.id)
-                          setSelectedClassData(cls)
-                        }}
-                        className={`w-full text-left p-4 hover:bg-blue-50 transition-colors border-l-4 ${
-                          selectedClass === cls.id
-                            ? 'border-blue-600 bg-blue-50'
-                            : 'border-gray-200'
-                        }`}
-                      >
-                        <h3 className="font-bold text-gray-900">
-                          {cls.class_name} {cls.arm_name}
-                        </h3>
-                        <p className="text-xs text-gray-600 mt-1">
-                          👥 {cls.student_count} students
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Results Display */}
-          <div className="lg:col-span-3">
-            {selectedClassData ? (
-              <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-                {/* Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4">
-                  <h2 className="text-2xl font-bold">
-                    {selectedClassData.class_name} {selectedClassData.arm_name}
-                  </h2>
-                  <p className="text-sm text-blue-100 mt-1">
-                    📊 {selectedClassData.student_count} Students
-                  </p>
-                </div>
-
-                {/* Results Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="px-6 py-3 text-left font-semibold text-gray-900">#</th>
-                        <th className="px-6 py-3 text-left font-semibold text-gray-900">Student Name</th>
-                        <th className="px-6 py-3 text-left font-semibold text-gray-900">Admission #</th>
-                        <th className="px-6 py-3 text-center font-semibold text-gray-900">Overall Score</th>
-                        <th className="px-6 py-3 text-left font-semibold text-gray-900">Performance</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {selectedClassData.students.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="px-6 py-8 text-center text-gray-600">
-                            No students in this class
-                          </td>
-                        </tr>
-                      ) : (
-                        selectedClassData.students.map((student, index) => (
-                          <tr key={student.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 font-bold text-gray-900">{index + 1}</td>
-                            <td className="px-6 py-4 text-gray-900">{student.full_name}</td>
-                            <td className="px-6 py-4 text-gray-600">{student.admission_number}</td>
-                            <td className="px-6 py-4 text-center">
-                              <span className="font-bold text-lg text-gray-900">
-                                {student.overall_score}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPerformanceColor(student.performance_rating)}`}>
-                                {student.performance_rating}
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow-lg p-8 text-center text-gray-600">
-                <p className="text-lg">👈 Select a class to view results</p>
               </div>
             )}
           </div>
