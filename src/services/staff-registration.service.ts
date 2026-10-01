@@ -77,11 +77,13 @@ export interface StaffRegistrationData {
 }
 
 export interface StaffRegistrationResult {
-  userId: string
-  staffId: string
-  pin: string
-  email: string
-  fullName: string
+  success: boolean
+  userId?: string
+  staffId?: string
+  pin?: string
+  email?: string
+  fullName?: string
+  message?: string
 }
 
 export class StaffRegistrationService {
@@ -272,15 +274,20 @@ export class StaffRegistrationService {
       console.log('[StaffRegistration] Staff registration completed successfully')
 
       return {
+        success: true,
         userId,
         staffId: staffId || `staff_${userId}`,
         pin,
         email,
         fullName,
+        message: `Staff member ${fullName} registered successfully. PIN: ${pin}`,
       }
     } catch (error: any) {
       console.error('[StaffRegistration] Registration failed:', error)
-      throw error
+      return {
+        success: false,
+        message: error.message || 'Staff registration failed',
+      }
     }
   }
 

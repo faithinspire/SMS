@@ -130,7 +130,7 @@ export default function SchoolAdminResultsPage() {
               total_score
             `)
             .eq('class_arm_combo_id', classArm.id)
-            .eq('academic_term_id', termId)
+            .eq('term_id', termId)
             .not('student', 'is', null)
 
           if (scoresError) {

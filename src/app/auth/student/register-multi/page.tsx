@@ -324,11 +324,17 @@ export default function StudentMultiStageRegister() {
         formData as StudentRegistrationData
       )
 
+      if (!result.success) {
+        setError(result.message || 'Registration failed')
+        setSubmitting(false)
+        return
+      }
+
       toast.success('✅ Student registered successfully!')
       console.log('Student registration completed:', result)
 
       // Show PIN display
-      const message = `Student Registered!\n\nName: ${result.fullName}\nAdmission No.: ${result.admissionNumber}\nTemporary PIN: ${result.pin}\n\nRedirecting to login...`
+      const message = `Student Registered!\n\nName: ${result.fullName || 'Student'}\nAdmission No.: ${result.admissionNumber}\nTemporary PIN: ${result.pin}\n\nRedirecting to login...`
       alert(message)
 
       // Redirect to student login
