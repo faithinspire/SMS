@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { SchoolService } from '@/services/school.service'
+import { LetterGenerationService } from '@/services/letter-generation.service'
 import { supabase } from '@/lib/supabase-client'
 import { User } from '@/types'
 import StaffHeader from '@/components/StaffHeader'
 import StudentProfileEditModal from '@/components/admin/StudentProfileEditModal'
+import { toast } from 'react-hot-toast'
 
 interface DashboardState {
   user: User | null
