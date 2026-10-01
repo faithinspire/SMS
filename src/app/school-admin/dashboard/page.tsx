@@ -528,6 +528,13 @@ export default function SchoolAdminDashboard() {
                             ✏️ Edit
                           </button>
                           <button
+                            onClick={() => generateStudentLetter(student)}
+                            className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 font-semibold"
+                            title="Generate admission letter"
+                          >
+                            📄 Letter
+                          </button>
+                          <button
                             onClick={() => deleteStudent(student.id)}
                             className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 font-semibold"
                           >
