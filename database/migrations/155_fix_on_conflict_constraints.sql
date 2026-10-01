@@ -1,79 +1,88 @@
 -- Migration 155: Fix ON CONFLICT errors by adding proper UNIQUE constraints
 -- Error Code: 42P10 - there is no unique or exclusion constraint matching the ON CONFLICT specification
 -- This migration adds missing unique constraints to tables used with ON CONFLICT
+-- All statements are wrapped in DO/EXCEPTION blocks for idempotency
 
-BEGIN;
-
--- Add unique constraint to schools table for email
-DO $$ 
+-- ============================================================================
+-- STEP 1: Add unique constraint to schools table for email (if not exists)
+-- ============================================================================
+DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage 
-    WHERE table_name = 'schools' AND constraint_name = 'schools_email_unique'
-  ) THEN
-    ALTER TABLE schools ADD CONSTRAINT schools_email_unique UNIQUE (email);
-    RAISE NOTICE 'Added unique constraint on schools.email';
-  END IF;
+  ALTER TABLE schools 
+  ADD CONSTRAINT schools_email_unique UNIQUE (email);
+  RAISE NOTICE 'Migration 155 - Step 1: Added unique constraint on schools(email)';
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Migration 155 - Step 1: Constraint schools_email_unique already exists';
+WHEN OTHERS THEN
+  RAISE NOTICE 'Migration 155 - Step 1: Error adding schools constraint: %', SQLERRM;
 END $$;
 
--- Add unique constraint to academic_sessions
-DO $$ 
+-- ============================================================================
+-- STEP 2: Add unique constraint to academic_sessions (if not exists)
+-- ============================================================================
+DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage 
-    WHERE table_name = 'academic_sessions' AND constraint_name = 'academic_sessions_school_year_unique'
-  ) THEN
-    ALTER TABLE academic_sessions ADD CONSTRAINT academic_sessions_school_year_unique UNIQUE (school_id, session_year);
-    RAISE NOTICE 'Added unique constraint on academic_sessions(school_id, session_year)';
-  END IF;
+  ALTER TABLE academic_sessions 
+  ADD CONSTRAINT academic_sessions_school_session_unique UNIQUE (school_id, session_year);
+  RAISE NOTICE 'Migration 155 - Step 2: Added unique constraint on academic_sessions(school_id, session_year)';
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Migration 155 - Step 2: Constraint academic_sessions_school_session_unique already exists';
+WHEN OTHERS THEN
+  RAISE NOTICE 'Migration 155 - Step 2: Error adding academic_sessions constraint: %', SQLERRM;
 END $$;
 
--- Add unique constraint to academic_terms
-DO $$ 
+-- ============================================================================
+-- STEP 3: Add unique constraint to academic_terms (if not exists)
+-- ============================================================================
+DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage 
-    WHERE table_name = 'academic_terms' AND constraint_name = 'academic_terms_session_order_unique'
-  ) THEN
-    ALTER TABLE academic_terms ADD CONSTRAINT academic_terms_session_order_unique UNIQUE (school_id, session_id, term_order);
-    RAISE NOTICE 'Added unique constraint on academic_terms(school_id, session_id, term_order)';
-  END IF;
+  ALTER TABLE academic_terms 
+  ADD CONSTRAINT academic_terms_school_session_term_unique UNIQUE (school_id, session_id, term_order);
+  RAISE NOTICE 'Migration 155 - Step 3: Added unique constraint on academic_terms(school_id, session_id, term_order)';
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Migration 155 - Step 3: Constraint academic_terms_school_session_term_unique already exists';
+WHEN OTHERS THEN
+  RAISE NOTICE 'Migration 155 - Step 3: Error adding academic_terms constraint: %', SQLERRM;
 END $$;
 
--- Add unique constraint to subjects
-DO $$ 
+-- ============================================================================
+-- STEP 4: Add unique constraint to subjects
+-- ============================================================================
+DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage 
-    WHERE table_name = 'subjects' AND constraint_name = 'subjects_school_name_unique'
-  ) THEN
-    ALTER TABLE subjects ADD CONSTRAINT subjects_school_name_unique UNIQUE (school_id, name);
-    RAISE NOTICE 'Added unique constraint on subjects(school_id, name)';
-  END IF;
+  ALTER TABLE subjects 
+  ADD CONSTRAINT subjects_school_name_unique UNIQUE (school_id, name);
+  RAISE NOTICE 'Migration 155 - Step 4: Added unique constraint on subjects(school_id, name)';
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Migration 155 - Step 4: Constraint subjects_school_name_unique already exists';
+WHEN OTHERS THEN
+  RAISE NOTICE 'Migration 155 - Step 4: Error adding subjects constraint: %', SQLERRM;
 END $$;
 
--- Add unique constraint to users email per school
-DO $$ 
+-- ============================================================================
+-- STEP 5: Add unique constraint to users email per school
+-- ============================================================================
+DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage 
-    WHERE table_name = 'users' AND constraint_name = 'users_school_email_unique'
-  ) THEN
-    ALTER TABLE users ADD CONSTRAINT users_school_email_unique UNIQUE (school_id, email);
-    RAISE NOTICE 'Added unique constraint on users(school_id, email)';
-  END IF;
+  ALTER TABLE users 
+  ADD CONSTRAINT users_school_email_unique UNIQUE (school_id, email);
+  RAISE NOTICE 'Migration 155 - Step 5: Added unique constraint on users(school_id, email)';
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Migration 155 - Step 5: Constraint users_school_email_unique already exists';
+WHEN OTHERS THEN
+  RAISE NOTICE 'Migration 155 - Step 5: Error adding users constraint: %', SQLERRM;
 END $$;
 
--- Add unique constraint to students admission number
-DO $$ 
+-- ============================================================================
+-- STEP 6: Add unique constraint to students admission number
+-- ============================================================================
+DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage 
-    WHERE table_name = 'students' AND constraint_name = 'students_admission_unique'
-  ) THEN
-    ALTER TABLE students ADD CONSTRAINT students_admission_unique UNIQUE (school_id, admission_number);
-    RAISE NOTICE 'Added unique constraint on students(school_id, admission_number)';
-  END IF;
+  ALTER TABLE students 
+  ADD CONSTRAINT students_school_admission_unique UNIQUE (school_id, admission_number);
+  RAISE NOTICE 'Migration 155 - Step 6: Added unique constraint on students(school_id, admission_number)';
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Migration 155 - Step 6: Constraint students_school_admission_unique already exists';
+WHEN OTHERS THEN
+  RAISE NOTICE 'Migration 155 - Step 6: Error adding students constraint: %', SQLERRM;
 END $$;
-
-COMMIT;
