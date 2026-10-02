@@ -1,0 +1,24 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "issue": "Migration 163 incomplete",
+      "severity": "medium",
+      "description": "Migration only adds staff.department and students.status, but the critical-fix-plan called for adding staff.salary, staff.salary_frequency, staff.bank_name, staff.account_number, staff.account_name, and staff.status as well. Letter generation code references these fields. Code has graceful fallbacks (optional rendering), so this doesn't block approval, but leaves unresolved gaps if new features try to use salary/bank fields.",
+      "action": "Create migration 164 to add the remaining staff columns, or document that salary/bank details are read-only in letter generation."
+    },
+    {
+      "issue": "API-level role default inconsistency",
+      "severity": "low",
+      "description": "/api/auth/register-user/route.ts line 46 defaults to role='STAFF' while service layer defaults to role='TEACHER'. The API default is unreachable in practice since calling code always passes explicit role, but creates cognitive load.",
+      "action": "Change /api/auth/register-user/route.ts line 46 to default role='TEACHER' for consistency."
+    },
+    {
+      "issue": "Expanded role acceptance in TeacherDataService needs authorization audit",
+      "severity": "medium",
+      "description": "TeacherDataService.getTeacherProfile now accepts role IN (TEACHER, STAFF, HEAD_TEACHER, PRINCIPAL, HEAD_OF_DEPARTMENT) instead of requiring exactly TEACHER. This is correct for role flexibility, but authorization checks elsewhere in the codebase might still expect role='TEACHER' exclusively and break when encountering role='STAFF' or 'PRINCIPAL'.",
+      "action": "Audit API endpoints and UI components that check userData.role to confirm they don't rely on role='TEACHER' exclusively. Test login flow for users with role='STAFF', 'HEAD_TEACHER', and 'PRINCIPAL'."
+    }
+  ],
+  "reviewDoc": "c:\\Users\\OLU\\Desktop\\SMS\\.agents\\tasks\\fix-review.md"
+}
