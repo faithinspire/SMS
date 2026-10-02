@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     // Step 1: Get student records ONLY (no joins)
     const { data: studentRecords, error: recordsError } = await supabase
       .from('students')
-      .select('id, user_id, admission_number, department')
+      .select('id, user_id, admission_number, status')
       .eq('school_id', school_id)
 
     if (recordsError) {
@@ -76,8 +76,7 @@ export async function POST(request: Request) {
           email: user.email || 'N/A',
           photo_url: user.photo_url || null,
           admission_number: student.admission_number,
-          department: student.department,
-          status: user.status || 'ACTIVE',
+          status: student.status || user.status || 'ACTIVE',
         }
       })
       .filter(s => s.id)
