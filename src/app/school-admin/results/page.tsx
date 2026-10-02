@@ -18,8 +18,8 @@ interface AcademicSession {
 interface AcademicTerm {
   id: string
   session_id: string
-  term_name: string
-  term_order: number
+  term_number: number
+  name?: string
   is_active: boolean
 }
 
@@ -155,10 +155,10 @@ export default function ResultsPage() {
 
       const { data, error } = await supabase
         .from('academic_terms')
-        .select('id, session_id, term_name, term_order, is_active')
+        .select('id, session_id, term_number, name, is_active')
         .eq('session_id', state.selectedSession)
         .eq('school_id', state.user.school_id)
-        .order('term_order', { ascending: true })
+        .order('term_number', { ascending: true })
 
       if (error) throw error
 
@@ -222,7 +222,7 @@ export default function ResultsPage() {
 
   const getSelectedTermName = () => {
     const term = state.terms.find(t => t.id === state.selectedTerm)
-    return term ? term.term_name : 'Select a term'
+    return term ? (term.name || `Term ${term.term_number}`) : 'Select a term'
   }
 
   if (state.loading) {
@@ -311,7 +311,7 @@ export default function ResultsPage() {
               </option>
               {state.terms.map(term => (
                 <option key={term.id} value={term.id}>
-                  {term.term_name} 
+                  {term.name || `Term ${term.term_number}`}
                   {term.is_active ? ' (Active)' : ''}
                 </option>
               ))}
