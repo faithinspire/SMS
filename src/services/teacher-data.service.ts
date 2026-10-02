@@ -97,7 +97,8 @@ export class TeacherDataService {
         throw new Error(`User not found: ${userError?.message}`)
       }
 
-      if (userData.role !== 'TEACHER' && userData.role !== 'STAFF') {
+      const teachingRoles = ['TEACHER', 'STAFF', 'HEAD_TEACHER', 'PRINCIPAL', 'HEAD_OF_DEPARTMENT']
+      if (!teachingRoles.includes(userData.role)) {
         throw new Error(`User is not a teacher (role: ${userData.role})`)
       }
 

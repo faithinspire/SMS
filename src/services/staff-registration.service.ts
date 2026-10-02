@@ -152,7 +152,7 @@ export class StaffRegistrationService {
 
       // Step 2: Create database user record with the auth user's ID
       // CRITICAL: Use the role from the registration form (e.g., TEACHER, ACCOUNTANT, PRINCIPAL, HEAD_TEACHER)
-      const userRole = data.primaryRole || 'STAFF'
+      const userRole = data.primaryRole || 'TEACHER'
       console.log('[StaffRegistration] Setting user role to:', userRole)
       
       const { data: newUser, error: userError } = await supabase

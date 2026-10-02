@@ -116,7 +116,6 @@ export class LetterGenerationService {
           id,
           admission_number,
           date_of_birth,
-          status,
           user_id,
           class_arm_combo_id
         `)
