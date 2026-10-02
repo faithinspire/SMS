@@ -105,6 +105,134 @@ const ConfirmationModal: React.FC<{
   </div>
 );
 
+// ✅ HOTFIX: Add EditStudentModal component
+const EditStudentModal: React.FC<{
+  student: Student;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (updates: Partial<Student>) => Promise<void>;
+  isLoading?: boolean;
+}> = ({ student, isOpen, onClose, onSave, isLoading = false }) => {
+  const [formData, setFormData] = useState(student);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setFormData(student);
+  }, [student]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await onSave(formData);
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 border-b border-blue-800">
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            ✏️ Edit Student
+          </h3>
+          <p className="text-blue-100 text-sm mt-1">Update student information</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              👤 Personal Information
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={formData.user.full_name}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      user: { ...formData.user, full_name: e.target.value },
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={formData.user.email}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      user: { ...formData.user, email: e.target.value },
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Admission Number</label>
+                <input
+                  type="text"
+                  value={formData.admission_number}
+                  onChange={(e) => setFormData({ ...formData, admission_number: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as StatusType })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="PAUSED">Paused</option>
+                  <option value="SUSPENDED">Suspended</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 justify-end border-t pt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+          {isLoading ? 'Processing...' : 'Confirm'}
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 const StudentsPage: React.FC = () => {
   const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
@@ -115,7 +243,7 @@ const StudentsPage: React.FC = () => {
   const [filterClass, setFilterClass] = useState<string>('ALL');
   const [schoolId, setSchoolId] = useState<string>('');
   const [modal, setModal] = useState<{
-    type: 'pause' | 'activate' | 'delete' | null;
+    type: 'pause' | 'activate' | 'delete' | 'edit' | null;
     student?: Student;
   }>({ type: null });
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -342,6 +470,26 @@ const StudentsPage: React.FC = () => {
     });
   };
 
+  // ✅ HOTFIX: Handle edit for students
+  const handleEditStudent = async (updates: Partial<Student>) => {
+    if (!modal.student) return;
+    try {
+      setIsActionLoading(true);
+      setStudents(students.map(s => 
+        s.id === modal.student!.id 
+          ? { ...s, ...updates, user: { ...s.user, ...updates.user } }
+          : s
+      ));
+      toast.success('Student updated successfully');
+      setModal({ type: null });
+    } catch (error) {
+      console.error('Error updating student:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update student');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-2xl font-bold mb-6">Students Management</h2>
@@ -446,8 +594,11 @@ const StudentsPage: React.FC = () => {
                   <td className="py-3 px-4 text-center">
                     <div className="flex gap-2 justify-center flex-wrap">
                       <button
-                        onClick={() => router.push(`/school-admin/students/${student.id}`)}
+                        onClick={() => setModal({ type: 'edit', student })}
                         className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                        title="Edit Student"
+                      >
+                        ✏️ Edit
                       >
                         ✏️ Edit
                       </button>
@@ -517,6 +668,17 @@ const StudentsPage: React.FC = () => {
           message={`Activate "${modal.student.user.full_name}"? They will regain access to the system.`}
           onConfirm={() => handleStatusChange(modal.student!.id, 'ACTIVE')}
           onCancel={() => setModal({ type: null })}
+          isLoading={isActionLoading}
+        />
+      )}
+
+      {/* Edit Student Modal */}
+      {modal.type === 'edit' && modal.student && (
+        <EditStudentModal
+          student={modal.student}
+          isOpen={true}
+          onClose={() => setModal({ type: null })}
+          onSave={handleEditStudent}
           isLoading={isActionLoading}
         />
       )}

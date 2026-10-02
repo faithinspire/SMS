@@ -1,42 +1,79 @@
 @echo off
-REM Deploy to Vercel - Super Simple Script
-REM This script deploys your SMS project to production on Vercel
+REM Complete SMS Deployment Script
+REM This script commits the fixes and pushes to GitHub
+
+cd /d "c:\Users\OLU\Desktop\SMS"
 
 echo.
-echo ==========================================
-echo  FTECH SMS - Deploy to Vercel
-echo ==========================================
+echo ================================
+echo SMS COMPLETE DEPLOYMENT
+echo ================================
 echo.
 
-REM Check if Vercel CLI is installed
-where vercel >nul 2>nul
-if %errorlevel% neq 0 (
-    echo Installing Vercel CLI globally...
-    call npm install -g vercel
-    echo.
-)
+echo Checking git status...
+git status --short
+echo.
 
-REM Check if git is clean
-git status --porcelain
+echo Staging files...
+git add "src/services/staff-registration.service.ts"
+git add "src/app/school-admin/students/[id]/page.tsx"
+git add "src/app/school-admin/transactions/page.tsx"
+echo Files staged successfully
+echo.
+
+echo Creating commit...
+git commit -m "^🔧 HARD FIX: Teacher subject assignment + PGRST116 error handling^
+
+FIXES:^
+- Fix staff registration table name (subject_teacher_assignments)^
+- Replace .single() with .maybeSingle() for graceful error handling^
+- Maintain multi-tenant data isolation via school_id indexes^
+
+DEPLOYMENT READY: Execute Supabase migrations"
+
 if %errorlevel% equ 0 (
-    echo.
-    echo Do you want to commit changes before deploying?
-    echo Current git status shown above.
-    echo.
+    echo Commit created successfully
+) else (
+    echo No changes to commit or commit failed
 )
+echo.
 
-REM Deploy to production
+echo Pushing to GitHub...
+git push origin main
+if %errorlevel% equ 0 (
+    echo Code pushed successfully
+) else (
+    echo Push failed
+    goto error
+)
 echo.
-echo Deploying to Vercel production...
-echo.
-call vercel --prod --yes
 
 echo.
-echo ==========================================
-echo  ✅ Deployment Complete!
-echo ==========================================
+echo ================================
+echo NEXT STEPS:
+echo ================================
 echo.
-echo Your app is now live!
-echo Check: https://vercel.com/dashboard
+echo 1. Go to https://supabase.com
+echo 2. Open SMS project
+echo 3. Go to SQL Editor
+echo 4. Create New Query
+echo 5. Copy-paste RUN_THIS_IN_SUPABASE_NOW.sql
+echo 6. Click RUN
 echo.
+echo 7. Check Vercel deployment at https://vercel.com
+echo 8. Test in production after deployment completes
+echo.
+echo ================================
+echo DEPLOYMENT CODE COMPLETE
+echo ================================
+echo.
+
 pause
+goto end
+
+:error
+echo.
+echo ERROR: Deployment failed
+pause
+
+:end

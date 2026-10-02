@@ -80,10 +80,12 @@ const TransactionsPage: React.FC = () => {
           .from('users')
           .select('school_id')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
 
-        if (userProfile) {
+        if (userProfile?.school_id) {
           setSchoolId(userProfile.school_id)
+        } else {
+          console.warn('[Transactions] User profile not found or missing school_id')
         }
       } catch (error) {
         console.error('Error getting school:', error)

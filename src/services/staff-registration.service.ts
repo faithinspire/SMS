@@ -262,7 +262,7 @@ export class StaffRegistrationService {
           }))
 
           const { error: subjectError } = await supabase
-            .from('teacher_subject_assignments')
+            .from('subject_teacher_assignments')
             .insert(subjectAssignments)
 
           if (!subjectError) {
