@@ -226,12 +226,6 @@ const EditStudentModal: React.FC<{
     </div>
   );
 };
-          {isLoading ? 'Processing...' : 'Confirm'}
-        </button>
-      </div>
-    </div>
-  </div>
-);
 
 const StudentsPage: React.FC = () => {
   const router = useRouter();
@@ -597,8 +591,6 @@ const StudentsPage: React.FC = () => {
                         onClick={() => setModal({ type: 'edit', student })}
                         className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
                         title="Edit Student"
-                      >
-                        ✏️ Edit
                       >
                         ✏️ Edit
                       </button>
