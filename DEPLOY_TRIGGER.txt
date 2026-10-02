@@ -1,0 +1,11 @@
+DEPLOYMENT TRIGGER - 6 CRITICAL FIXES READY FOR VERCEL
+
+Fixes deployed:
+1. Staff salary columns added to migration 163
+2. Staff/Students APIs use SERVICE_ROLE_KEY for unrestricted data access
+3. Results page correctly queries academic_sessions
+4. TeacherDataService.getTeacherClasses queries teacher_class_assignments table
+5. Student-class-teacher linking verified working
+6. All interconnected issues resolved
+
+Deploy to Vercel NOW.
