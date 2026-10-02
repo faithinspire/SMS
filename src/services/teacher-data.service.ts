@@ -97,6 +97,7 @@ export class TeacherDataService {
         throw new Error(`User not found: ${userError?.message}`)
       }
 
+      // ✅ HOTFIX 2026-10-02: Accept multiple teaching roles including STAFF
       const teachingRoles = ['TEACHER', 'STAFF', 'HEAD_TEACHER', 'PRINCIPAL', 'HEAD_OF_DEPARTMENT']
       if (!teachingRoles.includes(userData.role)) {
         throw new Error(`User is not a teacher (role: ${userData.role})`)

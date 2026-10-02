@@ -36,8 +36,8 @@ export async function POST(request: Request) {
     const staffCount = (staffData || []).length
     console.log(`[API] Loaded ${staffCount} staff members`)
 
-    // ==== STUDENTS QUERY ====
-    // Step 1: Get student records ONLY (no joins)
+    // ✅ HOTFIX 2026-10-02: Query 'status' column (not 'department') from students
+    // Fixes: "column students.status does not exist" 400 Bad Request
     const { data: studentRecords, error: recordsError } = await supabase
       .from('students')
       .select('id, user_id, admission_number, status')
