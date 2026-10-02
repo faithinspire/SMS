@@ -102,7 +102,7 @@ export class StaffRegistrationService {
 
       console.log('[StaffRegistration] Starting registration for:', fullName, 'email:', email)
 
-      // IDEMPOTENCY CHECK: Verify user doesn't already exist
+      // IDEMPOTENCY CHECK: Verify user doesn't already exist in database
       const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('id')
@@ -119,25 +119,42 @@ export class StaffRegistrationService {
         console.warn('[StaffRegistration] Warning checking existing user:', checkError)
       }
 
-      // NOTE: PIN is NO LONGER generated. Staff login with email + password
-      // const pin = this.generatePin()
-      // console.log('[StaffRegistration] Generated PIN for new staff')
+      // ⭐ CRITICAL FIX: Step 1: Create Supabase Auth user FIRST (via API)
+      // This must happen before creating database records
+      console.log('[StaffRegistration] Creating Supabase Auth account...')
+      const authResponse = await fetch('/api/auth/register-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email,
+          password: data.password || 'DefaultPass123!',
+          name: fullName,
+          role: data.primaryRole || 'TEACHER',
+          schoolId: schoolId,
+          accountType: 'STAFF',
+        }),
+      })
 
-      // Step 1: Create user record (REQUIRED for all staff)
-      // Generate proper UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-      const generateUUID = () => {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-          const r = Math.random() * 16 | 0
-          const v = c === 'x' ? r : (r & 0x3 | 0x8)
-          return v.toString(16)
-        })
+      if (!authResponse.ok) {
+        const authError = await authResponse.json()
+        console.error('[StaffRegistration] Failed to create auth user:', authError)
+        throw new Error(`Failed to create auth account: ${authError.error}`)
       }
-      
-      const userId = generateUUID()
+
+      const authResult = await authResponse.json()
+      const userId = authResult.userId
+
+      if (!userId) {
+        throw new Error('Failed to get user ID from auth service')
+      }
+
+      console.log('[StaffRegistration] Supabase Auth user created:', userId)
+
+      // Step 2: Create database user record with the auth user's ID
       const { data: newUser, error: userError } = await supabase
         .from('users')
         .insert({
-          id: userId,
+          id: userId, // Use auth user ID
           school_id: schoolId,
           email: email,
           full_name: fullName,
@@ -156,11 +173,11 @@ export class StaffRegistrationService {
         .single()
 
       if (userError) {
-        console.error('[StaffRegistration] Failed to create user:', userError)
+        console.error('[StaffRegistration] Failed to create user record:', userError)
         throw new Error(`Failed to create user record: ${userError.message}`)
       }
 
-      console.log('[StaffRegistration] User record created:', userId)
+      console.log('[StaffRegistration] User database record created:', userId)
 
       // Step 2: Create staff record (OPTIONAL employment details)
       let staffId: string | null = null

@@ -139,17 +139,47 @@ export class StudentRegistrationService {
         }
       }
 
-      // Step 2: Create user record
+      // Step 2: Create Supabase Auth account FIRST (via API)
+      // This must happen before creating database records
       const fullName = `${data.firstName}${data.middleName ? ' ' + data.middleName : ''} ${data.lastName}`
-      const userId = uuidv4()
+      
+      console.log('[StudentRegistration] Creating Supabase Auth account...')
+      const authResponse = await fetch('/api/auth/register-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password || `Student${admissionNumber}@2024`,
+          name: fullName,
+          role: 'STUDENT',
+          schoolId: data.schoolId,
+          accountType: 'STUDENT',
+        }),
+      })
 
-      console.log('[StudentRegistration] Creating user record:', userId)
+      if (!authResponse.ok) {
+        const authError = await authResponse.json()
+        console.error('[StudentRegistration] Failed to create auth user:', authError)
+        throw new Error(`Failed to create auth account: ${authError.error}`)
+      }
+
+      const authResult = await authResponse.json()
+      const userId = authResult.userId
+
+      if (!userId) {
+        throw new Error('Failed to get user ID from auth service')
+      }
+
+      console.log('[StudentRegistration] Supabase Auth user created:', userId)
+
+      // Step 3: Create database user record with the auth user's ID
+      console.log('[StudentRegistration] Creating user database record:', userId)
 
       const { data: newUser, error: userError } = await supabase
         .from('users')
         .insert([
           {
-            id: userId,
+            id: userId, // Use auth user ID
             school_id: data.schoolId,
             email: data.email,
             full_name: fullName,
@@ -164,13 +194,13 @@ export class StudentRegistrationService {
         .single()
 
       if (userError) {
-        console.error('[StudentRegistration] Error creating user:', userError)
-        throw new Error(`Failed to create user: ${userError.message}`)
+        console.error('[StudentRegistration] Error creating user database record:', userError)
+        throw new Error(`Failed to create user record: ${userError.message}`)
       }
 
-      console.log('[StudentRegistration] User created:', newUser.id)
+      console.log('[StudentRegistration] User database record created:', newUser.id)
 
-      // Step 3: Create student record
+      // Step 4: Create student record
       const studentId = uuidv4()
 
       console.log('[StudentRegistration] Creating student record:', studentId)
@@ -200,7 +230,7 @@ export class StudentRegistrationService {
 
       console.log('[StudentRegistration] Student record created:', newStudent.id)
 
-      // Step 4: Create guardian record
+      // Step 5: Create guardian record
       let guardianId: string | undefined
       if (data.primaryGuardian) {
         guardianId = uuidv4()
@@ -233,7 +263,7 @@ export class StudentRegistrationService {
         }
       }
 
-      // Step 5: Enroll in subjects
+      // Step 6: Enroll in subjects
       if (data.subjectIds && data.subjectIds.length > 0) {
         console.log('[StudentRegistration] Enrolling in subjects:', data.subjectIds.length)
 
@@ -260,7 +290,7 @@ export class StudentRegistrationService {
         }
       }
 
-      // Step 6: Generate PIN for student/guardian login
+      // Step 7: Generate PIN for student/guardian login
       const pin = this.generatePin()
 
       console.log('[StudentRegistration] Registration completed successfully')
