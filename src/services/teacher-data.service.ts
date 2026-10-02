@@ -147,49 +147,100 @@ export class TeacherDataService {
     )
 
     try {
-      // Query: Find all class_arm_combos where this teacher is class_teacher
-      const { data: classData, error: classError } = await supabase
-        .from('class_arm_combos')
+      // ✅ HOTFIX 2026-10-02: Query from teacher_class_assignments table (where registration saves assignments)
+      // This now supports both class_teacher_id on class_arm_combos AND assignments in teacher_class_assignments
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('teacher_class_assignments')
         .select(`
-          id,
-          classes (
+          class_arm_combo_id,
+          class_arm_combos (
             id,
-            name,
-            level,
-            type
-          ),
-          arms (
-            id,
-            name
+            classes (
+              id,
+              name,
+              level,
+              type
+            ),
+            arms (
+              id,
+              name
+            )
           )
         `)
-        .eq('class_teacher_id', teacherId)
+        .eq('teacher_id', teacherId)
         .eq('school_id', schoolId)
-        .order('id')
+        .order('created_at', { ascending: false })
 
-      if (classError) {
-        throw new Error(`Query failed: ${classError.message}`)
+      if (assignmentError) {
+        console.warn('[TeacherDataService] Error querying teacher_class_assignments:', assignmentError)
+        // Fall back to old method
       }
 
-      if (!classData || classData.length === 0) {
+      const classes: ClassInfo[] = []
+      
+      if (!assignmentError && assignments && assignments.length > 0) {
+        const classSet = new Set<string>() // Prevent duplicates
+        assignments.forEach((assignment: any) => {
+          const combo = assignment.class_arm_combos
+          if (combo && !classSet.has(combo.id)) {
+            classSet.add(combo.id)
+            classes.push({
+              id: combo.id,
+              name: combo.classes?.name || 'Unknown',
+              classLevel: combo.classes?.level?.toString() || '0',
+              armName: combo.arms?.name || 'Unknown',
+              displayName: `${combo.classes?.name || ''} ${combo.arms?.name || ''}`.trim(),
+            })
+          }
+        })
+      }
+
+      // Fallback: Also check class_teacher_id field if no assignments found
+      if (classes.length === 0) {
+        console.log('[TeacherDataService] No assignments found, checking class_teacher_id field...')
+        const { data: classData, error: classError } = await supabase
+          .from('class_arm_combos')
+          .select(`
+            id,
+            classes (
+              id,
+              name,
+              level,
+              type
+            ),
+            arms (
+              id,
+              name
+            )
+          `)
+          .eq('class_teacher_id', teacherId)
+          .eq('school_id', schoolId)
+          .order('id')
+
+        if (!classError && classData) {
+          classData.forEach((combo: any) => {
+            classes.push({
+              id: combo.id,
+              name: combo.classes?.name || 'Unknown',
+              classLevel: combo.classes?.level?.toString() || '0',
+              armName: combo.arms?.name || 'Unknown',
+              displayName: `${combo.classes?.name || ''} ${combo.arms?.name || ''}`.trim(),
+            })
+          })
+        }
+      }
+
+      if (classes.length === 0) {
         console.warn(
           `[TeacherDataService] Teacher ${teacherId} has NO class assignments`
         )
-        return []
+      } else {
+        console.log(
+          `[TeacherDataService] Loaded ${classes.length} classes:`,
+          classes.map((c) => c.displayName)
+        )
       }
 
-      const classes: ClassInfo[] = (classData as any[]).map((combo: any) => ({
-        id: combo.id,
-        name: combo.classes?.name || 'Unknown',
-        classLevel: combo.classes?.level?.toString() || '0',
-        armName: combo.arms?.name || 'Unknown',
-        displayName: `${combo.classes?.name || ''} ${combo.arms?.name || ''}`.trim(),
-      }))
-
-      console.log(
-        `[TeacherDataService] Loaded ${classes.length} classes:`,
-        classes.map((c) => c.displayName)
-      )
       return classes
     } catch (error) {
       console.error('[TeacherDataService] Error loading classes:', error)
