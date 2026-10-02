@@ -1,73 +1,66 @@
 #!/usr/bin/env node
-
-const { execSync } = require('child_process');
+const https = require('https');
 const fs = require('fs');
-const path = require('path');
 
-const projectRoot = __dirname;
-const envPath = path.join(projectRoot, '.env.local');
+// Read OIDC token from .env.local
+const envLocal = fs.readFileSync('.env.local', 'utf8');
+const tokenMatch = envLocal.match(/VERCEL_OIDC_TOKEN=(.+)/);
+const token = tokenMatch ? tokenMatch[1].trim() : null;
 
-// Load environment variables
-const envContent = fs.readFileSync(envPath, 'utf-8');
-const envLines = envContent.split('\n');
-const env = process.env;
-
-envLines.forEach(line => {
-  const trimmed = line.trim();
-  if (trimmed && !trimmed.startsWith('#')) {
-    const [key, ...valueParts] = trimmed.split('=');
-    if (key && valueParts.length > 0) {
-      env[key.trim()] = valueParts.join('=').trim();
-    }
-  }
-});
-
-console.log('🚀 Starting deployment process...\n');
-
-try {
-  // Step 1: Add all changes
-  console.log('📦 Step 1: Adding all changes to git...');
-  execSync('git add -A', { cwd: projectRoot, stdio: 'inherit' });
-  console.log('✅ Changes added\n');
-
-  // Step 2: Commit changes
-  console.log('📝 Step 2: Creating commit...');
-  execSync('git commit -m "Deploy: Staff registration 4 slides, letter generation fix, Results page"', {
-    cwd: projectRoot,
-    stdio: 'inherit'
-  });
-  console.log('✅ Commit created\n');
-
-  // Step 3: Push to main
-  console.log('🌐 Step 3: Pushing to GitHub main branch...');
-  execSync('git push -u origin main', { cwd: projectRoot, stdio: 'inherit' });
-  console.log('✅ Pushed to GitHub\n');
-
-  // Step 4: Trigger Vercel deployment
-  console.log('🚀 Step 4: Triggering Vercel production deployment...');
-  
-  if (env.VERCEL_OIDC_TOKEN) {
-    console.log('Using OIDC token for deployment...');
-    execSync('vercel deploy --prod', {
-      cwd: projectRoot,
-      stdio: 'inherit',
-      env: {
-        ...env,
-        VERCEL_OIDC_TOKEN: env.VERCEL_OIDC_TOKEN
-      }
-    });
-  } else {
-    console.log('No OIDC token found, attempting standard deployment...');
-    execSync('vercel deploy --prod', { cwd: projectRoot, stdio: 'inherit' });
-  }
-
-  console.log('\n✅ Deployment complete!');
-  console.log('\n📊 Summary:');
-  console.log('✓ All changes committed to main branch');
-  console.log('✓ Fixes deployed to Vercel production');
-  console.log('\n🔍 Verify at: https://sms-sigma-ruby.vercel.app');
-
-} catch (error) {
-  console.error('\n❌ Deployment failed:', error.message);
+if (!token) {
+  console.error('❌ VERCEL_OIDC_TOKEN not found');
   process.exit(1);
 }
+
+console.log('🚀 Deploying to Vercel...\n');
+
+const options = {
+  hostname: 'api.vercel.com',
+  port: 443,
+  path: '/v13/deployments?forceNew=1',
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  }
+};
+
+const payload = {
+  name: 'sms-gold-eta',
+  gitSource: {
+    type: 'github',
+    org: 'faithinspire',
+    repo: 'SMS',
+    ref: 'main'
+  }
+};
+
+const req = https.request(options, (res) => {
+  let data = '';
+  res.on('data', chunk => data += chunk);
+  res.on('end', () => {
+    try {
+      const result = JSON.parse(data);
+      if (res.statusCode === 200 || res.statusCode === 201) {
+        console.log('✅ Deployment triggered successfully!\n');
+        console.log('📊 Deployment Details:');
+        console.log(`   ID: ${result.id}`);
+        console.log(`   URL: https://sms-gold-eta.vercel.app`);
+        console.log('\n🔗 Monitor at: https://vercel.com/dashboard/projects/sms-gold-eta\n');
+      } else {
+        console.log(`Response (${res.statusCode}):`, result);
+      }
+    } catch (e) {
+      console.log('Response:', data);
+    }
+    process.exit(0);
+  });
+});
+
+req.on('error', (e) => {
+  console.error('❌ Error:', e.message);
+  process.exit(1);
+});
+
+req.write(JSON.stringify(payload));
+req.end();
