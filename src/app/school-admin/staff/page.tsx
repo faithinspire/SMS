@@ -29,6 +29,11 @@ interface StaffMember {
   position: string;
   employment_date: string;
   status: 'ACTIVE' | 'PAUSED' | 'INACTIVE' | 'SUSPENDED';
+  department?: string;
+  salary?: number;
+  bank_name?: string;
+  account_number?: string;
+  account_name?: string;
   user: {
     id: string;
     full_name: string;
@@ -119,7 +124,7 @@ const EditModal: React.FC<{
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 border-b border-blue-800">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
@@ -186,11 +191,84 @@ const EditModal: React.FC<{
                 />
               </div>
               <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Department</label>
+                <input
+                  type="text"
+                  value={formData.department || ''}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  placeholder="e.g., Academic, Administrative"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Employment Date</label>
                 <input
                   type="date"
                   value={formData.employment_date ? formData.employment_date.split('T')[0] : ''}
                   onChange={(e) => setFormData({ ...formData, employment_date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as StatusType })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="PAUSED">Paused</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="SUSPENDED">Suspended</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Salary & Bank Information Section */}
+          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              💰 Salary & Bank Information
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Monthly Salary</label>
+                <input
+                  type="number"
+                  value={formData.salary || ''}
+                  onChange={(e) => setFormData({ ...formData, salary: e.target.value ? parseFloat(e.target.value) : undefined })}
+                  placeholder="Enter monthly salary"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Bank Name</label>
+                <input
+                  type="text"
+                  value={formData.bank_name || ''}
+                  onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
+                  placeholder="e.g., First Bank, Access Bank"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Number</label>
+                <input
+                  type="text"
+                  value={formData.account_number || ''}
+                  onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
+                  placeholder="Enter bank account number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Name</label>
+                <input
+                  type="text"
+                  value={formData.account_name || ''}
+                  onChange={(e) => setFormData({ ...formData, account_name: e.target.value })}
+                  placeholder="Name on bank account"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
