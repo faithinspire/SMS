@@ -32,17 +32,26 @@ export default function StudentRegisterPage() {
   const [authLoading, setAuthLoading] = useState(true)
 
   const [formData, setFormData] = useState<FormState>({
-    // Stage 1: Student Personal
+    // Stage 1: Personal & Contact Information
     firstName: '',
     lastName: '',
+    middleName: '',
     gender: 'MALE',
     dateOfBirth: '',
+    nationality: 'Nigeria',
+    state: '',
+    lga: '',
+    address: '',
     phone: '',
     email: '',
-    address: '',
-    state: '',
+    photoUrl: '',
 
-    // Stage 2: Guardian & Admission
+    // Stage 2: Academic & Guardian Information
+    sessionId: '',
+    termId: '',
+    classArmComboId: '',
+    admissionNumber: '',
+    admissionDate: new Date().toISOString().split('T')[0],
     primaryGuardian: {
       fullName: '',
       relationship: 'Parent',
@@ -51,22 +60,13 @@ export default function StudentRegisterPage() {
       address: '',
       occupation: '',
     },
-    admissionNumber: '',
-    admissionDate: new Date().toISOString().split('T')[0],
-    admissionStatus: 'ACTIVE',
 
-    // Stage 3: Class/Session/Term & Subjects
-    sessionId: '',
-    termId: '',
-    classArmComboId: '',
+    // Stage 3: Class & Subject Assignment
     subjectIds: [],
 
-    // Stage 4: Medical & Documents
-    bloodType: '',
-    allergies: '',
-    medicalConditions: '',
-    emergencyContactName: '',
-    emergencyContactPhone: '',
+    // Stage 4: Account Security
+    password: '',
+    confirmPassword: '',
   })
 
   // Get current user and school on mount
@@ -178,10 +178,10 @@ export default function StudentRegisterPage() {
 
   const validateStage = (): boolean => {
     const required = {
-      1: ['firstName', 'lastName', 'gender', 'dateOfBirth', 'phone', 'email', 'address', 'state'],
-      2: ['primaryGuardian.fullName', 'primaryGuardian.phone', 'admissionDate'],
-      3: ['sessionId', 'termId', 'classArmComboId'],
-      4: [], // Medical info optional
+      1: ['firstName', 'lastName', 'gender', 'dateOfBirth', 'nationality', 'state', 'lga', 'address', 'phone', 'email'],
+      2: ['sessionId', 'termId', 'classArmComboId', 'admissionDate', 'primaryGuardian.fullName', 'primaryGuardian.phone'],
+      3: [], // Subjects optional
+      4: ['password', 'confirmPassword'],
       5: [], // Review only
     }
 
@@ -208,6 +208,28 @@ export default function StudentRegisterPage() {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(formData.email || '')) {
         toast.error('Please enter a valid email address')
+        return false
+      }
+    }
+
+    // Password validation on stage 4
+    if (currentStage === 4) {
+      if (!formData.password || formData.password.length < 8) {
+        toast.error('Password must be at least 8 characters')
+        return false
+      }
+      if (formData.password !== formData.confirmPassword) {
+        toast.error('Passwords do not match')
+        return false
+      }
+      // Check password strength
+      const hasUpper = /[A-Z]/.test(formData.password)
+      const hasLower = /[a-z]/.test(formData.password)
+      const hasNumber = /\d/.test(formData.password)
+      const hasSpecial = /[!@#$%^&*]/.test(formData.password)
+      
+      if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+        toast.error('Password must include uppercase, lowercase, number, and special character')
         return false
       }
     }
@@ -263,16 +285,23 @@ export default function StudentRegisterPage() {
 
   const renderStageContent = () => {
     switch (currentStage) {
-      case 1: // Student Personal
+      case 1: // Personal & Contact Information
         return (
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-6">Student Personal Information</h3>
+            <h3 className="text-lg font-semibold mb-6">Personal & Contact Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <input
                 type="text"
                 placeholder="First Name *"
                 value={formData.firstName || ''}
                 onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Middle Name"
+                value={formData.middleName || ''}
+                onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
               <input
@@ -299,6 +328,27 @@ export default function StudentRegisterPage() {
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
               <input
+                type="text"
+                placeholder="Nationality *"
+                value={formData.nationality || ''}
+                onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="State *"
+                value={formData.state || ''}
+                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="LGA *"
+                value={formData.lga || ''}
+                onChange={(e) => setFormData({ ...formData, lga: e.target.value })}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <input
                 type="tel"
                 placeholder="Phone *"
                 value={formData.phone || ''}
@@ -319,20 +369,78 @@ export default function StudentRegisterPage() {
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none md:col-span-2"
               />
-              <input
-                type="text"
-                placeholder="State *"
-                value={formData.state || ''}
-                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
             </div>
           </div>
         )
 
-      case 2: // Guardian & Admission
+      case 2: // Academic & Guardian Information
         return (
           <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold mb-6">Academic Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <select
+                  value={formData.sessionId || ''}
+                  onChange={(e) => setFormData({ ...formData, sessionId: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="">Select Session *</option>
+                  {sessions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name || s.id}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={formData.termId || ''}
+                  onChange={(e) => setFormData({ ...formData, termId: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="">Select Term *</option>
+                  {terms.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.term_name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={formData.classArmComboId || ''}
+                  onChange={(e) => setFormData({ ...formData, classArmComboId: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none md:col-span-2"
+                >
+                  <option value="">Select Class *</option>
+                  {classOptions.map((combo) => (
+                    <option key={combo.id} value={combo.id}>
+                      {combo.classes?.name} {combo.arms?.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-2 block">Admission Number</label>
+                <input
+                  type="text"
+                  placeholder="Auto-generated"
+                  value={formData.admissionNumber || '(Auto-generated)'}
+                  disabled
+                  className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 w-full"
+                />
+              </div>
+
+              <div className="mt-4">
+                <label className="text-sm font-semibold text-gray-700 mb-2 block">Admission Date *</label>
+                <input
+                  type="date"
+                  value={formData.admissionDate || ''}
+                  onChange={(e) => setFormData({ ...formData, admissionDate: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none w-full"
+                />
+              </div>
+            </div>
+
+            <hr />
+
             <div>
               <h3 className="text-lg font-semibold mb-6">Parent/Guardian Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -399,29 +507,16 @@ export default function StudentRegisterPage() {
                   }
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none md:col-span-2"
                 />
-              </div>
-            </div>
-
-            <hr />
-
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Admission Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-semibold text-gray-700">Admission Number</label>
-                  <input
-                    type="text"
-                    placeholder="Auto-generated"
-                    value={formData.admissionNumber || '(Auto-generated)'}
-                    disabled
-                    className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-100"
-                  />
-                </div>
                 <input
-                  type="date"
-                  placeholder="Admission Date *"
-                  value={formData.admissionDate || ''}
-                  onChange={(e) => setFormData({ ...formData, admissionDate: e.target.value })}
+                  type="text"
+                  placeholder="Guardian Occupation"
+                  value={formData.primaryGuardian?.occupation || ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      primaryGuardian: { ...formData.primaryGuardian, occupation: e.target.value },
+                    })
+                  }
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
@@ -429,55 +524,17 @@ export default function StudentRegisterPage() {
           </div>
         )
 
-      case 3: // Class/Session/Term & Subjects
+      case 3: // Class & Subject Assignment
         return (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-6">Class, Session & Subjects</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <select
-                  value={formData.sessionId || ''}
-                  onChange={(e) => setFormData({ ...formData, sessionId: e.target.value })}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  <option value="">Select Session *</option>
-                  {sessions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name || s.id}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={formData.termId || ''}
-                  onChange={(e) => setFormData({ ...formData, termId: e.target.value })}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  <option value="">Select Term *</option>
-                  {terms.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.term_name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={formData.classArmComboId || ''}
-                  onChange={(e) => setFormData({ ...formData, classArmComboId: e.target.value })}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none md:col-span-2"
-                >
-                  <option value="">Select Class *</option>
-                  {classOptions.map((combo) => (
-                    <option key={combo.id} value={combo.id}>
-                      {combo.classes?.name} {combo.arms?.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {subjects.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-6">Class & Subject Assignment</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Class: <span className="font-semibold">{classOptions.find(c => c.id === formData.classArmComboId)?.classes?.name} {classOptions.find(c => c.id === formData.classArmComboId)?.arms?.name}</span>
+            </p>
+            
+            {subjects.length > 0 ? (
               <div>
-                <h3 className="text-lg font-semibold mb-4">Subject Selection</h3>
-                <p className="text-sm text-gray-600 mb-3">Select all applicable subjects:</p>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Select Subjects</label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto border border-gray-200 p-4 rounded-lg bg-gray-50">
                   {subjects.map((subject) => (
                     <label key={subject.id} className="flex items-center gap-2">
@@ -501,89 +558,82 @@ export default function StudentRegisterPage() {
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-gray-600 mt-2">
+                <p className="text-xs text-gray-600 mt-3">
                   Selected: <span className="font-semibold">{(formData.subjectIds || []).length} subject(s)</span>
                 </p>
               </div>
+            ) : (
+              <p className="text-sm text-gray-600 bg-blue-50 p-4 rounded-lg">
+                Select a class in the previous stage to view available subjects.
+              </p>
             )}
           </div>
         )
 
-      case 4: // Medical & Documents
+      case 4: // Account Security
         return (
           <div className="space-y-6">
+            <h3 className="text-lg font-semibold mb-6">Account Security</h3>
             <div>
-              <h3 className="text-lg font-semibold mb-6">Medical Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <select
-                  value={formData.bloodType || ''}
-                  onChange={(e) => setFormData({ ...formData, bloodType: e.target.value })}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  <option value="">Blood Type</option>
-                  <option value="O+">O+</option>
-                  <option value="O-">O-</option>
-                  <option value="A+">A+</option>
-                  <option value="A-">A-</option>
-                  <option value="B+">B+</option>
-                  <option value="B-">B-</option>
-                  <option value="AB+">AB+</option>
-                  <option value="AB-">AB-</option>
-                </select>
+              <label className="text-sm font-semibold text-gray-700 mb-2 block">Email (Read-only)</label>
+              <input
+                type="email"
+                placeholder="Email"
+                value={formData.email || ''}
+                disabled
+                className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 w-full"
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-2 block">Password *</label>
                 <input
-                  type="text"
-                  placeholder="Allergies"
-                  value={formData.allergies || ''}
-                  onChange={(e) => setFormData({ ...formData, allergies: e.target.value })}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  type="password"
+                  placeholder="Password (8+ chars, uppercase, lowercase, number, special char)"
+                  value={formData.password || ''}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none w-full"
                 />
-                <textarea
-                  placeholder="Medical Conditions"
-                  value={formData.medicalConditions || ''}
-                  onChange={(e) => setFormData({ ...formData, medicalConditions: e.target.value })}
-                  rows={3}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none md:col-span-2"
-                />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-2 block">Confirm Password *</label>
                 <input
-                  type="text"
-                  placeholder="Emergency Contact Name"
-                  value={formData.emergencyContactName || ''}
-                  onChange={(e) => setFormData({ ...formData, emergencyContactName: e.target.value })}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-                <input
-                  type="tel"
-                  placeholder="Emergency Contact Phone"
-                  value={formData.emergencyContactPhone || ''}
-                  onChange={(e) => setFormData({ ...formData, emergencyContactPhone: e.target.value })}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  type="password"
+                  placeholder="Confirm Password"
+                  value={formData.confirmPassword || ''}
+                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none w-full"
                 />
               </div>
             </div>
+            <p className="text-xs text-gray-600 bg-blue-50 p-3 rounded-lg">
+              <strong>Password requirements:</strong> At least 8 characters, including uppercase, lowercase, number, and special character (!@#$%^&*)
+            </p>
           </div>
         )
 
-      case 5: // Review
+      case 5: // Review & Confirm
         return (
           <div className="space-y-6">
             <h3 className="text-lg font-semibold mb-6">Review & Confirmation</h3>
-            <div className="bg-gray-50 p-4 rounded-lg space-y-3 max-h-96 overflow-y-auto">
+            <div className="bg-gray-50 p-4 rounded-lg space-y-4 max-h-96 overflow-y-auto">
               <div>
                 <p className="text-xs font-semibold text-gray-600 uppercase">School</p>
                 <p className="text-sm font-bold text-blue-700">{currentUser?.school_name || 'Your School'}</p>
               </div>
               <hr />
               <div>
-                <p className="text-xs font-semibold text-gray-600 uppercase">Student Information</p>
+                <p className="text-xs font-semibold text-gray-600 uppercase">Personal Information</p>
                 <p className="text-sm">
-                  {formData.firstName} {formData.lastName}
+                  {formData.firstName} {formData.middleName} {formData.lastName}
                 </p>
                 <p className="text-xs text-gray-600">{formData.gender} • DOB: {formData.dateOfBirth}</p>
                 <p className="text-xs text-gray-600">{formData.email} • {formData.phone}</p>
+                <p className="text-xs text-gray-600">{formData.state}, {formData.lga} • {formData.address}</p>
               </div>
               <hr />
               <div>
-                <p className="text-xs font-semibold text-gray-600 uppercase">Guardian</p>
+                <p className="text-xs font-semibold text-gray-600 uppercase">Guardian Information</p>
                 <p className="text-sm">{formData.primaryGuardian?.fullName}</p>
                 <p className="text-xs text-gray-600">{formData.primaryGuardian?.relationship} • {formData.primaryGuardian?.phone}</p>
               </div>
@@ -594,13 +644,13 @@ export default function StudentRegisterPage() {
                   {classOptions.find(c => c.id === formData.classArmComboId)?.classes?.name}{' '}
                   {classOptions.find(c => c.id === formData.classArmComboId)?.arms?.name}
                 </p>
-                <p className="text-xs text-gray-600">Session • Term • {(formData.subjectIds || []).length} subject(s)</p>
+                <p className="text-xs text-gray-600">{(formData.subjectIds || []).length} subject(s) selected</p>
               </div>
             </div>
 
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-sm text-green-800">
-                ✓ All information has been verified. Click "Complete Registration" to finalize.
+                ✓ All information has been verified. Click "Complete Registration" to finalize enrollment.
               </p>
             </div>
           </div>
