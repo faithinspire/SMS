@@ -145,68 +145,20 @@ const StudentsPage: React.FC = () => {
       setIsLoading(true);
       console.log('[Students Page] Fetching students for school:', school);
 
-      // Add 30 second timeout for queries (increased from 15s for large datasets)
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Students query timeout after 30s')), 30000)
-      );
+      // Call the API endpoint instead of direct database query
+      const response = await fetch(`/api/school/students?schoolId=${school}`, {
+        signal,
+      });
 
-      const queryPromise = (async (): Promise<Student[]> => {
-        const { data, error } = await getSupabaseClient()
-          .from('students')
-          .select(`
-            id,
-            user_id,
-            school_id,
-            admission_number,
-            date_of_birth,
-            photo_url,
-            status,
-            class_arm_combo_id,
-            user:user_id (
-              id,
-              full_name,
-              email,
-              photo_url,
-              status,
-              phone
-            ),
-            class_arm_combo:class_arm_combo_id (
-              id,
-              class:class_id (
-                name
-              ),
-              arm:arm_id (
-                name
-              )
-            )
-          `)
-          .eq('school_id', school)
-          .not('class_arm_combo_id', 'is', null)  // Filter out incomplete registrations
-          .order('admission_number', { ascending: true });  // Sort by admission number (natural order)
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
 
-        if (signal.aborted) throw new Error('Request was cancelled');
-        if (error) {
-          console.error('[Students Page] Query error:', error);
-          throw error;
-        }
-        
-        // Sort in application layer by name
-        const sortedData = (data || []).sort((a: any, b: any) => 
-          (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
-        );
-        
-        console.log('[Students Page] Loaded students:', sortedData.length);
-        return sortedData;
-      })();
+      const result = await response.json();
 
-      const studentData = await Promise.race([queryPromise, timeoutPromise]);
-      
       if (!signal.aborted) {
-        setStudents(studentData);
-        console.log('[Students Page] Students set in state:', studentData.length);
-        if (studentData.length === 0) {
-          console.warn('[Students Page] No students found for school:', school);
-        }
+        setStudents(result.data || []);
+        console.log('[Students Page] Students set in state:', result.data?.length || 0);
       }
     } catch (error) {
       if (signal.aborted) {
@@ -228,7 +180,6 @@ const StudentsPage: React.FC = () => {
       toast.error(errorMsg);
       setStudents([]);
     } finally {
-      // CRITICAL: Always set loading to false, regardless of abort status
       setIsLoading(false);
     }
   }, []);

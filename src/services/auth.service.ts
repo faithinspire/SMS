@@ -289,16 +289,36 @@ export class AuthService {
         }
       }
 
-      // If Supabase Auth succeeds, return user
+      // If Supabase Auth succeeds, return user with role-based school_id from users table
       if (!error && data?.user) {
         console.log('✅ Primary login successful via Supabase Auth')
+        
+        // Fetch user's role and school_id from users table for proper routing
+        let userRole = data.user.user_metadata?.role || 'STUDENT'
+        let userSchoolId = data.user.user_metadata?.school_id
+        
+        try {
+          const { data: userRecord } = await supabase
+            .from('users')
+            .select('role, school_id')
+            .eq('id', data.user.id)
+            .maybeSingle()
+          
+          if (userRecord) {
+            userRole = userRecord.role || userRole
+            userSchoolId = userRecord.school_id || userSchoolId
+          }
+        } catch (e) {
+          console.warn('Could not fetch user record from database, using metadata')
+        }
+        
         return {
           user: {
             id: data.user.id,
             email: data.user.email || '',
             name: data.user.user_metadata?.name || '',
-            role: data.user.user_metadata?.role || 'STUDENT',
-            school_id: data.user.user_metadata?.school_id,
+            role: userRole,
+            school_id: userSchoolId,
             createdAt: data.user.created_at,
             loginMethod: 'auth',
           },

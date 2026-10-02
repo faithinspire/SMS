@@ -33,13 +33,24 @@ export default function StaffLoginPage() {
     setLoading(true)
 
     try {
-      await AuthService.login({
+      const { user } = await AuthService.login({
         email: formData.email,
         password: formData.password,
       })
 
-      // Redirect directly to teacher dashboard after successful login
-      router.push('/teacher/dashboard')
+      // Route based on user role
+      const roleRoutingMap: Record<string, string> = {
+        'TEACHER': '/teacher/dashboard',
+        'HEAD_TEACHER': '/headteacher/dashboard',
+        'PRINCIPAL': '/principal/dashboard',
+        'ACCOUNTANT': '/accountant/dashboard',
+        'ADMIN': '/school-admin/dashboard',
+        'SCHOOL_ADMIN': '/school-admin/dashboard',
+      }
+
+      const dashboardRoute = roleRoutingMap[user.role] || '/teacher/dashboard'
+      console.log(`[Staff Login] Routing ${user.role} to ${dashboardRoute}`)
+      router.push(dashboardRoute)
     } catch (err: any) {
       setError(err.message || 'Login failed')
     } finally {

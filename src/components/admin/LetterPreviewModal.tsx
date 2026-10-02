@@ -28,6 +28,8 @@ export function LetterPreviewModal({
   const [letterHTML, setLetterHTML] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
   const [showCopyConfirm, setShowCopyConfirm] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedContent, setEditedContent] = useState('')
 
   // Generate letter on mount or when props change
   useEffect(() => {
@@ -86,6 +88,7 @@ export function LetterPreviewModal({
       }
 
       setLetterHTML(html)
+      setEditedContent(html)
     } catch (error) {
       console.error('Error generating letter:', error)
       toast.error('Failed to generate letter')
@@ -242,19 +245,21 @@ export function LetterPreviewModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full h-full max-w-4xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200">
+        <div className="flex justify-between items-center p-6 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700">
           <div>
-            <h2 className="text-2xl font-bold text-gray-800">
-              {letterType === 'appointment' ? 'Appointment' : 'Admission'} Letter Preview
+            <h2 className="text-2xl font-bold text-white">
+              {letterType === 'appointment' ? '📋 Appointment' : '🎓 Admission'} Letter
             </h2>
-            <p className="text-gray-600 text-sm mt-1">Review before sharing or printing</p>
+            <p className="text-blue-100 text-sm mt-1">
+              {isEditing ? 'Edit letter content' : 'Review before sharing or printing'}
+            </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition"
+            className="p-2 hover:bg-blue-500 rounded-lg transition text-white"
             title="Close"
           >
-            <X className="w-6 h-6 text-gray-600" />
+            <X className="w-6 h-6" />
           </button>
         </div>
 
@@ -268,8 +273,20 @@ export function LetterPreviewModal({
           </div>
         )}
 
-        {/* Letter Preview */}
-        {!isLoading && letterHTML && (
+        {/* Edit Mode - Text Area */}
+        {!isLoading && isEditing && (
+          <div className="flex-1 overflow-auto p-6">
+            <textarea
+              value={editedContent}
+              onChange={(e) => setEditedContent(e.target.value)}
+              className="w-full h-full p-4 border-2 border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+              placeholder="Edit letter HTML here..."
+            />
+          </div>
+        )}
+
+        {/* Preview Mode - iFrame */}
+        {!isLoading && !isEditing && letterHTML && (
           <div className="flex-1 overflow-auto">
             <iframe
               srcDoc={letterHTML}
@@ -281,70 +298,107 @@ export function LetterPreviewModal({
 
         {/* Action Buttons */}
         <div className="border-t border-gray-200 p-6 bg-gray-50">
-          <div className="flex flex-wrap gap-3 justify-between items-center">
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={handleDownloadHTML}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition"
-              >
-                <Download className="w-4 h-4" />
-                Download HTML
-              </button>
-
-              <button
-                onClick={handlePrint}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition"
-              >
-                <Printer className="w-4 h-4" />
-                Print
-              </button>
-
-              <button
-                onClick={handleCopyHTML}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition"
-                title="Copy HTML content to clipboard"
-              >
-                <Copy className="w-4 h-4" />
-                {showCopyConfirm ? 'Copied!' : 'Copy HTML'}
-              </button>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {recipientEmail && (
+          <div className="space-y-4">
+            {/* Edit Mode Buttons */}
+            {isEditing && (
+              <div className="flex gap-3 justify-end">
                 <button
-                  onClick={handleEmailShare}
-                  disabled={isLoading}
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 transition"
-                  title="Share via email"
+                  onClick={() => {
+                    setLetterHTML(editedContent)
+                    setIsEditing(false)
+                    toast.success('Letter updated!')
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
                 >
-                  <Mail className="w-4 h-4" />
-                  Email
+                  ✓ Save Changes
                 </button>
-              )}
-
-              {recipientPhone && (
                 <button
-                  onClick={handleWhatsAppShareEnhanced}
-                  disabled={isLoading}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-400 transition"
-                  title="Share via WhatsApp"
+                  onClick={() => setIsEditing(false)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition"
                 >
-                  <MessageCircle className="w-4 h-4" />
-                  WhatsApp
+                  ✕ Cancel
                 </button>
-              )}
-            </div>
-          </div>
+              </div>
+            )}
 
-          {/* Helper Text */}
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-xs text-blue-800">
-              <strong>Tip:</strong> Download the HTML file to preserve the letter format for later use.
-              Email and WhatsApp options will open your default client.
-            </p>
+            {/* Preview Mode Buttons */}
+            {!isEditing && (
+              <div className="flex flex-wrap gap-3 justify-between items-center">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition"
+                    title="Edit letter content"
+                  >
+                    ✏️ Edit
+                  </button>
+
+                  <button
+                    onClick={handleDownloadHTML}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download
+                  </button>
+
+                  <button
+                    onClick={handlePrint}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Print
+                  </button>
+
+                  <button
+                    onClick={handleCopyHTML}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 transition"
+                    title="Copy HTML content to clipboard"
+                  >
+                    <Copy className="w-4 h-4" />
+                    {showCopyConfirm ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {recipientEmail && (
+                    <button
+                      onClick={handleEmailShare}
+                      disabled={isLoading}
+                      className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 transition"
+                      title="Share via email"
+                    >
+                      <Mail className="w-4 h-4" />
+                      Email
+                    </button>
+                  )}
+
+                  {recipientPhone && (
+                    <button
+                      onClick={handleWhatsAppShareEnhanced}
+                      disabled={isLoading}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-400 transition"
+                      title="Share via WhatsApp"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      WhatsApp
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Helper Text */}
+            {!isEditing && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs text-blue-800">
+                  <strong>💡 Tip:</strong> Click Edit to modify the letter content, Download to save as HTML, or Email/WhatsApp to send directly.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

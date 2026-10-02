@@ -64,7 +64,7 @@ export class LetterGenerationService {
           bank_name,
           account_number,
           account_name,
-          users (
+          users:user_id (
             id,
             full_name,
             email,

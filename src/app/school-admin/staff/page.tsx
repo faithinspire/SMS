@@ -118,71 +118,119 @@ const EditModal: React.FC<{
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-bold mb-4">Edit Staff Member</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
-            <input
-              type="text"
-              value={formData.user.full_name}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  user: { ...formData.user, full_name: e.target.value },
-                })
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 border-b border-blue-800">
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            ✏️ Edit Staff Member
+          </h3>
+          <p className="text-blue-100 text-sm mt-1">Update staff information</p>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Personal Information Section */}
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              👤 Personal Information
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={formData.user.full_name}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      user: { ...formData.user, full_name: e.target.value },
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={formData.user.email}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      user: { ...formData.user, email: e.target.value },
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              value={formData.user.email}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  user: { ...formData.user, email: e.target.value },
-                })
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+
+          {/* Employment Information Section */}
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              💼 Employment Information
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Position</label>
+                <input
+                  type="text"
+                  value={formData.position || ''}
+                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                  placeholder="e.g., English Teacher, Head of Department"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Employment Date</label>
+                <input
+                  type="date"
+                  value={formData.employment_date ? formData.employment_date.split('T')[0] : ''}
+                  onChange={(e) => setFormData({ ...formData, employment_date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Position</label>
-            <input
-              type="text"
-              value={formData.position || ''}
-              onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+
+          {/* Role Information */}
+          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+            <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              🎯 Role
+            </h4>
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">Current Role:</span> <span className="capitalize font-semibold text-blue-600">{formData.user.role}</span>
+            </p>
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Employment Date</label>
-            <input
-              type="date"
-              value={formData.employment_date ? formData.employment_date.split('T')[0] : ''}
-              onChange={(e) => setFormData({ ...formData, employment_date: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div className="flex gap-3 justify-end pt-4">
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+              className="px-6 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 font-medium transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting || isLoading}
-              className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+              className="px-6 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium transition-colors flex items-center gap-2"
             >
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
+              {isSubmitting ? (
+                <>
+                  <span className="animate-spin">⏳</span> Saving...
+                </>
+              ) : (
+                <>
+                  ✓ Save Changes
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -229,78 +277,20 @@ const StaffPage: React.FC = () => {
       setIsLoading(true);
       console.log('[Staff Page] Fetching staff for school:', school);
 
-      // Add 15 second timeout for queries
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Staff query timeout after 15s')), 15000)
-      );
+      // Call the API endpoint instead of direct database query
+      const response = await fetch(`/api/school/staff?schoolId=${school}`, {
+        signal,
+      });
 
-      const queryPromise = (async (): Promise<StaffMember[]> => {
-        // STEP 1: Get all STAFF users from users table
-        const { data: userStaffData, error: userError } = await getSupabaseClient()
-          .from('users')
-          .select('*')
-          .eq('school_id', school)
-          .in('role', ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'STAFF']);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
 
-        if (signal.aborted) throw new Error('Request was cancelled');
-        if (userError) {
-          console.error('[Staff Page] User query error:', userError);
-          throw userError;
-        }
-        console.log('[Staff Page] Found users with STAFF role:', userStaffData?.length);
+      const result = await response.json();
 
-        // STEP 2: Get staff employment records (optional supplementary data)
-        const { data: staffRecords, error: staffError } = await getSupabaseClient()
-          .from('staff')
-          .select('*')
-          .eq('school_id', school);
-
-        if (signal.aborted) throw new Error('Request was cancelled');
-        if (staffError) {
-          console.error('[Staff Page] Staff records query error:', staffError);
-          // Non-fatal error - proceed with users only
-        }
-        console.log('[Staff Page] Found staff records:', staffRecords?.length);
-
-        // STEP 3: Merge data - users table is source of truth, staff table augments
-        const mergedStaff = (userStaffData || []).map((user: any) => {
-          const staffRecord = staffRecords?.find((s: any) => s.user_id === user.id);
-          return {
-            id: staffRecord?.id || `staff_${user.id}`,
-            user_id: user.id,
-            school_id: user.school_id,
-            position: staffRecord?.position || 'Staff',
-            employment_date: staffRecord?.employment_date || null,
-            status: staffRecord?.status || 'ACTIVE',
-            user: {
-              id: user.id,
-              full_name: user.full_name || 'Unknown Staff',
-              email: user.email || 'no-email@school.local',
-              photo_url: user.photo_url,
-              role: user.role,
-              status: user.status,
-            },
-          };
-        });
-
-        // STEP 4: Sort in application layer
-        const sortedData = mergedStaff.sort((a, b) =>
-          (a.user?.full_name || '').localeCompare(b.user?.full_name || '')
-        );
-
-        console.log('[Staff Page] Final merged staff count:', sortedData.length);
-        return sortedData;
-      })();
-
-      // Race between query and timeout
-      const staffData = await Promise.race([queryPromise, timeoutPromise]);
-      
       if (!signal.aborted) {
-        setStaff(staffData);
-        console.log('[Staff Page] Staff set in state:', staffData.length);
-        if (staffData.length === 0) {
-          console.warn('[Staff Page] No staff found - database may be empty for this school');
-        }
+        setStaff(result.data || []);
+        console.log('[Staff Page] Staff set in state:', result.data?.length || 0);
       }
     } catch (error) {
       if (signal.aborted) {
@@ -322,7 +312,6 @@ const StaffPage: React.FC = () => {
       toast.error(errorMsg);
       setStaff([]);
     } finally {
-      // CRITICAL: Always set loading to false, regardless of abort status
       setIsLoading(false);
     }
   }, []);

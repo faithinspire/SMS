@@ -38,6 +38,7 @@ export default function StudentLoginPage() {
         password: formData.password,
       })
 
+      // Students always route to student dashboard
       router.push('/student/dashboard')
     } catch (err: any) {
       setError(err.message || 'Login failed')
