@@ -215,11 +215,14 @@ export default function StaffRegisterPage() {
 
     setIsLoading(true)
     try {
-      // Build submission data
+      // Build submission data - MAP role TO primaryRole
       const submissionData: StaffRegistrationData = {
         ...formData,
         password: formData.password || '',
+        primaryRole: formData.role || 'TEACHER', // MAP role field to primaryRole 
       } as StaffRegistrationData
+
+      console.log('[StaffRegistration] Submitting with primaryRole:', submissionData.primaryRole)
 
       const result = await StaffRegistrationService.registerStaff(submissionData)
 

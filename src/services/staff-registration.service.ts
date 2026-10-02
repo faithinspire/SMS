@@ -151,6 +151,10 @@ export class StaffRegistrationService {
       console.log('[StaffRegistration] Supabase Auth user created:', userId)
 
       // Step 2: Create database user record with the auth user's ID
+      // CRITICAL: Use the role from the registration form (e.g., TEACHER, ACCOUNTANT, PRINCIPAL, HEAD_TEACHER)
+      const userRole = data.primaryRole || 'STAFF'
+      console.log('[StaffRegistration] Setting user role to:', userRole)
+      
       const { data: newUser, error: userError } = await supabase
         .from('users')
         .insert({
@@ -158,7 +162,7 @@ export class StaffRegistrationService {
           school_id: schoolId,
           email: email,
           full_name: fullName,
-          role: data.primaryRole || 'STAFF',
+          role: userRole, // This is the SOURCE OF TRUTH for user role
           status: data.accountStatus || 'ACTIVE',
           gender: data.gender,
           phone: data.phone,
