@@ -109,7 +109,8 @@ export class LetterGenerationService {
     class?: any
   } | null> {
     try {
-      // Step 1: Fetch student without nested users join (to avoid relationship conflict)
+      // ✅ HOTFIX 2026-10-02: Do NOT select 'status' column (not yet in schema)
+      // Migration 163 will add this column
       const { data: student, error: studentError } = await this.supabase
         .from('students')
         .select(`
