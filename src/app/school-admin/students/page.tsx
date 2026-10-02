@@ -6,20 +6,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase-client';
+import { supabase } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
 import { LetterGenerationService } from '@/services/letter-generation.service';
 import { LetterPreviewModal as LetterPreviewModalComponent } from '@/components/admin/LetterPreviewModal';
-
-let supabase: any = null;
-
-function getSupabaseClient() {
-  if (!supabase) {
-    supabase = createClient();
-  }
-  return supabase;
-}
 
 interface Student {
   id: string;
@@ -310,23 +301,25 @@ const StudentsPage: React.FC = () => {
   useEffect(() => {
     const getCurrentSchool = async () => {
       try {
-        const { data: { user } } = await getSupabaseClient().auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           console.log('[Students Page] No authenticated user');
           return;
         }
 
-        const { data: userProfile, error } = await getSupabaseClient()
+        // FIXED: Handle case where user profile doesn't exist
+        const { data: userProfiles, error } = await supabase
           .from('users')
           .select('school_id')
-          .eq('id', user.id)
-          .single();
+          .eq('id', user.id);
 
-        if (error) {
+        if (error && error.code !== 'PGRST116') {
           console.error('[Students Page] Error getting user profile:', error);
           toast.error('Failed to load your school information');
           return;
         }
+
+        const userProfile = Array.isArray(userProfiles) ? userProfiles[0] : userProfiles;
 
         if (userProfile && userProfile.school_id) {
           console.log('[Students Page] Setting schoolId:', userProfile.school_id);

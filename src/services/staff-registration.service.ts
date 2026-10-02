@@ -240,13 +240,15 @@ export class StaffRegistrationService {
               created_at: new Date().toISOString(),
             })
 
-          if (!assignError) {
-            console.log('[StaffRegistration] Teacher assigned to class')
+          if (assignError) {
+            console.error('[StaffRegistration] ❌ Error assigning class:', assignError)
+            throw assignError
           } else {
-            console.warn('[StaffRegistration] Warning assigning class:', assignError)
+            console.log('[StaffRegistration] ✅ Teacher assigned to class')
           }
         } catch (err) {
-          console.warn('[StaffRegistration] Error assigning class (non-fatal):', err)
+          console.error('[StaffRegistration] ❌ CRITICAL: Error assigning class:', err)
+          throw new Error(`Failed to assign class: ${err instanceof Error ? err.message : 'Unknown error'}`)
         }
       }
 
@@ -265,13 +267,15 @@ export class StaffRegistrationService {
             .from('subject_teacher_assignments')
             .insert(subjectAssignments)
 
-          if (!subjectError) {
-            console.log('[StaffRegistration] Teacher subjects assigned:', data.subjectIds.length)
+          if (subjectError) {
+            console.error('[StaffRegistration] ❌ CRITICAL: Failed assigning subjects:', subjectError)
+            throw subjectError  // ← CRITICAL FIX: Don't silently swallow subject assignment errors
           } else {
-            console.warn('[StaffRegistration] Warning assigning subjects:', subjectError)
+            console.log('[StaffRegistration] ✅ Teacher subjects assigned:', data.subjectIds.length)
           }
         } catch (err) {
-          console.warn('[StaffRegistration] Error assigning subjects (non-fatal):', err)
+          console.error('[StaffRegistration] ❌ CRITICAL: Error assigning subjects - subjects will not load on dashboard:', err)
+          throw new Error(`Failed to assign subjects: ${err instanceof Error ? err.message : 'Unknown error'}`)
         }
       }
 

@@ -271,10 +271,6 @@ export class StudentRegistrationService {
           student_id: newStudent.id,
           subject_id: subjectId,
           school_id: data.schoolId,
-          session_id: data.sessionId,
-          term_id: data.termId,
-          class_arm_combo_id: data.classArmComboId,
-          enrollment_status: 'ACTIVE',
           created_at: new Date().toISOString(),
         }))
 
@@ -283,10 +279,10 @@ export class StudentRegistrationService {
           .insert(studentSubjectRecords)
 
         if (subjectError) {
-          // Log but don't fail - subjects can be added manually
-          console.warn('[StudentRegistration] Warning enrolling subjects:', subjectError)
+          console.error('[StudentRegistration] ❌ CRITICAL: Failed enrolling in subjects - subjects will NOT appear on student dashboard:', subjectError)
+          throw subjectError
         } else {
-          console.log('[StudentRegistration] Subject enrollment completed')
+          console.log('[StudentRegistration] ✅ Subject enrollment completed successfully')
         }
       }
 
