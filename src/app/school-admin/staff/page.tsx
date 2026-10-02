@@ -95,25 +95,93 @@ const ConfirmationModal: React.FC<{
   </div>
 );
 
-const EditModal: React.FC<{
+interface CompletedStaffEditModalProps {
   staff: StaffMember;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (updates: Partial<StaffMember>) => Promise<void>;
+  onSave: (staffId: string, updates: Partial<StaffMember>) => Promise<void>;
   isLoading?: boolean;
-}> = ({ staff, isOpen, onClose, onSave, isLoading = false }) => {
+  schoolId: string;
+}
+
+/**
+ * Complete Staff Profile Editor Modal
+ * Sections: Personal, Contact, Employment, Academic, Class Assignment, Subject Assignment, Salary, Account
+ * Built from Staff Registration Service structure to ensure consistency
+ */
+const StaffEditModal: React.FC<CompletedStaffEditModalProps> = ({
+  staff,
+  isOpen,
+  onClose,
+  onSave,
+  isLoading = false,
+  schoolId,
+}) => {
   const [formData, setFormData] = useState(staff);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
+  const [selectedClassArm, setSelectedClassArm] = useState<string>('');
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [loadingLookups, setLoadingLookups] = useState(false);
 
   useEffect(() => {
     setFormData(staff);
+    setSelectedClassArm('');
+    setSelectedSubjects([]);
   }, [staff]);
+
+  // Load sessions, classes, and subjects on mount
+  useEffect(() => {
+    if (isOpen && schoolId) {
+      loadLookupData();
+    }
+  }, [isOpen, schoolId]);
+
+  const loadLookupData = async () => {
+    try {
+      setLoadingLookups(true);
+
+      const supabaseClient = getSupabaseClient();
+
+      // Load sessions
+      const { data: sessionsData } = await supabaseClient
+        .from('academic_sessions')
+        .select('id, session_year')
+        .eq('school_id', schoolId)
+        .order('start_year', { ascending: false });
+
+      setSessions(sessionsData || []);
+
+      // Load classes
+      const { data: classesData } = await supabaseClient
+        .from('class_arm_combos')
+        .select('id, classes(name), arms(name)')
+        .eq('school_id', schoolId);
+
+      setClasses(classesData || []);
+
+      // Load subjects
+      const { data: subjectsData } = await supabaseClient
+        .from('subjects')
+        .select('id, name')
+        .eq('school_id', schoolId)
+        .order('name', { ascending: true });
+
+      setSubjects(subjectsData || []);
+    } catch (error) {
+      console.error('[StaffEditModal] Error loading lookup data:', error);
+    } finally {
+      setLoadingLookups(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await onSave(formData);
+      await onSave(staff.id, formData);
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -124,25 +192,25 @@ const EditModal: React.FC<{
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[95vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 border-b border-blue-800">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            ✏️ Edit Staff Member
+            ✏️ Complete Staff Profile Editor
           </h3>
-          <p className="text-blue-100 text-sm mt-1">Update staff information</p>
+          <p className="text-blue-100 text-sm mt-1">Update all staff information and assignments</p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Personal Information Section */}
+          {/* A. PERSONAL INFORMATION */}
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
             <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              👤 Personal Information
+              👤 A. Personal Information
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name *</label>
                 <input
                   type="text"
                   value={formData.user.full_name}
@@ -152,12 +220,60 @@ const EditModal: React.FC<{
                       user: { ...formData.user, full_name: e.target.value },
                     })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Gender</label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Date of Birth</label>
+                <input
+                  type="date"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Nationality</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Nigerian"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">State of Origin</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">LGA</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* B. CONTACT INFORMATION */}
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              📱 B. Contact Information
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Email *</label>
                 <input
                   type="email"
                   value={formData.user.email}
@@ -167,27 +283,58 @@ const EditModal: React.FC<{
                       user: { ...formData.user, email: e.target.value },
                     })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Residential Address</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">State</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
           </div>
 
-          {/* Employment Information Section */}
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+          {/* C. EMPLOYMENT INFORMATION */}
+          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
             <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              💼 Employment Information
+              💼 C. Employment Information
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Position</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Staff ID</label>
+                <input
+                  type="text"
+                  value={staff.id}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Position *</label>
                 <input
                   type="text"
                   value={formData.position || ''}
                   onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  placeholder="e.g., English Teacher, Head of Department"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Mathematics Teacher"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 />
               </div>
               <div>
@@ -196,8 +343,8 @@ const EditModal: React.FC<{
                   type="text"
                   value={formData.department || ''}
                   onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  placeholder="e.g., Academic, Administrative"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Academic"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
@@ -206,7 +353,7 @@ const EditModal: React.FC<{
                   type="date"
                   value={formData.employment_date ? formData.employment_date.split('T')[0] : ''}
                   onChange={(e) => setFormData({ ...formData, employment_date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
@@ -214,7 +361,7 @@ const EditModal: React.FC<{
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value as StatusType })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="ACTIVE">Active</option>
                   <option value="PAUSED">Paused</option>
@@ -222,24 +369,104 @@ const EditModal: React.FC<{
                   <option value="SUSPENDED">Suspended</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Role</label>
+                <input
+                  type="text"
+                  value={formData.user.role}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed capitalize"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Salary & Bank Information Section */}
-          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+          {/* E. CLASS ASSIGNMENT (for Teachers) */}
+          {['TEACHER', 'HEAD_TEACHER'].includes(formData.user.role) && (
+            <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+              <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                📚 E. Class Assignment
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Assigned Class</label>
+                  <select
+                    value={selectedClassArm}
+                    onChange={(e) => setSelectedClassArm(e.target.value)}
+                    disabled={loadingLookups}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                  >
+                    <option value="">Select class...</option>
+                    {classes.map((cls: any) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.classes?.name} {cls.arms?.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Class Teacher?</label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="false">No</option>
+                    <option value="true">Yes</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* F. SUBJECT ASSIGNMENT (for Teachers) */}
+          {['TEACHER', 'HEAD_TEACHER'].includes(formData.user.role) && (
+            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                📖 F. Subject Assignment
+              </h4>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Select Subjects</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-white">
+                  {loadingLookups ? (
+                    <p className="text-gray-600">Loading subjects...</p>
+                  ) : subjects.length === 0 ? (
+                    <p className="text-gray-600">No subjects available</p>
+                  ) : (
+                    subjects.map((subject: any) => (
+                      <label key={subject.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedSubjects.includes(subject.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedSubjects([...selectedSubjects, subject.id]);
+                            } else {
+                              setSelectedSubjects(selectedSubjects.filter((s) => s !== subject.id));
+                            }
+                          }}
+                          className="rounded"
+                        />
+                        <span className="text-sm">{subject.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* G. SALARY & BANK INFORMATION */}
+          <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-200">
             <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              💰 Salary & Bank Information
+              💰 G. Salary & Bank Information
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Monthly Salary</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Salary Amount</label>
                 <input
                   type="number"
                   value={formData.salary || ''}
                   onChange={(e) => setFormData({ ...formData, salary: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  placeholder="Enter monthly salary"
+                  placeholder="Enter salary amount"
                   step="0.01"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
@@ -248,18 +475,8 @@ const EditModal: React.FC<{
                   type="text"
                   value={formData.bank_name || ''}
                   onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
-                  placeholder="e.g., First Bank, Access Bank"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Number</label>
-                <input
-                  type="text"
-                  value={formData.account_number || ''}
-                  onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
-                  placeholder="Enter bank account number"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., First Bank"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
@@ -268,21 +485,48 @@ const EditModal: React.FC<{
                   type="text"
                   value={formData.account_name || ''}
                   onChange={(e) => setFormData({ ...formData, account_name: e.target.value })}
-                  placeholder="Name on bank account"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Name on account"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Number</label>
+                <input
+                  type="text"
+                  value={formData.account_number || ''}
+                  onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
+                  placeholder="Bank account number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
           </div>
 
-          {/* Role Information */}
+          {/* H. ACCOUNT INFORMATION (Read-only) */}
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-            <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-              🎯 Role
+            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              🔐 H. Account Information
             </h4>
-            <p className="text-sm text-gray-700">
-              <span className="font-medium">Current Role:</span> <span className="capitalize font-semibold text-blue-600">{formData.user.role}</span>
-            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">User ID</label>
+                <input
+                  type="text"
+                  value={staff.user_id}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Status</label>
+                <input
+                  type="text"
+                  value={formData.user.status}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed capitalize"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Action Buttons */}
@@ -404,11 +648,14 @@ const StaffPage: React.FC = () => {
           return;
         }
 
+        console.log('[Staff Page] Authenticated user:', user.id);
+
+        // ✅ HOTFIX: Removed .single() to avoid PGRST116 when record doesn't exist
         const { data: userProfile, error } = await getSupabaseClient()
           .from('users')
           .select('school_id')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('[Staff Page] Error getting user profile:', error);
@@ -420,7 +667,7 @@ const StaffPage: React.FC = () => {
           console.log('[Staff Page] Setting schoolId:', userProfile.school_id);
           setSchoolId(userProfile.school_id);
         } else {
-          console.warn('[Staff Page] No school_id in user profile');
+          console.warn('[Staff Page] No school_id in user profile - user record may not exist yet');
           toast.error('Your account is not linked to a school');
         }
       } catch (error) {
@@ -710,12 +957,13 @@ const StaffPage: React.FC = () => {
 
       {/* Modals */}
       {modal.type === 'edit' && modal.staff && (
-        <EditModal
+        <StaffEditModal
           staff={modal.staff}
           isOpen={true}
           onClose={() => setModal({ type: null })}
-          onSave={(updates) => handleEditSave(modal.staff!.id, updates)}
+          onSave={(staffId, updates) => handleEditSave(staffId, updates)}
           isLoading={isActionLoading}
+          schoolId={schoolId}
         />
       )}
 

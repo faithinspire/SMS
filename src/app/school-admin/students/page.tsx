@@ -307,25 +307,26 @@ const StudentsPage: React.FC = () => {
           return;
         }
 
-        // FIXED: Handle case where user profile doesn't exist
-        const { data: userProfiles, error } = await supabase
+        console.log('[Students Page] Authenticated user:', user.id);
+
+        // ✅ HOTFIX: Use .maybeSingle() instead of .single() to handle missing user records gracefully
+        const { data: userProfile, error } = await supabase
           .from('users')
           .select('school_id')
-          .eq('id', user.id);
+          .eq('id', user.id)
+          .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') {
+        if (error) {
           console.error('[Students Page] Error getting user profile:', error);
           toast.error('Failed to load your school information');
           return;
         }
 
-        const userProfile = Array.isArray(userProfiles) ? userProfiles[0] : userProfiles;
-
         if (userProfile && userProfile.school_id) {
           console.log('[Students Page] Setting schoolId:', userProfile.school_id);
           setSchoolId(userProfile.school_id);
         } else {
-          console.warn('[Students Page] No school_id in user profile');
+          console.warn('[Students Page] No school_id in user profile - user record may not exist yet');
           toast.error('Your account is not linked to a school');
         }
       } catch (error) {

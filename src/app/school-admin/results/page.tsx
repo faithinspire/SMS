@@ -132,16 +132,33 @@ export default function ResultsPage() {
 
       if (error) throw error
 
-      console.log('[Results] Sessions loaded:', data?.length || 0)
+      console.log('[Results] Sessions loaded:', data)
+      console.log('[Results] Session count:', data?.length || 0)
+
+      if (!data || data.length === 0) {
+        console.warn('[Results] ⚠️ No sessions found for this school')
+        setState(s => ({
+          ...s,
+          sessions: [],
+          selectedSession: null,
+          error: '📭 No academic sessions found. Create sessions first.',
+        }))
+        return
+      }
+
+      // Ensure all sessions have valid session_year
+      const validSessions = data.filter(s => s.session_year && typeof s.session_year === 'string')
+      console.log('[Results] Valid sessions after filtering:', validSessions)
 
       setState(s => ({
         ...s,
-        sessions: data || [],
-        selectedSession: data && data.length > 0 ? data[0].id : null,
+        sessions: validSessions,
+        selectedSession: validSessions.length > 0 ? validSessions[0].id : null,
+        error: '',
       }))
     } catch (err: any) {
       console.error('[Results] Error loading sessions:', err)
-      setState(s => ({ ...s, error: `❌ Failed to load sessions: ${err.message}` }))
+      setState(s => ({ ...s, error: `❌ Failed to load sessions: ${err.message}`, sessions: [] }))
     }
   }
 
@@ -217,7 +234,12 @@ export default function ResultsPage() {
 
   const getSelectedSessionYear = () => {
     const session = state.sessions.find(s => s.id === state.selectedSession)
-    return session ? session.session_year : 'Select a session'
+    if (!session) return 'Select a session'
+    
+    // Display: "2026/2027" or "2026/2027 ✓ Current" if active
+    const display = session.session_year || 'Unknown'
+    const indicator = session.is_active ? ' ✓ Current' : ''
+    return `${display}${indicator}`
   }
 
   const getSelectedTermName = () => {
@@ -279,8 +301,8 @@ export default function ResultsPage() {
               <option value="">Select a session</option>
               {state.sessions.map(session => (
                 <option key={session.id} value={session.id}>
-                  {session.session_year} 
-                  {session.is_active ? ' (Active)' : ''}
+                  {session.session_year}
+                  {session.is_active ? ' ✓ Current' : ''}
                 </option>
               ))}
             </select>
