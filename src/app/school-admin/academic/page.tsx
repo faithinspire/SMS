@@ -65,11 +65,15 @@ export default function SchoolAdminAcademicPage() {
           .from('schools')
           .select('*')
           .eq('id', currentUser.school_id)
-          .single()
+          .maybeSingle()
 
-        setSchool(schoolData)
+        setSchool(schoolData || null)
 
-        // Load sessions
+        // Check if school exists
+        if (!schoolData) {
+          setLoading(false)
+          return
+        }
         const { data: sessionsData } = await supabase
           .from('academic_sessions')
           .select('id, session_year, is_active, created_at')
@@ -116,7 +120,7 @@ export default function SchoolAdminAcademicPage() {
                 .from('users')
                 .select('full_name')
                 .eq('id', combo.class_teacher_id)
-                .single()
+                .maybeSingle()
               if (teacher) {
                 formMasterName = teacher.full_name
               }

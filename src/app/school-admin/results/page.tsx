@@ -107,11 +107,18 @@ export default function ResultsPage() {
       }
 
       if (!currentUser.school_id) {
-        setState(s => ({ ...s, error: '❌ School ID not found', loading: false }))
+        setState(s => ({ ...s, error: '❌ Your account is not linked to a school. Contact your administrator.', loading: false }))
         return
       }
 
-      setState(s => ({ ...s, user: currentUser, loading: false }))
+      // Load school data
+      const { data: schoolData } = await supabase
+        .from('schools')
+        .select('*')
+        .eq('id', currentUser.school_id)
+        .maybeSingle()
+
+      setState(s => ({ ...s, user: currentUser, school: schoolData, loading: false }))
     } catch (err: any) {
       console.error('[Results] Error loading user:', err)
       setState(s => ({ ...s, error: `❌ ${err.message}`, loading: false }))
