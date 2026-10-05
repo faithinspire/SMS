@@ -447,14 +447,6 @@ const StaffPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<StatusType | 'ALL'>('ALL');
   const [schoolId, setSchoolId] = useState<string>('');
-
-const StaffPage: React.FC = () => {
-  const router = useRouter();
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<StatusType | 'ALL'>('ALL');
-  const [schoolId, setSchoolId] = useState<string>('');
   const [modal, setModal] = useState<{
     type: 'edit' | 'pause' | 'activate' | 'inactive' | 'delete' | null;
     staff?: StaffMember;
