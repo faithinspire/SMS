@@ -695,44 +695,47 @@ const StaffPage: React.FC = () => {
             </div>
           )}
 
-          {/* G. SALARY & BANK INFORMATION */}
-          <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-200">
-            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              💰 G. Salary & Bank Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Salary Amount</label>
-                <input
-                  type="number"
-                  value={formData.salary || ''}
-                  onChange={(e) => setFormData({ ...formData, salary: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  placeholder="Enter salary amount"
-                  step="0.01"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Bank Name</label>
-                <input
-                  type="text"
-                  value={formData.bank_name || ''}
-                  onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
-                  placeholder="e.g., First Bank"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Name</label>
-                <input
-                  type="text"
-                  value={formData.account_name || ''}
-                  onChange={(e) => setFormData({ ...formData, account_name: e.target.value })}
-                  placeholder="Name on account"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
+          {/* SALARY TAB */}
+          {activeTab === 'salary' && (
+            <div className="space-y-4">
+              {/* G. SALARY & BANK INFORMATION */}
+              <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-200">
+                <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  💰 G. Salary & Bank Information
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Salary Amount</label>
+                    <input
+                      type="number"
+                      value={formData.salary || ''}
+                      onChange={(e) => setFormData({ ...formData, salary: e.target.value ? parseFloat(e.target.value) : undefined })}
+                      placeholder="Enter salary amount"
+                      step="0.01"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Bank Name</label>
+                    <input
+                      type="text"
+                      value={formData.bank_name || ''}
+                      onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
+                      placeholder="e.g., First Bank"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Account Name</label>
+                    <input
+                      type="text"
+                      value={formData.account_name || ''}
+                      onChange={(e) => setFormData({ ...formData, account_name: e.target.value })}
+                      placeholder="Name on account"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Account Number</label>
                 <input
                   type="text"
