@@ -1,0 +1,56 @@
+
+> school-management-saas@0.1.2 build
+> next build
+
+ ⚠ Invalid next.config.js options detected: 
+ ⚠     Unrecognized key(s) in object: 'staticPageGenerationTimeout' at "experimental"
+ ⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+ ⚠ Disabling SWC Minifer will not be an option in the next major version. Please report any issues you may be experiencing to https://github.com/vercel/next.js/issues
+  ▲ Next.js 14.2.35
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+> [PWA] Compile server
+> [PWA] Compile server
+> [PWA] Compile client (static)
+> [PWA] Auto register service worker with: C:\Users\OLU\Desktop\SMS\node_modules\next-pwa\register.js
+> [PWA] Service worker: C:\Users\OLU\Desktop\SMS\public\sw.js
+> [PWA]   url: /sw.js
+> [PWA]   scope: /
+Failed to compile.
+
+./src/app/share/letter/[token]/page.tsx
+Module not found: Can't resolve 'lucide-react'
+
+https://nextjs.org/docs/messages/module-not-found
+
+./src/components/admin/LetterPreviewModal.tsx
+Module not found: Can't resolve 'lucide-react'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./src/app/school-admin/students/page.tsx
+
+./src/app/school-admin/staff/page.tsx
+Error: 
+  [31mx[0m Unexpected token `div`. Expected jsx identifier
+     ,-[[36;1;4mC:\Users\OLU\Desktop\SMS\src\app\school-admin\staff\page.tsx[0m:449:1]
+ [2m449[0m |   const [schoolId, setSchoolId] = useState<string>('');
+ [2m450[0m | 
+ [2m451[0m |           {/* Action Buttons */}
+ [2m452[0m |           <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
+     : [31;1m           ^^^[0m
+ [2m453[0m |             <button
+ [2m454[0m |               type="button"
+ [2m454[0m |               onClick={onClose}
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/school-admin/staff/page.tsx
+
+
+> Build failed because of webpack errors
