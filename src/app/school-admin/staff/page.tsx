@@ -743,34 +743,39 @@ const StaffPage: React.FC = () => {
                 />
               </div>
             </div>
-          </div>
+          )}
 
-          {/* H. ACCOUNT INFORMATION (Read-only) */}
-          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              🔐 H. Account Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">User ID</label>
-                <input
-                  type="text"
-                  value={staff.user_id}
-                  disabled
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Status</label>
-                <input
-                  type="text"
-                  value={formData.user.status}
-                  disabled
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed capitalize"
-                />
+          {/* CONTACT TAB */}
+          {activeTab === 'contact' && (
+            <div className="space-y-4">
+              {/* H. ACCOUNT INFORMATION (Read-only) */}
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  🔐 H. Account Information
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">User ID</label>
+                    <input
+                      type="text"
+                      value={staff.user_id}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Account Status</label>
+                    <input
+                      type="text"
+                      value={formData.user.status}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed capitalize"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
