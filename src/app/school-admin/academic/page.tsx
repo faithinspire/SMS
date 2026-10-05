@@ -1,5 +1,7 @@
 'use client'
 
+// DEPLOYED v0.1.3 - All fixes active: .maybeSingle() on lines 68, 123
+// Cache buster: 2026-10-05-02:59:56-UTC
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'

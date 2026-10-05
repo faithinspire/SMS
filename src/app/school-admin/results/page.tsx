@@ -1,5 +1,7 @@
 'use client'
 
+// DEPLOYED v0.1.3 - School context loading fixed: .maybeSingle() on line 120
+// Cache buster: 2026-10-05-03:00:00-UTC
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase-client'

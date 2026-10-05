@@ -1,6 +1,8 @@
 /**
  * School Admin Staff Management Page
  * Lists all staff with filters, pause/activate/delete actions
+ * DEPLOYED v0.1.3 - JSX fixed, 6-tab modal working, staff letters fallback active
+ * Cache buster: 2026-10-05-03:00:30-UTC
  */
 
 'use client';
