@@ -448,38 +448,6 @@ const StaffPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<StatusType | 'ALL'>('ALL');
   const [schoolId, setSchoolId] = useState<string>('');
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-6 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 font-medium transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || isLoading}
-              className="px-6 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium transition-colors flex items-center gap-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="animate-spin">⏳</span> Saving...
-                </>
-              ) : (
-                <>
-                  ✓ Save Changes
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
 const StaffPage: React.FC = () => {
   const router = useRouter();
   const [staff, setStaff] = useState<StaffMember[]>([]);
