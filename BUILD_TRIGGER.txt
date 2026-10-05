@@ -1,0 +1,12 @@
+REBUILD TRIGGER - Force Vercel to use fresh code
+All fixes are in production code:
+- Academic Page: .maybeSingle() on lines 68, 123
+- Results Page: .maybeSingle() on line 120  
+- Staff Page: JSX syntax fixed, 6-tab modal working
+- Staff Letters: Fallback generation active
+- Nav Bar: School context properly resolved
+
+Deploy timestamp: 2026-10-05 02:59:56 UTC
+Commit: c152798 (HEAD -> main)
+
+Trigger ID: FORCE-DEPLOY-20261005-v0.1.3
