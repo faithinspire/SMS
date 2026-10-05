@@ -86,7 +86,7 @@ export class LetterGenerationService {
         user_id = staffRecord.user_id;
         const { data: user } = await this.supabase
           .from('users')
-          .select('id, full_name, email, phone, gender')
+          .select('id, full_name, email, phone, gender, role')
           .eq('id', user_id)
           .maybeSingle();
         userData = user;
@@ -95,7 +95,7 @@ export class LetterGenerationService {
         console.log('[LetterGenService] No staff record found, attempting fallback to users table');
         const { data: user } = await this.supabase
           .from('users')
-          .select('id, full_name, email, phone, gender')
+          .select('id, full_name, email, phone, gender, role')
           .eq('id', staffId)
           .maybeSingle();
         
@@ -116,6 +116,7 @@ export class LetterGenerationService {
         email: userData.email || '',
         phone: userData.phone || '',
         position: staffRecord?.position || 'Staff Member',
+        role: userData.role || 'Staff Member',
         department: staffRecord?.department || '',
         employment_date: staffRecord?.employment_date || null,
         salary: staffRecord?.salary || undefined,
