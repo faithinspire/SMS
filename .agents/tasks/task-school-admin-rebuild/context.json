@@ -1,0 +1,24 @@
+{
+  "project_type": "Next.js 14 (SSR) + Supabase PostgreSQL + Vercel deployment",
+  "language": "TypeScript + React 18",
+  "build_system": "npm, next build, next dev",
+  "test_framework": "jest configured, but minimal test coverage currently",
+  "build_command": "npm run build",
+  "test_command": "npm run test",
+  "verification_instructions": "Run 'npm run dev', navigate to school-admin pages (staff, students, academic, results), verify data loads in real-time, modals open/close correctly, dropdowns cascade",
+  "snapshot_or_generated_files": "None. Database migrations are applied via Supabase SQL console (migration 163 already created). No generated TypeScript code or build artifacts to commit.",
+  "environment_constraints": "Dev server runs on http://localhost:3001 (port 3001, not 3000). Environment vars in .env.local pulled from Vercel secrets. Supabase RLS disabled globally, so all client queries work without special auth. WebSocket may disconnect on poor network — handle gracefully.",
+  "contribution_requirements": "1. All pages use Supabase client-side queries only (no fetch to API routes for data that causes 406 errors). 2. Use .maybeSingle() for school/user lookups (not .single()) to avoid PGRST116. 3. Distinguish loading state from error state. 4. Modals must match exact styling of Student edit modal (6 tabs, gradient blue header, emoji icons, same form layout). 5. All letter generation returns role field (not just 'Staff'). 6. Results page shows cascade dropdowns with proper enable/disable states. 7. All data loads from real Supabase tables, not hardcoded or fallback.",
+  "key_patterns": "1. School context fetch: useEffect on mount calls AuthService.getCurrentUser(), then fetches school_id from users table using .maybeSingle(), sets schoolId state. 2. Tabbed modals: Conditional rendering by activeTab, sticky header, gradient blue styling. 3. Letter generation: LetterGenerationService.fetchStaffData(staffId, schoolId), fetchSchoolData(schoolId), then generate HTML with template strings. 4. Cascade dropdowns: useEffect on selectedSession change to load terms, useEffect on selectedTerm change to load classes. 5. Error handling: Check for errors and show toast.error() only after async completes, not during loading.",
+  "relevant_files": [
+    "src/app/school-admin/staff/page.tsx (staff context fetch, edit modal)",
+    "src/app/school-admin/students/page.tsx (student edit modal pattern to copy)",
+    "src/app/school-admin/academic/page.tsx (academic data loading)",
+    "src/app/school-admin/results/page.tsx (cascade dropdowns)",
+    "src/services/letter-generation.service.ts (staff letter generation)",
+    "src/components/admin/LetterPreviewModal.tsx (buttons already exist)",
+    "src/services/auth.service.ts (getCurrentUser method)",
+    "database/migrations/163_add_missing_staff_student_columns.sql (schema verification)"
+  ],
+  "directory_structure": "src/app/school-admin/ → staff/, students/, academic/, results/ page files. src/services/ → letter-generation.service.ts, auth.service.ts. src/components/admin/ → LetterPreviewModal.tsx, StaffHeader.tsx. database/migrations/ → 163_add_missing_staff_student_columns.sql (already created). src/lib/ → supabase-client.ts exports createClient()."
+}

@@ -1,0 +1,39 @@
+{
+  "id": "FEAT-004",
+  "type": "feat",
+  "description": "Fix results page: implement cascade dropdowns (Sessions → Terms → Classes → Students) with real-time data loading from Supabase. On mount, load sessions. When session selected, load terms. When term selected, call API to load classes and students. When class selected, display student results with scores and grades. All dropdowns must show proper enable/disable and loading states.",
+  "status": "pending",
+  "steps": [
+    "In src/app/school-admin/results/page.tsx, ensure component loads sessions on mount via useEffect. Query academic_sessions table filtered by school_id. Use .order('session_year', { ascending: false }) to show newest first.",
+    "Add useEffect on selectedSession change that calls loadTerms(). Query academic_terms table filtered by session_id and school_id. Show 'Select session first' in Terms dropdown until session selected.",
+    "Add useEffect on selectedTerm change that calls fetch(/api/results/school-classes-and-students?schoolId=...&termId=...). Parse response to get classes array. Show 'Select term first' in Classes dropdown until term selected.",
+    "When class selected (onchange handler), populate students array from selected class data. Display results table with columns: Admission Number, Student Name, Overall Score, Overall Grade, Performance Rating.",
+    "Implement proper disabled states: Terms disabled until session selected, Classes disabled until term selected, Students disabled until class selected.",
+    "Implement loading spinners: Show spinner next to dropdown label while fetching (not disabling the dropdown, just showing loading state).",
+    "Ensure all queries use school_id filter (passed from school context set in Task 1)."
+  ],
+  "acceptance_criteria": [
+    "Sessions dropdown populated on page load",
+    "Selecting session enables and loads Terms dropdown within 1 second",
+    "Selecting term enables and loads Classes dropdown within 1 second",
+    "Selecting class populates Students array and shows results table",
+    "Results table shows: admission number, full name, overall score, grade, performance rating",
+    "Dropdowns show correct enable/disable states (not enabled until dependent selection made)",
+    "Loading spinners appear while data fetching",
+    "No errors in console",
+    "All data is real-time from Supabase (not cached or hardcoded)"
+  ],
+  "verification": [
+    "npm run dev",
+    "Navigate to /school-admin/results",
+    "Verify Sessions dropdown is populated on load",
+    "Select a session, verify Terms dropdown enables and loads within 1 second",
+    "Select a term, verify Classes dropdown enables and loads within 1 second",
+    "Select a class, verify student results table appears with scores and grades",
+    "Verify all dropdown disable states work correctly",
+    "Check browser console for no errors",
+    "Verify data matches Supabase database (spot check a few records)"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

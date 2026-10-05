@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix school context loading across all admin pages (staff, students, academic, results). Replace .single() with .maybeSingle() on school_id lookups. Distinguish loading state from error state. Pages currently show 'Your account is not linked to a school' error even when school_id exists due to PGRST116 errors on missing records and improper error handling during loading.",
+  "status": "pending",
+  "steps": [
+    "In src/app/school-admin/staff/page.tsx, in the useEffect that calls getCurrentSchool (around line 540), change the users table query from .single() to .maybeSingle(). Check error only for non-PGRST116 errors. Only show toast.error after fetch completes and school_id is null (not during loading). Leave loading state unset until fetch completes.",
+    "In src/app/school-admin/students/page.tsx, apply the same fix to the school context useEffect (pattern is identical).",
+    "In src/app/school-admin/academic/page.tsx, apply the same fix. Also find the schools table query around line 68 and change .single() to .maybeSingle(). Find the academic_terms query around line 123 and change .single() to .maybeSingle().",
+    "In src/app/school-admin/results/page.tsx, apply the same fix to the school context fetch. Find any .single() calls on school-related queries and change to .maybeSingle()."
+  ],
+  "acceptance_criteria": [
+    "All four pages load without 'Your account is not linked to a school' error when user has valid school_id",
+    "During loading state, no error message appears (loading spinner only)",
+    "If school_id is genuinely null after fetch, toast.error shows (but this should not happen for valid users)",
+    "No PGRST116 errors in browser console",
+    "Dropdowns/data load immediately after school context is set"
+  ],
+  "verification": [
+    "npm run dev",
+    "Login as SCHOOL_ADMIN user with valid school_id",
+    "Navigate to /school-admin/staff, /school-admin/students, /school-admin/academic, /school-admin/results",
+    "Verify each page loads with data (not showing error)",
+    "Check browser DevTools console for no errors",
+    "Verify school context (school_id) is set correctly in component state"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

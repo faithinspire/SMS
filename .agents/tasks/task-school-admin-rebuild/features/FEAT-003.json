@@ -1,0 +1,36 @@
+{
+  "id": "FEAT-003",
+  "type": "fix",
+  "description": "Fix staff appointment letter generation. Replace API route fetch with direct Supabase client queries to avoid HTTP 406 errors. Handle WebSocket disconnection gracefully. Include staff role/position in letter body (currently shows only 'Staff'). Verify LetterPreviewModal buttons (Preview, Download, Share, Edit) work correctly.",
+  "status": "pending",
+  "steps": [
+    "In src/services/letter-generation.service.ts, locate the fetchStaffData method (around line 40). Replace the fetch() call to API route with direct Supabase queries: query staff table for id, user_id, position, department, employment_date, salary, bank_name, account_number, account_name. Then query users table for id, full_name, email, phone, gender, role. Use .maybeSingle() instead of .single().",
+    "In fetchStaffData return object, ensure role field is populated from userData.role (not hardcoded 'Staff Member'). Also populate position field from staffRecord.position.",
+    "In the generateAppointmentLetter method (around line 220), find the letter body text. Change 'offer you a position of [Position] as a staff member' to 'offer you a position of [Position] as a [Role]'. Update the details table to include Role row showing staffData.role.",
+    "In LetterPreviewModal (src/components/admin/LetterPreviewModal.tsx), verify that the modal has buttons for: Preview (show HTML in iframe), Download (generate PDF), Share (email/WhatsApp), Edit (text editor). These should already exist; verify they call correct functions and don't error.",
+    "Test end-to-end: Open LetterPreviewModal with letterType='appointment', verify staffData loads correctly with role field, verify letter HTML shows role, verify buttons work."
+  ],
+  "acceptance_criteria": [
+    "LetterPreviewModal opens without errors when 'Generate Appointment Letter' clicked",
+    "Staff data loads from Supabase (no 406 errors)",
+    "Letter HTML displays staff role (e.g., 'Teacher', 'Principal') not just 'Staff'",
+    "Download button generates PDF with correct content",
+    "Share button opens email/WhatsApp prompt",
+    "Edit button allows text modification",
+    "No WebSocket errors in console",
+    "Letter preview loads within 2 seconds"
+  ],
+  "verification": [
+    "npm run dev",
+    "Navigate to /school-admin/staff",
+    "Click 'Generate Appointment Letter' on any staff member",
+    "Verify modal opens with letter preview",
+    "Verify letter shows staff role (not 'Staff')",
+    "Click Download, verify PDF downloads",
+    "Click Share, verify email/WhatsApp dialog appears",
+    "Click Edit, verify text is editable",
+    "Check browser console for no errors or warnings"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

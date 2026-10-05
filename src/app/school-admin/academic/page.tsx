@@ -1,57 +1,66 @@
 'use client'
 
-// DEPLOYED v0.1.3 - All fixes active: .maybeSingle() on lines 68, 123
-// Cache buster: 2026-10-05-02:59:56-UTC
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
-import { supabase } from '@/lib/supabase-client'
-import StaffHeader from '@/components/StaffHeader'
+import { createClient } from '@/lib/supabase-client'
+import { toast } from 'react-hot-toast'
 
-interface AcademicSession {
-  id: string
-  session_year: string
-  is_active: boolean
-  created_at: string
-}
-
-interface Term {
-  id: string
-  session_id: string
-  term_name: string
-  term_number: number
-  is_active: boolean
-}
+const supabase = createClient()
 
 interface Class {
   id: string
   class_name: string
   arm_name: string
   student_count: number
-  form_master?: string
+  form_master: string
 }
 
-export default function SchoolAdminAcademicPage() {
-  const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [school, setSchool] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  
-  const [sessions, setSessions] = useState<AcademicSession[]>([])
-  const [terms, setTerms] = useState<Term[]>([])
-  const [classes, setClasses] = useState<Class[]>([])
-  
-  const [selectedSession, setSelectedSession] = useState<string | null>(null)
-  const [selectedTerm, setSelectedTerm] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'sessions' | 'terms' | 'classes'>('sessions')
+interface Term {
+  id: string
+  term_name: string
+  term_number: number
+  is_active: boolean
+}
 
+interface Session {
+  id: string
+  session_year: string
+  is_active: boolean
+}
+
+interface PageState {
+  loading: boolean
+  error: string | null
+  sessions: Session[]
+  terms: Term[]
+  classes: Class[]
+  school: any
+  user: any
+}
+
+export default function AcademicPage() {
+  const router = useRouter()
+  const [state, setState] = useState<PageState>({
+    loading: true,
+    error: null,
+    sessions: [],
+    terms: [],
+    classes: [],
+    school: null,
+    user: null,
+  })
+
+  // Load all data on mount
   useEffect(() => {
-    loadData()
+    loadAllData()
   }, [])
 
-  const loadData = async () => {
+  const loadAllData = async () => {
     try {
-      setLoading(true)
+      setState(s => ({ ...s, loading: true, error: null }))
+
+      // Get current user
       const currentUser = await AuthService.getCurrentUser()
 
       if (!currentUser || currentUser.role !== 'SCHOOL_ADMIN') {
@@ -59,299 +68,261 @@ export default function SchoolAdminAcademicPage() {
         return
       }
 
-      setUser(currentUser)
+      setState(s => ({ ...s, user: currentUser }))
 
-      if (currentUser.school_id) {
-        // Load school
-        const { data: schoolData } = await supabase
-          .from('schools')
-          .select('*')
-          .eq('id', currentUser.school_id)
-          .maybeSingle()
-
-        setSchool(schoolData || null)
-
-        // Check if school exists
-        if (!schoolData) {
-          setLoading(false)
-          return
-        }
-        const { data: sessionsData } = await supabase
-          .from('academic_sessions')
-          .select('id, session_year, is_active, created_at')
-          .eq('school_id', currentUser.school_id)
-          .order('session_year', { ascending: false })
-
-        setSessions(sessionsData || [])
-
-        // Load terms
-        const { data: termsData } = await supabase
-          .from('academic_terms')
-          .select('id, session_id, term_name, term_number, is_active')
-          .eq('school_id', currentUser.school_id)
-          .order('term_number', { ascending: true })
-
-        setTerms(termsData || [])
-
-        // Load classes with proper relationships
-        const { data: classArmsData } = await supabase
-          .from('class_arm_combos')
-          .select(`
-            id,
-            class:class_id (id, name),
-            arm:arm_id (id, name),
-            class_teacher_id,
-            school_id
-          `)
-          .eq('school_id', currentUser.school_id)
-          .order('created_at', { ascending: true })
-
-        // For each class/arm combo, count students
-        const classesWithCounts = await Promise.all(
-          (classArmsData || []).map(async (combo) => {
-            const { count } = await supabase
-              .from('students')
-              .select('id', { count: 'exact', head: true })
-              .eq('class_arm_combo_id', combo.id)
-              .eq('status', 'ACTIVE')
-
-            // Fetch class teacher name if assigned
-            let formMasterName = 'Unassigned'
-            if (combo.class_teacher_id) {
-              const { data: teacher } = await supabase
-                .from('users')
-                .select('full_name')
-                .eq('id', combo.class_teacher_id)
-                .maybeSingle()
-              if (teacher) {
-                formMasterName = teacher.full_name
-              }
-            }
-
-            return {
-              id: combo.id,
-              class_name: combo.class?.name || 'Unknown',
-              arm_name: combo.arm?.name || 'N/A',
-              student_count: count || 0,
-              form_master: formMasterName,
-            }
-          })
-        )
-
-        setClasses(classesWithCounts)
+      if (!currentUser.school_id) {
+        setState(s => ({
+          ...s,
+          error: 'Your account is not linked to a school',
+          loading: false,
+        }))
+        return
       }
+
+      // Load school data
+      const { data: schoolData } = await supabase
+        .from('schools')
+        .select('*')
+        .eq('id', currentUser.school_id)
+        .maybeSingle()
+
+      if (!schoolData) {
+        setState(s => ({
+          ...s,
+          error: 'School data not found',
+          loading: false,
+        }))
+        return
+      }
+
+      setState(s => ({ ...s, school: schoolData }))
+
+      // Load sessions
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from('academic_sessions')
+        .select('id, session_year, is_active, created_at')
+        .eq('school_id', currentUser.school_id)
+        .order('created_at', { ascending: false })
+
+      if (sessionsError) throw sessionsError
+
+      setState(s => ({ ...s, sessions: sessionsData || [] }))
+
+      // Load terms
+      const { data: termsData, error: termsError } = await supabase
+        .from('academic_terms')
+        .select('id, term_name, term_number, is_active')
+        .eq('school_id', currentUser.school_id)
+        .order('term_number', { ascending: true })
+
+      if (termsError) throw termsError
+
+      setState(s => ({ ...s, terms: termsData || [] }))
+
+      // Load classes with student counts
+      const { data: classArmsData, error: classError } = await supabase
+        .from('class_arm_combos')
+        .select(`
+          id,
+          class:class_id (id, name),
+          arm:arm_id (id, name),
+          class_teacher_id,
+          school_id
+        `)
+        .eq('school_id', currentUser.school_id)
+        .order('created_at', { ascending: true })
+
+      if (classError) throw classError
+
+      // Count students for each class
+      const classesWithCounts = await Promise.all(
+        (classArmsData || []).map(async (combo) => {
+          const { count } = await supabase
+            .from('students')
+            .select('id', { count: 'exact' })
+            .eq('class_arm_combo_id', combo.id)
+            .eq('school_id', currentUser.school_id)
+
+          // Get form master name
+          let formMasterName = 'N/A'
+          if (combo.class_teacher_id) {
+            const { data: teacher } = await supabase
+              .from('users')
+              .select('full_name')
+              .eq('id', combo.class_teacher_id)
+              .maybeSingle()
+            if (teacher) {
+              formMasterName = teacher.full_name
+            }
+          }
+
+          return {
+            id: combo.id,
+            class_name: combo.class?.name || 'Unknown',
+            arm_name: combo.arm?.name || 'N/A',
+            student_count: count || 0,
+            form_master: formMasterName,
+          }
+        })
+      )
+
+      setState(s => ({ ...s, classes: classesWithCounts, loading: false }))
     } catch (error) {
-      console.error('Load error:', error)
-    } finally {
-      setLoading(false)
+      console.error('[Academic Page] Error:', error)
+      setState(s => ({
+        ...s,
+        error: error instanceof Error ? error.message : 'Failed to load data',
+        loading: false,
+      }))
+      toast.error('Failed to load academic data')
     }
   }
 
-  const getSessionStats = () => {
-    const activeSessions = sessions.filter(s => s.is_active).length
-    const totalTerms = terms.length
-    const totalClasses = classes.length
-    return { activeSessions, totalTerms, totalClasses }
-  }
-
-  const stats = getSessionStats()
-
-  if (loading) {
+  if (state.loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-50 flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-500 border-t-indigo-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading academic data...</p>
         </div>
       </div>
     )
   }
 
+  if (state.error) {
+    return (
+      <div className="p-6 bg-red-50 rounded-lg">
+        <p className="text-red-700">{state.error}</p>
+        <button
+          onClick={loadAllData}
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-50 pb-32">
-      <StaffHeader
-        staffName={user?.full_name || 'School Admin'}
-        schoolName={school?.name || 'School'}
-        section="Academic Management"
-      />
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h1 className="text-3xl font-bold mb-2">📚 Academic Management</h1>
+      <p className="text-gray-600 mb-6">
+        School: <strong>{state.school?.name || 'Loading...'}</strong>
+      </p>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
-        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-8">📚 Academic Management</h1>
-
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <p className="text-gray-600 text-sm font-semibold">Active Sessions</p>
-            <p className="text-4xl font-bold text-purple-600 mt-2">{stats.activeSessions}</p>
-            <p className="text-xs text-gray-500 mt-2">Out of {sessions.length} total</p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <p className="text-gray-600 text-sm font-semibold">Total Terms</p>
-            <p className="text-4xl font-bold text-indigo-600 mt-2">{stats.totalTerms}</p>
-            <p className="text-xs text-gray-500 mt-2">Across all sessions</p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <p className="text-gray-600 text-sm font-semibold">Total Classes</p>
-            <p className="text-4xl font-bold text-blue-600 mt-2">{stats.totalClasses}</p>
-            <p className="text-xs text-gray-500 mt-2">Class arms and combinations</p>
-          </div>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex gap-2 mb-6 border-b border-gray-300">
-          {[
-            { id: 'sessions', label: '📅 Sessions' },
-            { id: 'terms', label: '📆 Terms' },
-            { id: 'classes', label: '🏫 Classes' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-4 py-3 font-semibold text-sm border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-purple-600 text-purple-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Sessions Tab */}
-        {activeTab === 'sessions' && (
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-            <div className="p-6 border-b">
-              <h2 className="text-2xl font-bold text-gray-900">Academic Sessions</h2>
-              <p className="text-sm text-gray-600 mt-1">Manage academic years and sessions</p>
-            </div>
-
-            {sessions.length === 0 ? (
-              <div className="p-8 text-center text-gray-600">
-                <p className="text-lg">No sessions found</p>
+      {/* Sessions Section */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+          📅 Academic Sessions ({state.sessions.length})
+        </h2>
+        {state.sessions.length === 0 ? (
+          <p className="text-gray-500">No sessions found</p>
+        ) : (
+          <div className="grid gap-3">
+            {state.sessions.map(session => (
+              <div
+                key={session.id}
+                className={`p-4 rounded-lg border-2 ${
+                  session.is_active
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-300 bg-gray-50'
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-lg">{session.session_year}</span>
+                  {session.is_active && (
+                    <span className="px-3 py-1 bg-green-600 text-white rounded-full text-sm font-bold">
+                      Active
+                    </span>
+                  )}
+                </div>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-6 py-3 text-left font-semibold text-gray-900">#</th>
-                      <th className="px-6 py-3 text-left font-semibold text-gray-900">Session Year</th>
-                      <th className="px-6 py-3 text-left font-semibold text-gray-900">Status</th>
-                      <th className="px-6 py-3 text-left font-semibold text-gray-900">Created</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {sessions.map((session, idx) => (
-                      <tr key={session.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 font-bold text-gray-900">{idx + 1}</td>
-                        <td className="px-6 py-4 text-gray-900 font-semibold">{session.session_year}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            session.is_active 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {session.is_active ? '✅ Active' : '⏸️ Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {new Date(session.created_at).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            ))}
           </div>
         )}
+      </div>
 
-        {/* Terms Tab */}
-        {activeTab === 'terms' && (
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-            <div className="p-6 border-b">
-              <h2 className="text-2xl font-bold text-gray-900">Academic Terms</h2>
-              <p className="text-sm text-gray-600 mt-1">Manage terms within each session</p>
-            </div>
-
-            {terms.length === 0 ? (
-              <div className="p-8 text-center text-gray-600">
-                <p className="text-lg">No terms found</p>
+      {/* Terms Section */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+          📆 Terms ({state.terms.length})
+        </h2>
+        {state.terms.length === 0 ? (
+          <p className="text-gray-500">No terms found</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {state.terms.map(term => (
+              <div
+                key={term.id}
+                className={`p-4 rounded-lg border-2 ${
+                  term.is_active
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-300 bg-gray-50'
+                }`}
+              >
+                <h3 className="font-bold text-lg">{term.term_name}</h3>
+                <p className="text-gray-600 text-sm">Term {term.term_number}</p>
+                {term.is_active && (
+                  <span className="mt-2 inline-block px-2 py-1 bg-blue-600 text-white rounded text-xs font-bold">
+                    Active
+                  </span>
+                )}
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
-                {terms.map(term => {
-                  const session = sessions.find(s => s.id === term.session_id)
-                  return (
-                    <div key={term.id} className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg p-4 border border-purple-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-bold text-gray-900">{term.term_name}</h3>
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          term.is_active 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {term.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        <span className="font-semibold">Term {term.term_number}</span> • {session?.session_year}
-                      </p>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+            ))}
           </div>
         )}
+      </div>
 
-        {/* Classes Tab */}
-        {activeTab === 'classes' && (
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-            <div className="p-6 border-b">
-              <h2 className="text-2xl font-bold text-gray-900">Classes & Arms</h2>
-              <p className="text-sm text-gray-600 mt-1">All class combinations in the school</p>
-            </div>
-
-            {classes.length === 0 ? (
-              <div className="p-8 text-center text-gray-600">
-                <p className="text-lg">No classes found</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-6 py-3 text-left font-semibold text-gray-900">#</th>
-                      <th className="px-6 py-3 text-left font-semibold text-gray-900">Class Name</th>
-                      <th className="px-6 py-3 text-left font-semibold text-gray-900">Arm</th>
-                      <th className="px-6 py-3 text-center font-semibold text-gray-900">Students</th>
-                      <th className="px-6 py-3 text-left font-semibold text-gray-900">Form Master</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {classes.map((cls, idx) => (
-                      <tr key={cls.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 font-bold text-gray-900">{idx + 1}</td>
-                        <td className="px-6 py-4 text-gray-900 font-semibold">{cls.class_name}</td>
-                        <td className="px-6 py-4 text-gray-600">{cls.arm_name || 'N/A'}</td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
-                            {cls.student_count || 0}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-gray-600">{cls.form_master || 'Unassigned'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+      {/* Classes Section */}
+      <div>
+        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+          🎓 Classes ({state.classes.length})
+        </h2>
+        {state.classes.length === 0 ? (
+          <p className="text-gray-500">No classes found</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-blue-100 border-b-2 border-blue-600">
+                  <th className="p-3 text-left font-bold">Class</th>
+                  <th className="p-3 text-left font-bold">Arm</th>
+                  <th className="p-3 text-center font-bold">Students</th>
+                  <th className="p-3 text-left font-bold">Form Master</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.classes.map((cls, idx) => (
+                  <tr
+                    key={cls.id}
+                    className={`border-b ${
+                      idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                    } hover:bg-blue-50`}
+                  >
+                    <td className="p-3 font-semibold">{cls.class_name}</td>
+                    <td className="p-3">{cls.arm_name}</td>
+                    <td className="p-3 text-center">
+                      <span className="px-3 py-1 bg-blue-600 text-white rounded-full font-bold">
+                        {cls.student_count}
+                      </span>
+                    </td>
+                    <td className="p-3">{cls.form_master}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
+      </div>
+
+      {/* Refresh Button */}
+      <div className="mt-8 flex gap-3">
+        <button
+          onClick={loadAllData}
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold flex items-center gap-2"
+        >
+          🔄 Refresh Data
+        </button>
       </div>
     </div>
   )

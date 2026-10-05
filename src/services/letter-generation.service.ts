@@ -48,85 +48,31 @@ export class LetterGenerationService {
   private static supabase = createClient()
 
   /**
-   * Fetch complete staff data with all relationships from Supabase
-   * ✅ HOTFIX 2026-10-02: Handle newly registered staff without staff employment record
-   * Falls back to user record if staff record doesn't exist yet
+   * Fetch complete staff data via API route
+   * API handles Supabase queries and returns formatted staff data
    */
   static async fetchStaffData(staffId: string, schoolId: string): Promise<StaffData | null> {
     try {
-      console.log('[LetterGenService] Fetching staff data for:', staffId);
+      console.log('[LetterGenService] Fetching staff data via API for:', staffId);
 
-      // Try to get staff employment record first
-      const { data: staffRecord, error: staffError } = await this.supabase
-        .from('staff')
-        .select(`
-          id,
-          user_id,
-          position,
-          department,
-          employment_date,
-          salary,
-          bank_name,
-          account_number,
-          account_name
-        `)
-        .eq('id', staffId)
-        .eq('school_id', schoolId)
-        .maybeSingle();
+      const response = await fetch(`/api/letters/fetch-staff?staffId=${staffId}&schoolId=${schoolId}`)
 
-      if (staffError && staffError.code !== 'PGRST116') {
-        console.warn('[LetterGenService] Error fetching staff record:', staffError);
+      if (!response.ok) {
+        console.error('[LetterGenService] API error:', response.status, response.statusText)
+        return null
       }
 
-      // If staff record exists, fetch user data
-      let userData = null;
-      let user_id = null;
+      const result = await response.json()
 
-      if (staffRecord) {
-        user_id = staffRecord.user_id;
-        const { data: user } = await this.supabase
-          .from('users')
-          .select('id, full_name, email, phone, gender, role')
-          .eq('id', user_id)
-          .maybeSingle();
-        userData = user;
-      } else {
-        // Fallback: Try to find staff via user_id if staffId is actually a user_id
-        console.log('[LetterGenService] No staff record found, attempting fallback to users table');
-        const { data: user } = await this.supabase
-          .from('users')
-          .select('id, full_name, email, phone, gender, role')
-          .eq('id', staffId)
-          .maybeSingle();
-        
-        if (user) {
-          userData = user;
-          user_id = user.id;
-        }
+      if (!result.success || !result.data) {
+        console.error('[LetterGenService] Invalid API response:', result)
+        return null
       }
 
-      if (!userData) {
-        console.warn('[LetterGenService] No user data found for staff:', staffId);
-        return null;
-      }
-
-      return {
-        id: staffRecord?.id || staffId,
-        full_name: userData.full_name || '',
-        email: userData.email || '',
-        phone: userData.phone || '',
-        position: staffRecord?.position || 'Staff Member',
-        role: userData.role || 'Staff Member',
-        department: staffRecord?.department || '',
-        employment_date: staffRecord?.employment_date || null,
-        salary: staffRecord?.salary || undefined,
-        bank_name: staffRecord?.bank_name || '',
-        account_number: staffRecord?.account_number || '',
-        account_name: staffRecord?.account_name || '',
-      };
+      return result.data as StaffData
     } catch (error) {
-      console.error('[LetterGenService] Error fetching staff data:', error);
-      return null;
+      console.error('[LetterGenService] Error fetching staff data:', error)
+      return null
     }
   }
 

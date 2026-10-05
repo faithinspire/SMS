@@ -1,0 +1,7 @@
+{
+  "task_id": "task-school-admin-rebuild",
+  "task_description": "Rebuild school admin dashboard: fix school context loading (all pages), rebuild 6-tab staff edit modal, fix staff letter generation with real roles, rebuild academic page with real-time data, fix results page cascade dropdowns",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004"],
+  "blocked_reason": null
+}

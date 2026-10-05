@@ -1,0 +1,39 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Rebuild staff edit modal to match student edit modal design: 6 tabs (Personal, Admission, Class, Employment, Salary, Contact) with identical UI styling (gradient blue header, emoji icons, form sections, save button). Modal must load lookup data (classes, subjects) on open and save all changes back to database.",
+  "status": "pending",
+  "steps": [
+    "In src/app/school-admin/staff/page.tsx, find the StaffEditModal component (starts around line 120). Verify it has interface CompletedStaffEditModalProps with staff, isOpen, onClose, onSave, schoolId props.",
+    "Implement the Personal tab: Full Name (from user), Gender (select: MALE/FEMALE/OTHER), Date of Birth (date input). Use exact same styling as Student modal (bg-gray-50 rounded-lg p-4 section container).",
+    "Implement the Admission tab: Staff ID (disabled, read-only), Position (text input, required). Same styling.",
+    "Implement the Class tab: Assigned Class (select dropdown loaded from class_arm_combos showing 'ClassName Arm'), Subject Assignments (checkboxes for multi-select loaded from subjects table). Same styling.",
+    "Implement the Employment tab: Department (text input), Employment Date (date input), Status (select: ACTIVE/PAUSED/INACTIVE/SUSPENDED). Same styling.",
+    "Implement the Salary tab: Salary (number input with step 0.01), Bank Name (text input), Account Number (text input), Account Name (text input). Same styling.",
+    "Implement the Contact tab: Email (email input), Role (text input, disabled). Same styling.",
+    "Ensure form submission calls onSave with all updates, which calls database update API. Ensure modal closes on successful save.",
+    "Add loadLookupData function (already stubbed) that fetches classes and subjects from Supabase and populates dropdowns."
+  ],
+  "acceptance_criteria": [
+    "Modal opens when edit button clicked on staff member",
+    "All 6 tabs are visible with correct labels and emojis",
+    "Each tab displays correct fields with proper input types (text, select, number, date, checkbox)",
+    "Lookup data (classes, subjects) loads within 2 seconds",
+    "Form saves successfully and closes modal",
+    "All fields update correctly in database (users and staff tables)",
+    "Modal styling matches Student edit modal exactly (gradient header, spacing, colors)"
+  ],
+  "verification": [
+    "npm run dev",
+    "Navigate to /school-admin/staff",
+    "Click Edit on any staff member",
+    "Verify modal opens with all 6 tabs",
+    "Click each tab and verify fields are present and styled correctly",
+    "Edit a field (e.g., change Department)",
+    "Click Save",
+    "Verify modal closes and table updates",
+    "Refresh page and verify changes persisted in database"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
