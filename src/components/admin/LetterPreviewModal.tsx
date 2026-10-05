@@ -9,21 +9,25 @@ import { WhatsAppService } from '@/services/whatsapp.service'
 interface LetterPreviewModalProps {
   isOpen: boolean
   onClose: () => void
-  letterType: 'appointment' | 'admission'
-  recipientId: string
-  schoolId: string
+  letterType?: 'appointment' | 'admission'
+  recipientId?: string
+  schoolId?: string
   recipientEmail?: string
   recipientPhone?: string
+  staffId?: string
+  studentId?: string
 }
 
 export function LetterPreviewModal({
   isOpen,
   onClose,
-  letterType,
+  letterType = 'appointment',
   recipientId,
   schoolId,
   recipientEmail,
   recipientPhone,
+  staffId,
+  studentId,
 }: LetterPreviewModalProps) {
   const [letterHTML, setLetterHTML] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
@@ -31,16 +35,25 @@ export function LetterPreviewModal({
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState('')
 
+  // Determine which ID and type to use
+  const actualRecipientId = staffId || studentId || recipientId
+  const actualLetterType = staffId ? 'appointment' : (letterType || 'admission')
+
   // Generate letter on mount or when props change
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && actualRecipientId) {
       generateLetter()
     }
-  }, [isOpen, letterType, recipientId, schoolId])
+  }, [isOpen, actualLetterType, actualRecipientId, schoolId])
 
   const generateLetter = async () => {
     setIsLoading(true)
     try {
+      if (!actualRecipientId || !schoolId) {
+        toast.error('Missing required information')
+        return
+      }
+
       // Fetch school data
       const schoolData = await LetterGenerationService.fetchSchoolData(schoolId)
       if (!schoolData) {
@@ -50,17 +63,17 @@ export function LetterPreviewModal({
 
       let html = ''
 
-      if (letterType === 'appointment') {
-        // Fetch staff data
-        const staffData = await LetterGenerationService.fetchStaffData(recipientId, schoolId)
+      if (actualLetterType === 'appointment' || staffId) {
+        // Staff letter
+        const staffData = await LetterGenerationService.fetchStaffData(actualRecipientId, schoolId)
         if (!staffData) {
           toast.error('Failed to load staff data')
           return
         }
         html = await LetterGenerationService.generateAppointmentLetter(staffData, schoolData)
       } else {
-        // Fetch student data
-        const studentDataInfo = await LetterGenerationService.fetchStudentData(recipientId, schoolId)
+        // Student admission letter
+        const studentDataInfo = await LetterGenerationService.fetchStudentData(actualRecipientId, schoolId)
         if (!studentDataInfo) {
           toast.error('Failed to load student data')
           return
@@ -136,10 +149,10 @@ export function LetterPreviewModal({
         },
         body: JSON.stringify({
           recipientEmail,
-          recipientName: letterType === 'appointment' ? 'Staff Member' : 'Parent/Guardian',
-          letterType,
+          recipientName: staffId ? 'Staff Member' : 'Parent/Guardian',
+          letterType: actualLetterType,
           letterHTML,
-          schoolName: 'School', // This will be set from fetched school data
+          schoolName: 'School',
           senderEmail: recipientEmail,
         }),
       })
@@ -148,7 +161,6 @@ export function LetterPreviewModal({
           if (data.success) {
             toast.success('Letter sent via email!')
           } else if (data.useMailto) {
-            // Fallback to mailto
             handleMailtoFallback()
           } else {
             toast.error(data.message || 'Failed to send email')
@@ -156,7 +168,6 @@ export function LetterPreviewModal({
         })
         .catch((err) => {
           console.error('Email send error:', err)
-          // Fallback to mailto
           handleMailtoFallback()
         })
         .finally(() => {
@@ -203,16 +214,16 @@ export function LetterPreviewModal({
       // Try to create a shareable link first
       const shareUrl = await WhatsAppService.createShareableLink({
         letterHTML,
-        letterType,
-        recipientId,
-        schoolId,
+        letterType: actualLetterType,
+        recipientId: actualRecipientId,
+        schoolId: schoolId || '',
       })
 
       // Generate WhatsApp message
       const result = await WhatsAppService.shareLetterViaWhatsApp({
         recipientPhone,
-        recipientName: letterType === 'appointment' ? 'Staff Member' : 'Parent',
-        letterType,
+        recipientName: staffId ? 'Staff Member' : 'Parent',
+        letterType: actualLetterType,
         schoolName: 'School',
         documentUrl: shareUrl || undefined,
       })
@@ -248,7 +259,7 @@ export function LetterPreviewModal({
         <div className="flex justify-between items-center p-6 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700">
           <div>
             <h2 className="text-2xl font-bold text-white">
-              {letterType === 'appointment' ? '📋 Appointment' : '🎓 Admission'} Letter
+              {actualLetterType === 'appointment' ? '📋 Staff Appointment' : '🎓 Student Admission'} Letter
             </h2>
             <p className="text-blue-100 text-sm mt-1">
               {isEditing ? 'Edit letter content' : 'Review before sharing or printing'}

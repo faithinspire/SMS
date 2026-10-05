@@ -2,13 +2,29 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { AuthService } from '@/services/auth.service'
 import { createClient } from '@/lib/supabase-client'
 import { toast } from 'react-hot-toast'
 
 const supabase = createClient()
 
-interface Class {
+interface Session {
+  id: string
+  session_year: string
+  start_year: number
+  end_year: number
+  is_active: boolean
+  created_at: string
+}
+
+interface Term {
+  id: string
+  session_id: string
+  term_number: number
+  name: string
+  is_active: boolean
+}
+
+interface ClassArm {
   id: string
   class_name: string
   arm_name: string
@@ -16,27 +32,14 @@ interface Class {
   form_master: string
 }
 
-interface Term {
-  id: string
-  term_name: string
-  term_number: number
-  is_active: boolean
-}
-
-interface Session {
-  id: string
-  session_year: string
-  is_active: boolean
-}
-
 interface PageState {
   loading: boolean
   error: string | null
+  user: any
+  school: any
   sessions: Session[]
   terms: Term[]
-  classes: Class[]
-  school: any
-  user: any
+  classes: ClassArm[]
 }
 
 export default function AcademicPage() {
@@ -44,11 +47,11 @@ export default function AcademicPage() {
   const [state, setState] = useState<PageState>({
     loading: true,
     error: null,
+    user: null,
+    school: null,
     sessions: [],
     terms: [],
     classes: [],
-    school: null,
-    user: null,
   })
 
   // Load all data on mount
@@ -61,16 +64,21 @@ export default function AcademicPage() {
       setState(s => ({ ...s, loading: true, error: null }))
 
       // Get current user
-      const currentUser = await AuthService.getCurrentUser()
+      const { data: { user } } = await supabase.auth.getUser()
 
-      if (!currentUser || currentUser.role !== 'SCHOOL_ADMIN') {
+      if (!user) {
         router.push('/landing')
         return
       }
 
-      setState(s => ({ ...s, user: currentUser }))
+      // Get user profile with school_id
+      const { data: userProfile, error: userError } = await supabase
+        .from('users')
+        .select('school_id')
+        .eq('id', user.id)
+        .maybeSingle()
 
-      if (!currentUser.school_id) {
+      if (userError || !userProfile) {
         setState(s => ({
           ...s,
           error: 'Your account is not linked to a school',
@@ -79,11 +87,22 @@ export default function AcademicPage() {
         return
       }
 
+      if (!userProfile.school_id) {
+        setState(s => ({
+          ...s,
+          error: 'Your account is not linked to a school',
+          loading: false,
+        }))
+        return
+      }
+
+      setState(s => ({ ...s, user: userProfile }))
+
       // Load school data
       const { data: schoolData } = await supabase
         .from('schools')
         .select('*')
-        .eq('id', currentUser.school_id)
+        .eq('id', userProfile.school_id)
         .maybeSingle()
 
       if (!schoolData) {
@@ -97,29 +116,29 @@ export default function AcademicPage() {
 
       setState(s => ({ ...s, school: schoolData }))
 
-      // Load sessions
+      // Load sessions - real-time
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('academic_sessions')
-        .select('id, session_year, is_active, created_at')
-        .eq('school_id', currentUser.school_id)
+        .select('id, session_year, start_year, end_year, is_active, created_at')
+        .eq('school_id', userProfile.school_id)
         .order('created_at', { ascending: false })
 
       if (sessionsError) throw sessionsError
 
       setState(s => ({ ...s, sessions: sessionsData || [] }))
 
-      // Load terms
+      // Load terms - real-time
       const { data: termsData, error: termsError } = await supabase
         .from('academic_terms')
-        .select('id, term_name, term_number, is_active')
-        .eq('school_id', currentUser.school_id)
+        .select('id, session_id, term_number, name, is_active')
+        .eq('school_id', userProfile.school_id)
         .order('term_number', { ascending: true })
 
       if (termsError) throw termsError
 
       setState(s => ({ ...s, terms: termsData || [] }))
 
-      // Load classes with student counts
+      // Load classes with student counts - real-time
       const { data: classArmsData, error: classError } = await supabase
         .from('class_arm_combos')
         .select(`
@@ -129,19 +148,20 @@ export default function AcademicPage() {
           class_teacher_id,
           school_id
         `)
-        .eq('school_id', currentUser.school_id)
+        .eq('school_id', userProfile.school_id)
         .order('created_at', { ascending: true })
 
       if (classError) throw classError
 
-      // Count students for each class
+      // Get student counts and form masters for each class
       const classesWithCounts = await Promise.all(
         (classArmsData || []).map(async (combo) => {
+          // Count students
           const { count } = await supabase
             .from('students')
             .select('id', { count: 'exact' })
             .eq('class_arm_combo_id', combo.id)
-            .eq('school_id', currentUser.school_id)
+            .eq('school_id', userProfile.school_id)
 
           // Get form master name
           let formMasterName = 'N/A'
@@ -205,10 +225,12 @@ export default function AcademicPage() {
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <h1 className="text-3xl font-bold mb-2">📚 Academic Management</h1>
-      <p className="text-gray-600 mb-6">
-        School: <strong>{state.school?.name || 'Loading...'}</strong>
-      </p>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">📚 Academic Management</h1>
+        <p className="text-gray-600">
+          School: <strong>{state.school?.name || 'Loading...'}</strong>
+        </p>
+      </div>
 
       {/* Sessions Section */}
       <div className="mb-8">
@@ -229,7 +251,12 @@ export default function AcademicPage() {
                 }`}
               >
                 <div className="flex justify-between items-center">
-                  <span className="font-semibold text-lg">{session.session_year}</span>
+                  <div>
+                    <span className="font-semibold text-lg">{session.session_year}</span>
+                    <p className="text-sm text-gray-600">
+                      {session.start_year} - {session.end_year}
+                    </p>
+                  </div>
                   {session.is_active && (
                     <span className="px-3 py-1 bg-green-600 text-white rounded-full text-sm font-bold">
                       Active
@@ -260,7 +287,7 @@ export default function AcademicPage() {
                     : 'border-gray-300 bg-gray-50'
                 }`}
               >
-                <h3 className="font-bold text-lg">{term.term_name}</h3>
+                <h3 className="font-bold text-lg">{term.name}</h3>
                 <p className="text-gray-600 text-sm">Term {term.term_number}</p>
                 {term.is_active && (
                   <span className="mt-2 inline-block px-2 py-1 bg-blue-600 text-white rounded text-xs font-bold">

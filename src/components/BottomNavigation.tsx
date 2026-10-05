@@ -3,27 +3,35 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { AuthService } from '@/services/auth.service'
+import { createClient } from '@/lib/supabase-client'
 import { User } from '@/types'
+
+const supabase = createClient()
 
 export default function BottomNavigation() {
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
+  const [schoolName, setSchoolName] = useState<string>('School')
   const [loading, setLoading] = useState(true)
   
   // Cache to prevent repeated auth checks
   const userCacheRef = useRef<{ user: User | null; timestamp: number } | null>(null)
   const CACHE_DURATION = 60000 // 60 seconds - cache user data
 
-  // Load user only once on mount
+  // Load user and school data on mount
   useEffect(() => {
-    const loadUser = async () => {
+    const loadUserAndSchool = async () => {
       const now = Date.now()
       
       // Use cached user if still valid
       if (userCacheRef.current && (now - userCacheRef.current.timestamp) < CACHE_DURATION) {
         setUser(userCacheRef.current.user)
         setLoading(false)
+        // Still fetch school name even if user is cached
+        if (userCacheRef.current.user?.school_id) {
+          fetchSchoolName(userCacheRef.current.user.school_id)
+        }
         return
       }
 
@@ -38,16 +46,50 @@ export default function BottomNavigation() {
         }
         
         setUser(currentUser)
+
+        // Fetch school name if user has school_id
+        if (currentUser && currentUser.school_id) {
+          fetchSchoolName(currentUser.school_id)
+        } else {
+          console.warn('[BottomNav] No school_id in user profile')
+          setSchoolName('Not linked to school')
+        }
       } catch (err) {
         console.error('[BottomNav] Error loading user:', err)
         setUser(null)
+        setSchoolName('Error loading school')
       } finally {
         setLoading(false)
       }
     }
 
-    loadUser()
+    loadUserAndSchool()
   }, [])
+
+  const fetchSchoolName = async (schoolId: string) => {
+    try {
+      const { data: school, error } = await supabase
+        .from('schools')
+        .select('name')
+        .eq('id', schoolId)
+        .maybeSingle()
+
+      if (error) {
+        console.error('[BottomNav] Error fetching school:', error)
+        setSchoolName('School')
+        return
+      }
+
+      if (school) {
+        setSchoolName(school.name || 'School')
+      } else {
+        setSchoolName('School')
+      }
+    } catch (error) {
+      console.error('[BottomNav] Error fetching school name:', error)
+      setSchoolName('School')
+    }
+  }
 
   // Don't show nav while loading or if no user
   if (loading || !user) return null
@@ -113,6 +155,14 @@ export default function BottomNavigation() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-300 shadow-xl z-50">
+      {/* School Name Header */}
+      <div className="px-4 py-2 text-center border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50">
+        <p className="text-xs font-semibold text-gray-700">
+          🏫 <span className="text-blue-600">{schoolName}</span>
+        </p>
+      </div>
+
+      {/* Navigation Items */}
       <div className="flex justify-around items-stretch w-full">
         {navItems.map((item) => (
           <button
