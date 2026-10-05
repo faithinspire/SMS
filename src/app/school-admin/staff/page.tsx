@@ -105,9 +105,9 @@ interface CompletedStaffEditModalProps {
 }
 
 /**
- * Complete Staff Profile Editor Modal
- * Sections: Personal, Contact, Employment, Academic, Class Assignment, Subject Assignment, Salary, Account
- * Built from Staff Registration Service structure to ensure consistency
+ * Staff Edit Modal with Tabbed Interface
+ * Matches Student Edit Modal design pattern
+ * Tabs: Personal, Admission, Class, Employment, Salary, Contact
  */
 const StaffEditModal: React.FC<CompletedStaffEditModalProps> = ({
   staff,
@@ -119,20 +119,17 @@ const StaffEditModal: React.FC<CompletedStaffEditModalProps> = ({
 }) => {
   const [formData, setFormData] = useState(staff);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'personal' | 'admission' | 'class' | 'employment' | 'salary' | 'contact'>('personal');
   const [classes, setClasses] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
-  const [selectedClassArm, setSelectedClassArm] = useState<string>('');
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(false);
 
   useEffect(() => {
     setFormData(staff);
-    setSelectedClassArm('');
-    setSelectedSubjects([]);
+    setActiveTab('personal');
   }, [staff]);
 
-  // Load sessions, classes, and subjects on mount
+  // Load lookup data on mount
   useEffect(() => {
     if (isOpen && schoolId) {
       loadLookupData();
@@ -142,17 +139,7 @@ const StaffEditModal: React.FC<CompletedStaffEditModalProps> = ({
   const loadLookupData = async () => {
     try {
       setLoadingLookups(true);
-
       const supabaseClient = getSupabaseClient();
-
-      // Load sessions
-      const { data: sessionsData } = await supabaseClient
-        .from('academic_sessions')
-        .select('id, session_year')
-        .eq('school_id', schoolId)
-        .order('start_year', { ascending: false });
-
-      setSessions(sessionsData || []);
 
       // Load classes
       const { data: classesData } = await supabaseClient
@@ -192,18 +179,274 @@ const StaffEditModal: React.FC<CompletedStaffEditModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[95vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 border-b border-blue-800">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            ✏️ Complete Staff Profile Editor
+            ✏️ Edit Staff
           </h3>
-          <p className="text-blue-100 text-sm mt-1">Update all staff information and assignments</p>
+          <p className="text-blue-100 text-sm mt-1">Update staff information</p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* A. PERSONAL INFORMATION */}
+        {/* Tabs */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6">
+          <div className="flex gap-0 flex-wrap">
+            {[
+              { id: 'personal', label: '👤 Personal', icon: '👤' },
+              { id: 'admission', label: '📋 Admission', icon: '📋' },
+              { id: 'class', label: '📚 Class', icon: '📚' },
+              { id: 'employment', label: '💼 Employment', icon: '💼' },
+              { id: 'salary', label: '💰 Salary', icon: '💰' },
+              { id: 'contact', label: '📱 Contact', icon: '📱' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Form Content */}
+        <form onSubmit={handleSubmit} className="p-6">
+          {/* PERSONAL TAB */}
+          {activeTab === 'personal' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  value={formData.user.full_name}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      user: { ...formData.user, full_name: e.target.value },
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Gender</label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select Gender</option>
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Date of Birth</label>
+                  <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ADMISSION TAB */}
+          {activeTab === 'admission' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Staff ID</label>
+                <input type="text" value={staff.id} disabled className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Position *</label>
+                <input
+                  type="text"
+                  value={formData.position || ''}
+                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                  placeholder="e.g., Mathematics Teacher"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          {/* CLASS TAB */}
+          {activeTab === 'class' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Assigned Class</label>
+                <select disabled={loadingLookups} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100">
+                  <option value="">Select class...</option>
+                  {classes.map((cls: any) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.classes?.name} {cls.arms?.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Subject Assignment</label>
+                <div className="border border-gray-300 rounded-lg p-3 max-h-32 overflow-y-auto space-y-2">
+                  {subjects.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No subjects available</p>
+                  ) : (
+                    subjects.map((subject: any) => (
+                      <label key={subject.id} className="flex items-center gap-2">
+                        <input type="checkbox" className="rounded" />
+                        <span className="text-sm">{subject.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EMPLOYMENT TAB */}
+          {activeTab === 'employment' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Department</label>
+                <input
+                  type="text"
+                  value={formData.department || ''}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  placeholder="e.g., Academic"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Employment Date</label>
+                <input
+                  type="date"
+                  value={formData.employment_date ? formData.employment_date.split('T')[0] : ''}
+                  onChange={(e) => setFormData({ ...formData, employment_date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as StatusType })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="PAUSED">Paused</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="SUSPENDED">Suspended</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* SALARY TAB */}
+          {activeTab === 'salary' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Salary</label>
+                <input
+                  type="number"
+                  value={formData.salary || ''}
+                  onChange={(e) => setFormData({ ...formData, salary: e.target.value ? parseFloat(e.target.value) : undefined })}
+                  placeholder="Enter salary"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Bank Name</label>
+                <input
+                  type="text"
+                  value={formData.bank_name || ''}
+                  onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
+                  placeholder="e.g., First Bank"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Number</label>
+                <input
+                  type="text"
+                  value={formData.account_number || ''}
+                  onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
+                  placeholder="Bank account number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* CONTACT TAB */}
+          {activeTab === 'contact' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={formData.user.email}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      user: { ...formData.user, email: e.target.value },
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Role</label>
+                <input
+                  type="text"
+                  value={formData.user.role}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed capitalize"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 justify-end border-t border-gray-200 mt-6 pt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || isLoading}
+              className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="animate-spin">⏳</span> Saving...
+                </>
+              ) : (
+                <>✓ Save Changes</>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const StaffPage: React.FC = () => {
+  const router = useRouter();
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<StatusType | 'ALL'>('ALL');
+  const [schoolId, setSchoolId] = useState<string>('');
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
             <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
               👤 A. Personal Information

@@ -49,10 +49,15 @@ export class LetterGenerationService {
 
   /**
    * Fetch complete staff data with all relationships from Supabase
+   * ✅ HOTFIX 2026-10-02: Handle newly registered staff without staff employment record
+   * Falls back to user record if staff record doesn't exist yet
    */
   static async fetchStaffData(staffId: string, schoolId: string): Promise<StaffData | null> {
     try {
-      const { data, error } = await this.supabase
+      console.log('[LetterGenService] Fetching staff data for:', staffId);
+
+      // Try to get staff employment record first
+      const { data: staffRecord, error: staffError } = await this.supabase
         .from('staff')
         .select(`
           id,
@@ -63,37 +68,64 @@ export class LetterGenerationService {
           salary,
           bank_name,
           account_number,
-          account_name,
-          users:user_id (
-            id,
-            full_name,
-            email,
-            phone,
-            gender
-          )
+          account_name
         `)
         .eq('id', staffId)
         .eq('school_id', schoolId)
-        .single()
+        .maybeSingle();
 
-      if (error) throw error
+      if (staffError && staffError.code !== 'PGRST116') {
+        console.warn('[LetterGenService] Error fetching staff record:', staffError);
+      }
+
+      // If staff record exists, fetch user data
+      let userData = null;
+      let user_id = null;
+
+      if (staffRecord) {
+        user_id = staffRecord.user_id;
+        const { data: user } = await this.supabase
+          .from('users')
+          .select('id, full_name, email, phone, gender')
+          .eq('id', user_id)
+          .maybeSingle();
+        userData = user;
+      } else {
+        // Fallback: Try to find staff via user_id if staffId is actually a user_id
+        console.log('[LetterGenService] No staff record found, attempting fallback to users table');
+        const { data: user } = await this.supabase
+          .from('users')
+          .select('id, full_name, email, phone, gender')
+          .eq('id', staffId)
+          .maybeSingle();
+        
+        if (user) {
+          userData = user;
+          user_id = user.id;
+        }
+      }
+
+      if (!userData) {
+        console.warn('[LetterGenService] No user data found for staff:', staffId);
+        return null;
+      }
 
       return {
-        id: data.id,
-        full_name: data.users?.full_name || '',
-        email: data.users?.email || '',
-        phone: data.users?.phone || '',
-        position: data.position,
-        department: data.department,
-        employment_date: data.employment_date,
-        salary: data.salary,
-        bank_name: data.bank_name,
-        account_number: data.account_number,
-        account_name: data.account_name,
-      }
+        id: staffRecord?.id || staffId,
+        full_name: userData.full_name || '',
+        email: userData.email || '',
+        phone: userData.phone || '',
+        position: staffRecord?.position || 'Staff Member',
+        department: staffRecord?.department || '',
+        employment_date: staffRecord?.employment_date || null,
+        salary: staffRecord?.salary || undefined,
+        bank_name: staffRecord?.bank_name || '',
+        account_number: staffRecord?.account_number || '',
+        account_name: staffRecord?.account_name || '',
+      };
     } catch (error) {
-      console.error('Error fetching staff data:', error)
-      return null
+      console.error('[LetterGenService] Error fetching staff data:', error);
+      return null;
     }
   }
 
