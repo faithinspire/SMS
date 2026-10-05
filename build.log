@@ -1,5 +1,5 @@
 
-> school-management-saas@0.1.2 build
+> school-management-saas@0.1.3 build
 > next build
 
  ⚠ Invalid next.config.js options detected: 
@@ -17,39 +17,6 @@
 > [PWA] Service worker: C:\Users\OLU\Desktop\SMS\public\sw.js
 > [PWA]   url: /sw.js
 > [PWA]   scope: /
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=|false|dependencyType=|esm|modules=[|0=|node_modules|]|fallback=|false|exportsFields=[|0=|exports|]|importsFields=[|0=|imports|]|conditionNames=[|0=|node|1=|import|]|descriptionFiles=[|0=|package.json|]|extensions=[|0=|.js|1=|.json|2=|.node|]|enforceExtensions=|false|symlinks=|true|mainFields=[|0=|main|]|mainFiles=[|0=|index|]|roots=[|]|fullySpecified=|true|preferRelative=|false|preferAbsolute=|false|restrictions=[|]|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\dashboard\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=|false|dependencyType=|esm|modules=[|0=|node_modules|]|fallback=|false|exportsFields=[|0=|exports|]|importsFields=[|0=|imports|]|conditionNames=[|0=|node|1=|import|]|descriptionFiles=[|0=|package.json|]|extensions=[|0=|.js|1=|.json|2=|.node|]|enforceExtensions=|false|symlinks=|true|mainFields=[|0=|main|]|mainFiles=[|0=|index|]|roots=[|]|fullySpecified=|true|preferRelative=|false|preferAbsolute=|false|restrictions=[|]|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\results\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=|false|dependencyType=|esm|modules=[|0=|node_modules|]|fallback=|false|exportsFields=[|0=|exports|]|importsFields=[|0=|imports|]|conditionNames=[|0=|node|1=|import|]|descriptionFiles=[|0=|package.json|]|extensions=[|0=|.js|1=|.json|2=|.node|]|enforceExtensions=|false|symlinks=|true|mainFields=[|0=|main|]|mainFiles=[|0=|index|]|roots=[|]|fullySpecified=|true|preferRelative=|false|preferAbsolute=|false|restrictions=[|]|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\staff\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=|false|dependencyType=|esm|modules=[|0=|node_modules|]|fallback=|false|exportsFields=[|0=|exports|]|importsFields=[|0=|imports|]|conditionNames=[|0=|node|1=|import|]|descriptionFiles=[|0=|package.json|]|extensions=[|0=|.js|1=|.json|2=|.node|]|enforceExtensions=|false|symlinks=|true|mainFields=[|0=|main|]|mainFiles=[|0=|index|]|roots=[|]|fullySpecified=|true|preferRelative=|false|preferAbsolute=|false|restrictions=[|]|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\students\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/empty|client-only$=|next/dist/compiled/client-only/error|next/dist/compiled/server-only$=|next/dist/compiled/server-only/empty|next/dist/compiled/client-only$=|next/dist/compiled/client-only/error|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation.react-server|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\staff\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/empty|client-only$=|next/dist/compiled/client-only/error|next/dist/compiled/server-only$=|next/dist/compiled/server-only/empty|next/dist/compiled/client-only$=|next/dist/compiled/client-only/error|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation.react-server|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\students\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-loader\index.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[3].use[0]!C:\Users\OLU\Desktop\SMS\src\app\school-admin\staff\page.tsx|rsc from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-loader\index.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[3].use[0]!C:\Users\OLU\Desktop\SMS\src\app\school-admin\students\page.tsx|rsc from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/empty|client-only$=|next/dist/compiled/client-only/error|next/dist/compiled/server-only$=|next/dist/compiled/server-only/empty|next/dist/compiled/client-only$=|next/dist/compiled/client-only/error|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation.react-server|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\results\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/empty|client-only$=|next/dist/compiled/client-only/error|next/dist/compiled/server-only$=|next/dist/compiled/server-only/empty|next/dist/compiled/client-only$=|next/dist/compiled/client-only/error|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation.react-server|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\dashboard\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-loader\index.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[3].use[0]!C:\Users\OLU\Desktop\SMS\src\app\school-admin\results\page.tsx|rsc from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-loader\index.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[3].use[0]!C:\Users\OLU\Desktop\SMS\src\app\school-admin\dashboard\page.tsx|rsc from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/empty|client-only$=|next/dist/compiled/client-only/error|next/dist/compiled/server-only$=|next/dist/compiled/server-only/empty|next/dist/compiled/client-only$=|next/dist/compiled/client-only/error|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation.react-server|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|react$=|next/dist/server/future/route-modules/app-page/vendored/rsc/react|react-dom$=|next/dist/server/future/route-modules/app-page/vendored/rsc/react-dom|react/jsx-runtime$=|next/dist/server/future/route-modules/app-page/vendored/rsc/react-jsx-runtime|react/jsx-dev-runtime$=|next/dist/server/future/route-modules/app-page/vendored/rsc/react-jsx-dev-runtime|react-dom/client$=|next/dist/compiled/react-dom/client|react-dom/server$=|next/dist/compiled/react-dom/server|react-dom/static$=|next/dist/compiled/react-dom-experimental/static|react-dom/static.edge$=|next/dist/compiled/react-dom-experimental/static.edge|react-dom/static.browser$=|next/dist/compiled/react-dom-experimental/static.browser|react-dom/server.edge$=|next/dist/build/webpack/alias/react-dom-server-edge.js|react-dom/server.browser$=|next/dist/build/webpack/alias/react-dom-server-browser.js|react-server-dom-webpack/client$=|next/dist/compiled/react-server-dom-webpack/client|react-server-dom-webpack/client.edge$=|next/dist/compiled/react-server-dom-webpack/client.edge|react-server-dom-webpack/server.edge$=|next/dist/server/future/route-modules/app-page/vendored/rsc/react-server-dom-webpack-server-edge|react-server-dom-webpack/server.node$=|next/dist/server/future/route-modules/app-page/vendored/rsc/react-server-dom-webpack-server-node|@vercel/turbopack-ecmascript-runtime/dev/client/hmr-client.ts=|next/dist/client/dev/noop-turbopack-hmr|]|mainFields=[|0=|module|1=|main|]|conditionNames=[|0=|react-server|1=|...|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS\src\app|request=|@/components/BottomNavigation from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-loader\index.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[3].use[0]!C:\Users\OLU\Desktop\SMS\src\components\BottomNavigation.tsx|rsc from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=|false|dependencyType=|esm|modules=[|0=|node_modules|]|fallback=|false|exportsFields=[|0=|exports|]|importsFields=[|0=|imports|]|conditionNames=[|0=|node|1=|import|]|descriptionFiles=[|0=|package.json|]|extensions=[|0=|.js|1=|.json|2=|.node|]|enforceExtensions=|false|symlinks=|true|mainFields=[|0=|main|]|mainFiles=[|0=|index|]|roots=[|]|fullySpecified=|true|preferRelative=|false|preferAbsolute=|false|restrictions=[|]|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\components\BottomNavigation.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/index|client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/server-only=|next/dist/compiled/server-only/index|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\dashboard\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/index|client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/server-only=|next/dist/compiled/server-only/index|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\results\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/index|client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/server-only=|next/dist/compiled/server-only/index|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\staff\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/index|client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/server-only=|next/dist/compiled/server-only/index|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\app\school-admin\students\page.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/index|client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/server-only=|next/dist/compiled/server-only/index|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS|request=|C:\Users\OLU\Desktop\SMS\src\components\BottomNavigation.tsx from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-client-module-loader.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[6].use[1]!C:\Users\OLU\Desktop\SMS\src\app\school-admin\dashboard\page.tsx|ssr from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-client-module-loader.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[6].use[1]!C:\Users\OLU\Desktop\SMS\src\app\school-admin\results\page.tsx|ssr from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-client-module-loader.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[6].use[1]!C:\Users\OLU\Desktop\SMS\src\app\school-admin\staff\page.tsx|ssr from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-client-module-loader.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[6].use[1]!C:\Users\OLU\Desktop\SMS\src\app\school-admin\students\page.tsx|ssr from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-client-module-loader.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[6].use[1]!C:\Users\OLU\Desktop\SMS\src\components\BottomNavigation.tsx|ssr from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for ResolverCachePlugin|normal|default|alias=[|server-only$=|next/dist/compiled/server-only/index|client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/client-only$=|next/dist/compiled/client-only/index|next/dist/compiled/server-only=|next/dist/compiled/server-only/index|C:\Users\OLU\Desktop\SMS\node_modules\next\head.js=|next/dist/client/components/noop-head|C:\Users\OLU\Desktop\SMS\node_modules\next\image.js=|next/dist/api/image|C:\Users\OLU\Desktop\SMS\node_modules\next\constants.js=|next/dist/api/constants|C:\Users\OLU\Desktop\SMS\node_modules\next\router.js=|next/dist/api/router|C:\Users\OLU\Desktop\SMS\node_modules\next\dynamic.js=|next/dist/api/app-dynamic|C:\Users\OLU\Desktop\SMS\node_modules\next\script.js=|next/dist/api/script|C:\Users\OLU\Desktop\SMS\node_modules\next\link.js=|next/dist/api/link|C:\Users\OLU\Desktop\SMS\node_modules\next\navigation.js=|next/dist/api/navigation|C:\Users\OLU\Desktop\SMS\node_modules\next\headers.js=|next/dist/api/headers|C:\Users\OLU\Desktop\SMS\node_modules\next\og.js=|next/dist/api/og|C:\Users\OLU\Desktop\SMS\node_modules\next\server.js=|next/dist/api/server|C:\Users\OLU\Desktop\SMS\node_modules\next\document.js=|next/dist/api/document|C:\Users\OLU\Desktop\SMS\node_modules\next\app.js=|next/dist/api/app|react$=|next/dist/server/future/route-modules/app-page/vendored/ssr/react|react-dom$=|next/dist/server/future/route-modules/app-page/vendored/ssr/react-dom|react/jsx-runtime$=|next/dist/server/future/route-modules/app-page/vendored/ssr/react-jsx-runtime|react/jsx-dev-runtime$=|next/dist/server/future/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime|react-dom/client$=|next/dist/compiled/react-dom/client|react-dom/server$=|next/dist/compiled/react-dom/server|react-dom/static$=|next/dist/compiled/react-dom-experimental/static|react-dom/static.edge$=|next/dist/compiled/react-dom-experimental/static.edge|react-dom/static.browser$=|next/dist/compiled/react-dom-experimental/static.browser|react-dom/server.edge$=|next/dist/build/webpack/alias/react-dom-server-edge.js|react-dom/server.browser$=|next/dist/build/webpack/alias/react-dom-server-browser.js|react-server-dom-webpack/client$=|next/dist/compiled/react-server-dom-webpack/client|react-server-dom-webpack/client.edge$=|next/dist/server/future/route-modules/app-page/vendored/ssr/react-server-dom-webpack-client-edge|react-server-dom-webpack/server.edge$=|next/dist/compiled/react-server-dom-webpack/server.edge|react-server-dom-webpack/server.node$=|next/dist/compiled/react-server-dom-webpack/server.node|@vercel/turbopack-ecmascript-runtime/dev/client/hmr-client.ts=|next/dist/client/dev/noop-turbopack-hmr|]|mainFields=[|0=|module|1=|main|]|dependencyType=|esm|path=|C:\Users\OLU\Desktop\SMS\src\components\admin|request=|@/services/academic.service from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/modules|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-client-module-loader.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[6].use[1]!C:\Users\OLU\Desktop\SMS\src\services\academic.service.ts|ssr from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for FlagDependencyExportsPlugin|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-client-module-loader.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[6].use[1]!C:\Users\OLU\Desktop\SMS\src\app\school-admin\dashboard\page.tsx|ssr from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for FlagDependencyExportsPlugin|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-client-module-loader.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[6].use[1]!C:\Users\OLU\Desktop\SMS\src\components\BottomNavigation.tsx|ssr from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for FlagDependencyExportsPlugin|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-client-module-loader.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[6].use[1]!C:\Users\OLU\Desktop\SMS\src\services\academic.service.ts|ssr from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/codeGeneration|javascript/auto|C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-flight-client-module-loader.js!C:\Users\OLU\Desktop\SMS\node_modules\next\dist\build\webpack\loaders\next-swc-loader.js??ruleSet[1].rules[16].oneOf[6].use[1]!C:\Users\OLU\Desktop\SMS\src\components\BottomNavigation.tsx|ssr|webpack-runtime from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Restoring failed for Compilation/assets|chunk2184 from pack: Error: Unexpected end of stream
-<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: Unexpected end of stream
 Failed to compile.
 
 ./src/app/share/letter/[token]/page.tsx
@@ -63,7 +30,266 @@ Module not found: Can't resolve 'lucide-react'
 https://nextjs.org/docs/messages/module-not-found
 
 Import trace for requested module:
-./src/app/school-admin/students/page.tsx
+./src/app/school-admin/staff/page.tsx
+
+./src/app/api/letters/fetch-staff/route.ts
+Module not found: Can't resolve '@/lib/supabase-admin'
+
+https://nextjs.org/docs/messages/module-not-found
+
+./src/app/school-admin/results/page.tsx
+Error: 
+  [31mx[0m Return statement is not allowed here
+     ,-[[36;1;4mC:\Users\OLU\Desktop\SMS\src\app\school-admin\results\page.tsx[0m:555:1]
+ [2m555[0m |       }
+ [2m556[0m |     
+ [2m557[0m |       if (state.loading) {
+ [2m558[0m | [31;1m,[0m[31;1m-[0m[31;1m>[0m     return (
+ [2m559[0m | [31;1m|[0m         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+ [2m560[0m | [31;1m|[0m           <div className="text-center">
+ [2m561[0m | [31;1m|[0m             <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-purple-500 mx-auto mb-4"></div>
+ [2m562[0m | [31;1m|[0m             <p className="text-gray-600 font-semibold">Loading results page...</p>
+ [2m563[0m | [31;1m|[0m           </div>
+ [2m564[0m | [31;1m|[0m         </div>
+ [2m565[0m | [31;1m`[0m[31;1m-[0m[31;1m>[0m     )
+ [2m566[0m |       }
+ [2m567[0m |     
+ [2m567[0m |       return (
+     `----
+
+  [31mx[0m Return statement is not allowed here
+     ,-[[36;1;4mC:\Users\OLU\Desktop\SMS\src\app\school-admin\results\page.tsx[0m:565:1]
+ [2m565[0m |         )
+ [2m566[0m |       }
+ [2m567[0m |     
+ [2m568[0m | [31;1m,[0m[31;1m-[0m[31;1m>[0m   return (
+ [2m569[0m | [31;1m|[0m       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pb-20">
+ [2m570[0m | [31;1m|[0m         {/* Header */}
+ [2m571[0m | [31;1m|[0m         <div className="sticky top-0 z-50">
+ [2m572[0m | [31;1m|[0m           <StaffHeader
+ [2m573[0m | [31;1m|[0m             staffName={state.user?.full_name || 'School Administrator'}
+ [2m574[0m | [31;1m|[0m             schoolName={state.school?.name || 'School'}
+ [2m575[0m | [31;1m|[0m             section="Results Management"
+ [2m576[0m | [31;1m|[0m           />
+ [2m577[0m | [31;1m|[0m         </div>
+ [2m578[0m | [31;1m|[0m   
+ [2m579[0m | [31;1m|[0m         {/* Main Content */}
+ [2m580[0m | [31;1m|[0m         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+ [2m581[0m | [31;1m|[0m           {/* Error Message */}
+ [2m582[0m | [31;1m|[0m           {state.error && (
+ [2m583[0m | [31;1m|[0m             <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+ [2m584[0m | [31;1m|[0m               {state.error}
+ [2m585[0m | [31;1m|[0m             </div>
+ [2m586[0m | [31;1m|[0m           )}
+ [2m587[0m | [31;1m|[0m   
+ [2m588[0m | [31;1m|[0m           {/* Selectors Section */}
+ [2m589[0m | [31;1m|[0m           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+ [2m590[0m | [31;1m|[0m             {/* Session Selector */}
+ [2m591[0m | [31;1m|[0m             <div className="bg-white rounded-lg shadow-lg p-6">
+ [2m592[0m | [31;1m|[0m               <label className="block text-sm font-bold text-gray-700 mb-3">
+ [2m593[0m | [31;1m|[0m                 📅 Academic Session
+ [2m594[0m | [31;1m|[0m               </label>
+ [2m595[0m | [31;1m|[0m               <select
+ [2m596[0m | [31;1m|[0m                 value={state.selectedSession || ''}
+ [2m597[0m | [31;1m|[0m                 onChange={(e) => {
+ [2m598[0m | [31;1m|[0m                   setState(s => ({ 
+ [2m599[0m | [31;1m|[0m                     ...s, 
+ [2m600[0m | [31;1m|[0m                     selectedSession: e.target.value || null,
+ [2m601[0m | [31;1m|[0m                     selectedTerm: null,
+ [2m602[0m | [31;1m|[0m                     terms: [],
+ [2m603[0m | [31;1m|[0m                     classes: [],
+ [2m604[0m | [31;1m|[0m                   }))
+ [2m605[0m | [31;1m|[0m                 }}
+ [2m606[0m | [31;1m|[0m                 className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none bg-white"
+ [2m607[0m | [31;1m|[0m               >
+ [2m608[0m | [31;1m|[0m                 <option value="">Select a session</option>
+ [2m609[0m | [31;1m|[0m                 {state.sessions.map(session => (
+ [2m610[0m | [31;1m|[0m                   <option key={session.id} value={session.id}>
+ [2m611[0m | [31;1m|[0m                     {session.session_year}
+ [2m612[0m | [31;1m|[0m                     {session.is_active ? ' ✓ Current' : ''}
+ [2m613[0m | [31;1m|[0m                   </option>
+ [2m614[0m | [31;1m|[0m                 ))}
+ [2m615[0m | [31;1m|[0m               </select>
+ [2m616[0m | [31;1m|[0m               {state.sessions.length === 0 && (
+ [2m617[0m | [31;1m|[0m                 <p className="text-sm text-gray-500 mt-2">📭 No sessions available</p>
+ [2m618[0m | [31;1m|[0m               )}
+ [2m619[0m | [31;1m|[0m             </div>
+ [2m620[0m | [31;1m|[0m   
+ [2m621[0m | [31;1m|[0m             {/* Term Selector */}
+ [2m622[0m | [31;1m|[0m             <div className="bg-white rounded-lg shadow-lg p-6">
+ [2m623[0m | [31;1m|[0m               <label className="block text-sm font-bold text-gray-700 mb-3">
+ [2m624[0m | [31;1m|[0m                 📋 Term
+ [2m625[0m | [31;1m|[0m               </label>
+ [2m626[0m | [31;1m|[0m               <select
+ [2m627[0m | [31;1m|[0m                 value={state.selectedTerm || ''}
+ [2m628[0m | [31;1m|[0m                 onChange={(e) => {
+ [2m629[0m | [31;1m|[0m                   setState(s => ({ 
+ [2m630[0m | [31;1m|[0m                     ...s, 
+ [2m631[0m | [31;1m|[0m                     selectedTerm: e.target.value || null,
+ [2m632[0m | [31;1m|[0m                     classes: [],
+ [2m633[0m | [31;1m|[0m                   }))
+ [2m634[0m | [31;1m|[0m                 }}
+ [2m635[0m | [31;1m|[0m                 disabled={!state.selectedSession || state.loadingTerms}
+ [2m636[0m | [31;1m|[0m                 className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+ [2m637[0m | [31;1m|[0m               >
+ [2m638[0m | [31;1m|[0m                 <option value="">
+ [2m639[0m | [31;1m|[0m                   {state.loadingTerms ? '⏳ Loading terms...' : 'Select a term'}
+ [2m640[0m | [31;1m|[0m                 </option>
+ [2m641[0m | [31;1m|[0m                 {state.terms.map(term => (
+ [2m642[0m | [31;1m|[0m                   <option key={term.id} value={term.id}>
+ [2m643[0m | [31;1m|[0m                     {term.name || `Term ${term.term_number}`}
+ [2m644[0m | [31;1m|[0m                     {term.is_active ? ' (Active)' : ''}
+ [2m645[0m | [31;1m|[0m                   </option>
+ [2m646[0m | [31;1m|[0m                 ))}
+ [2m647[0m | [31;1m|[0m               </select>
+ [2m648[0m | [31;1m|[0m               {!state.selectedSession && (
+ [2m649[0m | [31;1m|[0m                 <p className="text-sm text-gray-500 mt-2">👆 Select a session first</p>
+ [2m650[0m | [31;1m|[0m               )}
+ [2m651[0m | [31;1m|[0m               {state.selectedSession && state.terms.length === 0 && !state.loadingTerms && (
+ [2m652[0m | [31;1m|[0m                 <p className="text-sm text-gray-500 mt-2">📭 No terms available</p>
+ [2m653[0m | [31;1m|[0m               )}
+ [2m654[0m | [31;1m|[0m             </div>
+ [2m655[0m | [31;1m|[0m           </div>
+ [2m656[0m | [31;1m|[0m   
+ [2m657[0m | [31;1m|[0m           {/* Results Section */}
+ [2m658[0m | [31;1m|[0m           {state.selectedTerm && (
+ [2m659[0m | [31;1m|[0m             <div>
+ [2m660[0m | [31;1m|[0m               <div className="mb-6">
+ [2m661[0m | [31;1m|[0m                 <h2 className="text-3xl font-bold text-gray-900">
+ [2m662[0m | [31;1m|[0m                   📊 Results - {getSelectedSessionYear()} • {getSelectedTermName()}
+ [2m663[0m | [31;1m|[0m                 </h2>
+ [2m664[0m | [31;1m|[0m                 <p className="text-gray-600 mt-2">
+ [2m665[0m | [31;1m|[0m                   {state.loadingClasses ? '⏳ Loading classes and students...' : `${state.classes.length} classes`}
+ [2m666[0m | [31;1m|[0m                 </p>
+ [2m667[0m | [31;1m|[0m               </div>
+ [2m668[0m | [31;1m|[0m   
+ [2m669[0m | [31;1m|[0m               {state.loadingClasses ? (
+ [2m670[0m | [31;1m|[0m                 <div className="text-center py-12">
+ [2m671[0m | [31;1m|[0m                   <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-purple-500 mx-auto mb-4"></div>
+ [2m672[0m | [31;1m|[0m                   <p className="text-gray-600">Loading classes and student results...</p>
+ [2m673[0m | [31;1m|[0m                 </div>
+ [2m674[0m | [31;1m|[0m               ) : state.classes.length === 0 ? (
+ [2m675[0m | [31;1m|[0m                 <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+ [2m676[0m | [31;1m|[0m                   <p className="text-gray-600">📭 No classes found for this term</p>
+ [2m677[0m | [31;1m|[0m                 </div>
+ [2m678[0m | [31;1m|[0m               ) : (
+ [2m679[0m | [31;1m|[0m                 <div className="space-y-6">
+ [2m680[0m | [31;1m|[0m                   {state.classes.map(cls => (
+ [2m681[0m | [31;1m|[0m                     <div key={cls.id} className="bg-white rounded-lg shadow-lg overflow-hidden">
+ [2m682[0m | [31;1m|[0m                       {/* Class Header */}
+ [2m683[0m | [31;1m|[0m                       <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4">
+ [2m684[0m | [31;1m|[0m                         <h3 className="text-xl font-bold">
+ [2m685[0m | [31;1m|[0m                           {cls.class_name} {cls.arm_name}
+ [2m686[0m | [31;1m|[0m                         </h3>
+ [2m687[0m | [31;1m|[0m                         <p className="text-blue-100 text-sm mt-1">
+ [2m688[0m | [31;1m|[0m                           👥 {cls.student_count} student{cls.student_count !== 1 ? 's' : ''}
+ [2m689[0m | [31;1m|[0m                         </p>
+ [2m690[0m | [31;1m|[0m                       </div>
+ [2m691[0m | [31;1m|[0m   
+ [2m692[0m | [31;1m|[0m                       {/* Students Table */}
+ [2m693[0m | [31;1m|[0m                       {cls.students.length === 0 ? (
+ [2m694[0m | [31;1m|[0m                         <div className="p-6 text-center text-gray-600">
+ [2m695[0m | [31;1m|[0m                           No students enrolled in this class
+ [2m696[0m | [31;1m|[0m                         </div>
+ [2m697[0m | [31;1m|[0m                       ) : (
+ [2m698[0m | [31;1m|[0m                         <div className="overflow-x-auto">
+ [2m699[0m | [31;1m|[0m                           <table className="w-full">
+ [2m700[0m | [31;1m|[0m                             <thead className="bg-gray-100 border-b-2 border-gray-300">
+ [2m701[0m | [31;1m|[0m                               <tr>
+ [2m702[0m | [31;1m|[0m                                 <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">
+ [2m703[0m | [31;1m|[0m                                   Admission #
+ [2m704[0m | [31;1m|[0m                                 </th>
+ [2m705[0m | [31;1m|[0m                                 <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">
+ [2m706[0m | [31;1m|[0m                                   Student Name
+ [2m707[0m | [31;1m|[0m                                 </th>
+ [2m708[0m | [31;1m|[0m                                 <th className="px-6 py-3 text-center text-sm font-bold text-gray-700">
+ [2m709[0m | [31;1m|[0m                                   Score
+ [2m710[0m | [31;1m|[0m                                 </th>
+ [2m711[0m | [31;1m|[0m                                 <th className="px-6 py-3 text-center text-sm font-bold text-gray-700">
+ [2m712[0m | [31;1m|[0m                                   Grade
+ [2m713[0m | [31;1m|[0m                                 </th>
+ [2m714[0m | [31;1m|[0m                                 <th className="px-6 py-3 text-left text-sm font-bold text-gray-700">
+ [2m715[0m | [31;1m|[0m                                   Performance
+ [2m716[0m | [31;1m|[0m                                 </th>
+ [2m717[0m | [31;1m|[0m                               </tr>
+ [2m718[0m | [31;1m|[0m                             </thead>
+ [2m719[0m | [31;1m|[0m                             <tbody className="divide-y">
+ [2m720[0m | [31;1m|[0m                               {cls.students.map((student, idx) => (
+ [2m721[0m | [31;1m|[0m                                 <tr 
+ [2m722[0m | [31;1m|[0m                                   key={student.id} 
+ [2m723[0m | [31;1m|[0m                                   className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+ [2m724[0m | [31;1m|[0m                                 >
+ [2m725[0m | [31;1m|[0m                                   <td className="px-6 py-4 text-sm font-semibold text-gray-700">
+ [2m726[0m | [31;1m|[0m                                     {student.admission_number}
+ [2m727[0m | [31;1m|[0m                                   </td>
+ [2m728[0m | [31;1m|[0m                                   <td className="px-6 py-4 text-sm text-gray-700">
+ [2m729[0m | [31;1m|[0m                                     {student.full_name}
+ [2m730[0m | [31;1m|[0m                                   </td>
+ [2m731[0m | [31;1m|[0m                                   <td className="px-6 py-4 text-center text-sm font-bold text-gray-900">
+ [2m732[0m | [31;1m|[0m                                     {student.overall_score}
+ [2m733[0m | [31;1m|[0m                                   </td>
+ [2m734[0m | [31;1m|[0m                                   <td className="px-6 py-4 text-center">
+ [2m735[0m | [31;1m|[0m                                     <span className={`px-3 py-1 rounded-full text-sm font-bold text-white ${
+ [2m736[0m | [31;1m|[0m                                       student.overall_grade === 'A' ? 'bg-green-600' :
+ [2m737[0m | [31;1m|[0m                                       student.overall_grade === 'B' ? 'bg-blue-600' :
+ [2m738[0m | [31;1m|[0m                                       student.overall_grade === 'C' ? 'bg-yellow-600' :
+ [2m739[0m | [31;1m|[0m                                       student.overall_grade === 'D' ? 'bg-orange-600' :
+ [2m740[0m | [31;1m|[0m                                       'bg-red-600'
+ [2m741[0m | [31;1m|[0m                                     }`}>
+ [2m742[0m | [31;1m|[0m                                       {student.overall_grade}
+ [2m743[0m | [31;1m|[0m                                     </span>
+ [2m744[0m | [31;1m|[0m                                   </td>
+ [2m745[0m | [31;1m|[0m                                   <td className="px-6 py-4 text-sm">
+ [2m746[0m | [31;1m|[0m                                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+ [2m747[0m | [31;1m|[0m                                       student.performance_rating === 'Excellent' ? 'bg-green-100 text-green-800' :
+ [2m748[0m | [31;1m|[0m                                       student.performance_rating === 'Very Good' ? 'bg-blue-100 text-blue-800' :
+ [2m749[0m | [31;1m|[0m                                       student.performance_rating === 'Good' ? 'bg-cyan-100 text-cyan-800' :
+ [2m750[0m | [31;1m|[0m                                       student.performance_rating === 'Fair' ? 'bg-yellow-100 text-yellow-800' :
+ [2m751[0m | [31;1m|[0m                                       student.performance_rating === 'Poor' ? 'bg-orange-100 text-orange-800' :
+ [2m752[0m | [31;1m|[0m                                       'bg-red-100 text-red-800'
+ [2m753[0m | [31;1m|[0m                                     }`}>
+ [2m754[0m | [31;1m|[0m                                       {student.performance_rating}
+ [2m755[0m | [31;1m|[0m                                     </span>
+ [2m756[0m | [31;1m|[0m                                   </td>
+ [2m757[0m | [31;1m|[0m                                 </tr>
+ [2m758[0m | [31;1m|[0m                               ))}
+ [2m759[0m | [31;1m|[0m                             </tbody>
+ [2m760[0m | [31;1m|[0m                           </table>
+ [2m761[0m | [31;1m|[0m                         </div>
+ [2m762[0m | [31;1m|[0m                       )}
+ [2m763[0m | [31;1m|[0m                     </div>
+ [2m764[0m | [31;1m|[0m                   ))}
+ [2m765[0m | [31;1m|[0m                 </div>
+ [2m766[0m | [31;1m|[0m               )}
+ [2m767[0m | [31;1m|[0m             </div>
+ [2m768[0m | [31;1m|[0m           )}
+ [2m769[0m | [31;1m|[0m   
+ [2m770[0m | [31;1m|[0m           {/* No Selection Message */}
+ [2m771[0m | [31;1m|[0m           {!state.selectedTerm && state.selectedSession && (
+ [2m772[0m | [31;1m|[0m             <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+ [2m773[0m | [31;1m|[0m               <p className="text-gray-600">👆 Select a term to view results</p>
+ [2m774[0m | [31;1m|[0m             </div>
+ [2m775[0m | [31;1m|[0m           )}
+ [2m776[0m | [31;1m|[0m         </div>
+ [2m777[0m | [31;1m|[0m       </div>
+ [2m778[0m | [31;1m`[0m[31;1m-[0m[31;1m>[0m   )
+ [2m779[0m |     }
+     `----
+
+  [31mx[0m Expression expected
+     ,-[[36;1;4mC:\Users\OLU\Desktop\SMS\src\app\school-admin\results\page.tsx[0m:776:1]
+ [2m776[0m |       </div>
+ [2m777[0m |     </div>
+ [2m778[0m |   )
+ [2m779[0m | }
+     : [31;1m^[0m
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/school-admin/results/page.tsx
 
 
 > Build failed because of webpack errors
