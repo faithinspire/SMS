@@ -53,25 +53,44 @@ export class LetterGenerationService {
    */
   static async fetchStaffData(staffId: string, schoolId: string): Promise<StaffData | null> {
     try {
-      console.log('[LetterGenService] Fetching staff data via API for:', staffId);
+      console.log('[LetterGenService] 🚀 Fetching staff data via API for:', { staffId, schoolId });
 
-      const response = await fetch(`/api/letters/fetch-staff?staffId=${staffId}&schoolId=${schoolId}`)
+      const url = `/api/letters/fetch-staff?staffId=${staffId}&schoolId=${schoolId}`
+      console.log('[LetterGenService] API URL:', url)
+
+      const response = await fetch(url)
+
+      console.log('[LetterGenService] API response status:', response.status, response.statusText)
 
       if (!response.ok) {
-        console.error('[LetterGenService] API error:', response.status, response.statusText)
+        let errorDetails = ''
+        try {
+          const errorBody = await response.json()
+          errorDetails = JSON.stringify(errorBody)
+        } catch {
+          errorDetails = await response.text()
+        }
+        console.error('[LetterGenService] ❌ API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          details: errorDetails
+        })
         return null
       }
 
       const result = await response.json()
 
+      console.log('[LetterGenService] API response received:', result)
+
       if (!result.success || !result.data) {
-        console.error('[LetterGenService] Invalid API response:', result)
+        console.error('[LetterGenService] ❌ Invalid API response structure:', result)
         return null
       }
 
+      console.log('[LetterGenService] ✅ Staff data retrieved successfully')
       return result.data as StaffData
     } catch (error) {
-      console.error('[LetterGenService] Error fetching staff data:', error)
+      console.error('[LetterGenService] ❌ Exception fetching staff data:', error)
       return null
     }
   }

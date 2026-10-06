@@ -12,7 +12,10 @@ export async function GET(request: NextRequest) {
     const staffId = searchParams.get('staffId')
     const schoolId = searchParams.get('schoolId')
 
+    console.log('[API /letters/fetch-staff] Request received:', { staffId, schoolId })
+
     if (!staffId || !schoolId) {
+      console.error('[API /letters/fetch-staff] Missing required params')
       return NextResponse.json(
         { error: 'Missing staffId or schoolId' },
         { status: 400 }
@@ -22,6 +25,7 @@ export async function GET(request: NextRequest) {
     const supabase = createClient()
 
     // Fetch staff record
+    console.log('[API /letters/fetch-staff] Fetching staff record...')
     const { data: staffRecord, error: staffError } = await supabase
       .from('staff')
       .select(`
@@ -40,19 +44,22 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (staffError) {
-      console.error('[Staff API] Error fetching staff:', staffError)
+      console.error('[API /letters/fetch-staff] Staff query error:', staffError)
       return NextResponse.json(
-        { error: 'Failed to fetch staff record' },
+        { error: 'Failed to fetch staff record', details: staffError.message },
         { status: 500 }
       )
     }
 
     if (!staffRecord) {
+      console.error('[API /letters/fetch-staff] Staff record not found:', { staffId, schoolId })
       return NextResponse.json(
-        { error: 'Staff not found' },
+        { error: 'Staff not found', details: `No staff with ID ${staffId} in school ${schoolId}` },
         { status: 404 }
       )
     }
+
+    console.log('[API /letters/fetch-staff] Staff record found, fetching user data...')
 
     // Fetch user data
     const { data: userData, error: userError } = await supabase
@@ -61,13 +68,23 @@ export async function GET(request: NextRequest) {
       .eq('id', staffRecord.user_id)
       .maybeSingle()
 
-    if (userError || !userData) {
-      console.error('[Staff API] Error fetching user:', userError)
+    if (userError) {
+      console.error('[API /letters/fetch-staff] User query error:', userError)
       return NextResponse.json(
-        { error: 'Failed to fetch user data' },
+        { error: 'Failed to fetch user data', details: userError.message },
         { status: 500 }
       )
     }
+
+    if (!userData) {
+      console.error('[API /letters/fetch-staff] User not found for staff:', staffRecord.user_id)
+      return NextResponse.json(
+        { error: 'User not found', details: `No user with ID ${staffRecord.user_id}` },
+        { status: 404 }
+      )
+    }
+
+    console.log('[API /letters/fetch-staff] ✅ Success - returning staff data')
 
     // Return combined staff data
     return NextResponse.json({
@@ -88,9 +105,9 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('[Staff API] Unexpected error:', error)
+    console.error('[API /letters/fetch-staff] Unexpected error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }

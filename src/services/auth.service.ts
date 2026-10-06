@@ -392,7 +392,7 @@ export class AuthService {
           id: `fallback_${fallbackSession.school_id}`,
           email: fallbackSession.adminEmail,
           name: `${fallbackSession.schoolName} Admin`,
-          full_name: `${fallbackSession.schoolName} Admin`, // Add this
+          full_name: `${fallbackSession.schoolName} Admin`,
           role: 'SCHOOL_ADMIN',
           school_id: fallbackSession.school_id,
           createdAt: fallbackSession.loginTime,
@@ -406,70 +406,94 @@ export class AuthService {
 
       console.log('👤 Auth user:', data.user.id, 'Email:', data.user.email)
       
-      // PRIMARY: Get role and school_id from users table (authoritative source)
-      // Note: User might not exist in users table yet (created in auth.users only)
-      try {
-        const { data: userRecords, error: userError } = await supabase
-          .from('users')
-          .select('role, school_id, full_name')
-          .eq('id', data.user.id)
-          .maybeSingle()
+      // Get role and school_id from auth metadata first (fastest)
+      const metadataRole = data.user.user_metadata?.role as string
+      const metadataSchoolId = data.user.user_metadata?.school_id as string
+      const metadataFullName = data.user.user_metadata?.name as string
 
-        if (!userError && userRecords) {
-          console.log('✅ User record found:', userRecords.role, 'School:', userRecords.school_id)
-          return {
-            id: data.user.id,
-            email: data.user.email || '',
-            name: userRecords.full_name || data.user.user_metadata?.name || '',
-            full_name: userRecords.full_name || data.user.user_metadata?.name || '',
-            role: (userRecords.role || 'STUDENT') as any,
-            school_id: userRecords.school_id,
-            createdAt: data.user.created_at,
-            loginMethod: 'auth',
-          }
-        } else if (userError) {
-          // Log the specific error for debugging
-          console.warn('⚠️ User table query error:', userError.message || userError)
-        } else {
-          // User exists in auth but not in users table - use metadata as fallback
-          console.warn('⚠️ User not found in users table, falling back to metadata')
+      console.log('🔍 Auth metadata:', { metadataRole, metadataSchoolId, email: data.user.email })
+
+      // PRIORITY 1: If we have school_id in metadata, use it immediately
+      if (metadataSchoolId) {
+        let mappedRole = metadataRole || 'STUDENT'
+        if (mappedRole === 'ADMIN') {
+          mappedRole = 'SCHOOL_ADMIN'
         }
-      } catch (dbError) {
-        console.warn('Could not fetch user record from database:', dbError)
+        
+        console.log('✅ PRIORITY 1: Using school_id from auth metadata:', metadataSchoolId)
+        
+        return {
+          id: data.user.id,
+          email: data.user.email || '',
+          name: metadataFullName || '',
+          full_name: metadataFullName || '',
+          role: (mappedRole || 'STUDENT') as any,
+          school_id: metadataSchoolId,
+          createdAt: data.user.created_at,
+          loginMethod: 'auth',
+        }
       }
 
-      // FALLBACK: Use metadata if database lookup fails
-      // This handles cases where the user record hasn't been created yet
-      const role = data.user.user_metadata?.role as string
-      const school_id = data.user.user_metadata?.school_id as string
-      const fullName = data.user.user_metadata?.name as string
-      
-      console.log('⚠️ Using metadata - role:', role, 'school_id:', school_id)
-      
-      // Map 'ADMIN' role from old system to 'SCHOOL_ADMIN'
-      let mappedRole = role || 'STUDENT'
+      // PRIORITY 2: If no metadata school_id, try to fetch from users table (for ADMIN/SCHOOL_ADMIN only)
+      if (metadataRole === 'SCHOOL_ADMIN' || metadataRole === 'ADMIN') {
+        try {
+          console.log('🔍 PRIORITY 2: Looking up user record in database...')
+          const { data: userRecord, error: userError } = await supabase
+            .from('users')
+            .select('role, school_id, full_name')
+            .eq('id', data.user.id)
+            .maybeSingle()
+
+          if (!userError && userRecord?.school_id) {
+            console.log('✅ PRIORITY 2: Found school_id in users table:', userRecord.school_id)
+            
+            let mappedRole = userRecord.role === 'ADMIN' ? 'SCHOOL_ADMIN' : userRecord.role
+            
+            return {
+              id: data.user.id,
+              email: data.user.email || '',
+              name: userRecord.full_name || metadataFullName || '',
+              full_name: userRecord.full_name || metadataFullName || '',
+              role: (mappedRole || 'STUDENT') as any,
+              school_id: userRecord.school_id,
+              createdAt: data.user.created_at,
+              loginMethod: 'auth',
+            }
+          } else if (userError) {
+            console.warn('⚠️  Database lookup error:', userError.message)
+          }
+        } catch (dbError) {
+          console.warn('⚠️  Database lookup exception:', dbError)
+        }
+      }
+
+      // PRIORITY 3: Return with whatever we have (even if school_id is missing)
+      // Pages will handle missing school_id gracefully
+      let mappedRole = metadataRole || 'STUDENT'
       if (mappedRole === 'ADMIN') {
         mappedRole = 'SCHOOL_ADMIN'
       }
-      
-      // Validate that role and school_id are present for non-student roles
-      if (mappedRole === 'SCHOOL_ADMIN' && !school_id) {
-        console.error('❌ SCHOOL_ADMIN role detected but no school_id in metadata!')
-        throw new Error('School admin user is missing school_id - cannot proceed')
+
+      console.log('⚠️  PRIORITY 3: Returning user with role=' + mappedRole + ', school_id=undefined')
+
+      if ((mappedRole === 'SCHOOL_ADMIN' || mappedRole === 'ADMIN') && !metadataSchoolId) {
+        console.error('❌ CRITICAL: SCHOOL_ADMIN/ADMIN role but NO school_id found!')
+        console.error('   Auth metadata:', JSON.stringify(data.user.user_metadata))
+        console.error('   This indicates registration did not store school_id properly')
       }
-      
+
       return {
         id: data.user.id,
         email: data.user.email || '',
-        name: fullName || '',
-        full_name: fullName || '',
+        name: metadataFullName || '',
+        full_name: metadataFullName || '',
         role: (mappedRole || 'STUDENT') as any,
-        school_id: school_id || undefined,
+        school_id: undefined, // No school_id found
         createdAt: data.user.created_at,
         loginMethod: 'auth',
       }
     } catch (error) {
-      console.error('Get user error:', error)
+      console.error('❌ Get user error:', error)
       return null
     }
   }
