@@ -1,12 +1,16 @@
 /**
  * GET /api/admin/dashboard
  * Get admin dashboard data
+ * ⚠️ DYNAMIC: Uses cookies() for Supabase auth - cannot be statically rendered
  */
 
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { AdminDashboardService } from '@/services/admin-dashboard.service'
+
+// ✅ Mark as dynamic - uses cookies() which requires request context
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {

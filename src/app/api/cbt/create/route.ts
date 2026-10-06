@@ -8,6 +8,8 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { CBTManagementService } from '@/services/cbt-management.service'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerComponentClient({ cookies })
