@@ -6,11 +6,20 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { supabase, createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
 import { LetterGenerationService } from '@/services/letter-generation.service';
 import { LetterPreviewModal as LetterPreviewModalComponent } from '@/components/admin/LetterPreviewModal';
+
+// Helper to get fresh Supabase client
+let supabaseClient: any = null;
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    supabaseClient = createClient();
+  }
+  return supabaseClient;
+}
 
 interface Student {
   id: string;
