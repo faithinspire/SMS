@@ -1,113 +1,118 @@
 import { createClient } from '@/lib/supabase-client'
 import { NextRequest, NextResponse } from 'next/server'
 
-/**
- * API Route: GET /api/letters/fetch-staff
- * Fetches staff data for letter generation
- * Query params: staffId, schoolId
- */
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
+    const searchParams = request.nextUrl.searchParams
     const staffId = searchParams.get('staffId')
     const schoolId = searchParams.get('schoolId')
 
-    console.log('[API /letters/fetch-staff] Request received:', { staffId, schoolId })
-
     if (!staffId || !schoolId) {
-      console.error('[API /letters/fetch-staff] Missing required params')
       return NextResponse.json(
-        { error: 'Missing staffId or schoolId' },
+        { success: false, error: 'Missing staffId or schoolId' },
         { status: 400 }
       )
     }
 
     const supabase = createClient()
 
-    // Fetch staff record
-    console.log('[API /letters/fetch-staff] Fetching staff record...')
-    const { data: staffRecord, error: staffError } = await supabase
-      .from('staff')
-      .select(`
-        id,
-        user_id,
-        position,
-        department,
-        employment_date,
-        salary,
-        bank_name,
-        account_number,
-        account_name
-      `)
+    // Get user record (using staffId as users.id)
+    const { data: userRecord, error: userError } = await supabase
+      .from('users')
+      .select('id, full_name, email, phone, role, status')
       .eq('id', staffId)
       .eq('school_id', schoolId)
       .maybeSingle()
 
-    if (staffError) {
-      console.error('[API /letters/fetch-staff] Staff query error:', staffError)
+    if (userError || !userRecord) {
+      console.error('Error fetching user record:', userError)
       return NextResponse.json(
-        { error: 'Failed to fetch staff record', details: staffError.message },
-        { status: 500 }
-      )
-    }
-
-    if (!staffRecord) {
-      console.error('[API /letters/fetch-staff] Staff record not found:', { staffId, schoolId })
-      return NextResponse.json(
-        { error: 'Staff not found', details: `No staff with ID ${staffId} in school ${schoolId}` },
+        { success: false, error: 'Staff not found' },
         { status: 404 }
       )
     }
 
-    console.log('[API /letters/fetch-staff] Staff record found, fetching user data...')
-
-    // Fetch user data
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, full_name, email, phone, gender, role')
-      .eq('id', staffRecord.user_id)
+    // Get staff record
+    const { data: staffRecord } = await supabase
+      .from('staff')
+      .select('id, user_id, position, department, employment_date, salary, bank_name, account_number, account_holder_name')
+      .eq('user_id', staffId)
+      .eq('school_id', schoolId)
       .maybeSingle()
 
-    if (userError) {
-      console.error('[API /letters/fetch-staff] User query error:', userError)
-      return NextResponse.json(
-        { error: 'Failed to fetch user data', details: userError.message },
-        { status: 500 }
-      )
+    // Get class assignment
+    const { data: classAssignment } = await supabase
+      .from('teacher_class_assignments')
+      .select(`
+        id,
+        class_arm_combo_id,
+        is_class_teacher,
+        class_arm_combos (
+          id,
+          class_id,
+          arm_id,
+          classes (id, name),
+          arms (id, name)
+        )
+      `)
+      .eq('teacher_id', staffId)
+      .eq('school_id', schoolId)
+      .maybeSingle()
+
+    // Get subject assignments
+    const { data: subjectAssignments } = await supabase
+      .from('subject_teacher_assignments')
+      .select(`
+        id,
+        subject_id,
+        subjects (id, name),
+        class_arm_combos (
+          id,
+          classes (id, name),
+          arms (id, name)
+        )
+      `)
+      .eq('teacher_id', staffId)
+      .eq('school_id', schoolId)
+
+    // Build response with all staff data
+    const responseData = {
+      id: userRecord.id,
+      full_name: userRecord.full_name || '',
+      email: userRecord.email || '',
+      phone: userRecord.phone || '',
+      role: userRecord.role || '',
+      position: staffRecord?.position || '',
+      department: staffRecord?.department || '',
+      employment_date: staffRecord?.employment_date || '',
+      salary: staffRecord?.salary || 0,
+      salaryFrequency: 'MONTHLY', // Default, not stored yet
+      bankName: staffRecord?.bank_name || '',
+      accountNumber: staffRecord?.account_number || '',
+      accountName: staffRecord?.account_holder_name || '',
+      classAssignment: classAssignment ? {
+        class_name: classAssignment.class_arm_combos?.classes?.name || '',
+        arm_name: classAssignment.class_arm_combos?.arms?.name || '',
+        is_class_teacher: classAssignment.is_class_teacher || false,
+      } : undefined,
+      subjects: subjectAssignments
+        ? subjectAssignments.map(sa => ({
+            name: sa.subjects?.name || '',
+            class: `${sa.class_arm_combos?.classes?.name || ''} ${sa.class_arm_combos?.arms?.name || ''}`.trim(),
+          }))
+        : [],
     }
 
-    if (!userData) {
-      console.error('[API /letters/fetch-staff] User not found for staff:', staffRecord.user_id)
-      return NextResponse.json(
-        { error: 'User not found', details: `No user with ID ${staffRecord.user_id}` },
-        { status: 404 }
-      )
-    }
-
-    console.log('[API /letters/fetch-staff] ✅ Success - returning staff data')
-
-    // Return combined staff data
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: staffRecord.id,
-        full_name: userData.full_name || '',
-        email: userData.email || '',
-        phone: userData.phone || '',
-        role: userData.role || 'Staff Member',
-        position: staffRecord.position || 'Staff Member',
-        department: staffRecord.department || '',
-        employment_date: staffRecord.employment_date || null,
-        salary: staffRecord.salary || undefined,
-        bank_name: staffRecord.bank_name || '',
-        account_number: staffRecord.account_number || '',
-        account_name: staffRecord.account_name || '',
-      },
-    })
-  } catch (error) {
-    console.error('[API /letters/fetch-staff] Unexpected error:', error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { success: true, data: responseData },
+      { status: 200 }
+    )
+  } catch (error) {
+    console.error('fetch-staff error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }

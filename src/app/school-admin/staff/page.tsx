@@ -1,585 +1,217 @@
-/**
- * School Admin Staff Management Page
- * Lists all staff for the authenticated school
- * Features: Real school context resolution, edit modal, appointment letter generation
- * 
- * KEY FIX: Uses SchoolContextService for reliable school resolution
- * - No more "account not linked to school" false errors
- * - Comprehensive error logging for diagnostics
- * - Fetches ONLY staff belonging to authenticated school
- */
+'use client'
 
-'use client';
+import React, { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { AuthService } from '@/services/auth.service'
+import { StaffService, StaffProfile } from '@/services/staff.service'
+import StaffProfileEditModal from '@/components/admin/StaffProfileEditModal'
+import { LetterPreviewModal } from '@/components/admin/LetterPreviewModal'
+import { toast } from 'react-hot-toast'
+import { Plus, Edit2, Trash2, Mail, FileText } from 'lucide-react'
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase-client';
-import { toast } from 'react-hot-toast';
-import Image from 'next/image';
-import { SchoolContextService } from '@/services/school-context.service';
-import { LetterGenerationService } from '@/services/letter-generation.service';
-import { LetterPreviewModal } from '@/components/admin/LetterPreviewModal';
+export default function StaffPage() {
+  const router = useRouter()
+  const [staff, setStaff] = useState<StaffProfile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [schoolId, setSchoolId] = useState<string | null>(null)
+  const [selectedStaff, setSelectedStaff] = useState<StaffProfile | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showLetterModal, setShowLetterModal] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
-const supabase = createClient();
-
-interface StaffMember {
-  id: string;
-  user_id: string;
-  school_id: string;
-  position: string;
-  employment_date: string;
-  department?: string;
-  salary?: number;
-  bank_name?: string;
-  account_number?: string;
-  account_name?: string;
-  status: 'ACTIVE' | 'PAUSED' | 'INACTIVE' | 'SUSPENDED';
-  user: {
-    id: string;
-    full_name: string;
-    email: string;
-    phone?: string;
-    photo_url: string | null;
-    role: string;
-  };
-}
-
-type StatusType = 'ACTIVE' | 'PAUSED' | 'INACTIVE' | 'SUSPENDED';
-
-const StatusBadge: React.FC<{ status: StatusType }> = ({ status }) => {
-  const variants: Record<StatusType, string> = {
-    ACTIVE: 'bg-green-100 text-green-800',
-    PAUSED: 'bg-yellow-100 text-yellow-800',
-    INACTIVE: 'bg-gray-100 text-gray-800',
-    SUSPENDED: 'bg-red-100 text-red-800',
-  };
-
-  return (
-    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${variants[status]}`}>
-      {status}
-    </span>
-  );
-};
-
-const ConfirmationModal: React.FC<{
-  title: string;
-  message: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-  isLoading?: boolean;
-  isDangerous?: boolean;
-}> = ({ title, message, onConfirm, onCancel, isLoading = false, isDangerous = false }) => (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
-      <h3 className="text-lg font-bold mb-2">{title}</h3>
-      <p className="text-gray-600 mb-6">{message}</p>
-      <div className="flex gap-3 justify-end">
-        <button
-          onClick={onCancel}
-          disabled={isLoading}
-          className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onConfirm}
-          disabled={isLoading}
-          className={`px-4 py-2 text-white rounded ${
-            isDangerous ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
-          } disabled:opacity-50`}
-        >
-          {isLoading ? 'Processing...' : 'Confirm'}
-        </button>
-      </div>
-    </div>
-  </div>
-);
-
-// ✅ STAFF EDIT MODAL - MATCHING STUDENT EDIT STRUCTURE
-const EditStaffModal: React.FC<{
-  staff: StaffMember;
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (updates: Partial<StaffMember>) => Promise<void>;
-  isLoading?: boolean;
-}> = ({ staff, isOpen, onClose, onSave, isLoading = false }) => {
-  const [formData, setFormData] = useState(staff);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
+  // Load current user and fetch staff
   useEffect(() => {
-    setFormData(staff);
-  }, [staff]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      await onSave(formData);
-      onClose();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 border-b border-purple-800">
-          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            ✏️ Edit Staff Member
-          </h3>
-          <p className="text-purple-100 text-sm mt-1">Update staff information</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Personal Information Section */}
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              👤 Personal Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  value={formData.user.full_name}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      user: { ...formData.user, full_name: e.target.value },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Role</label>
-                <input
-                  type="text"
-                  value={formData.user.role}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      user: { ...formData.user, role: e.target.value },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Contact Information Section */}
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              📞 Contact Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={formData.user.email}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      user: { ...formData.user, email: e.target.value },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Phone</label>
-                <input
-                  type="tel"
-                  value={formData.user.phone || ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      user: { ...formData.user, phone: e.target.value },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Employment Information Section */}
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              💼 Employment Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Position</label>
-                <input
-                  type="text"
-                  value={formData.position}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Department</label>
-                <input
-                  type="text"
-                  value={formData.department || ''}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Employment Date</label>
-                <input
-                  type="date"
-                  value={formData.employment_date}
-                  onChange={(e) => setFormData({ ...formData, employment_date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as StatusType })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="ACTIVE">Active</option>
-                  <option value="PAUSED">Paused</option>
-                  <option value="INACTIVE">Inactive</option>
-                  <option value="SUSPENDED">Suspended</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Salary & Bank Information Section */}
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              🏦 Salary & Bank Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Salary</label>
-                <input
-                  type="number"
-                  value={formData.salary || ''}
-                  onChange={(e) => setFormData({ ...formData, salary: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Bank Name</label>
-                <input
-                  type="text"
-                  value={formData.bank_name || ''}
-                  onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Number</label>
-                <input
-                  type="text"
-                  value={formData.account_number || ''}
-                  onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Name</label>
-                <input
-                  type="text"
-                  value={formData.account_name || ''}
-                  onChange={(e) => setFormData({ ...formData, account_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-3 justify-end border-t pt-6">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
-            >
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-const StaffPage: React.FC = () => {
-  const router = useRouter();
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<StatusType | 'ALL'>('ALL');
-  const [schoolId, setSchoolId] = useState<string>('');
-  const [modal, setModal] = useState<{
-    type: 'pause' | 'activate' | 'delete' | 'edit' | null;
-    staffMember?: StaffMember;
-  }>({ type: null });
-  const [isActionLoading, setIsActionLoading] = useState(false);
-  const [letterModal, setLetterModal] = useState<{
-    isOpen: boolean;
-    staffId?: string;
-  }>({ isOpen: false });
-
-  // Get current user's school using centralized service
-  useEffect(() => {
-    const loadUserSchoolContext = async () => {
+    const loadData = async () => {
       try {
-        console.log('[Staff Page] 🚀 Loading school context...');
-        const userSchool = await SchoolContextService.getCurrentUserSchool();
-        console.log('[Staff Page] ✅ School context loaded:', {
-          userId: userSchool.userId,
-          schoolId: userSchool.schoolId,
-        });
-        setSchoolId(userSchool.schoolId);
-      } catch (error) {
-        console.error('[Staff Page] ❌ Failed to load school context:', error);
-        const errorMsg = error instanceof Error ? error.message : 'Failed to load school information';
-        toast.error(errorMsg);
-      }
-    };
+        setLoading(true)
+        
+        const user = await AuthService.getCurrentUser()
+        if (!user) {
+          router.push('/auth/login')
+          return
+        }
 
-    loadUserSchoolContext();
-  }, []);
+        if (!user.school_id) {
+          toast.error('Account not linked to school')
+          return
+        }
 
-  // Fetch staff from Supabase
-  useEffect(() => {
-    const fetchStaff = async () => {
-      if (!schoolId) {
-        setIsLoading(false);
-        return;
-      }
+        setSchoolId(user.school_id)
 
-      try {
-        setIsLoading(true);
-        const { data, error } = await supabase
-          .from('staff')
-          .select(`
-            id,
-            user_id,
-            school_id,
-            position,
-            employment_date,
-            department,
-            salary,
-            bank_name,
-            account_number,
-            account_name,
-            status,
-            user:user_id (
-              id,
-              full_name,
-              email,
-              phone,
-              photo_url,
-              role
-            )
-          `)
-          .eq('school_id', schoolId)
-          .eq('status', 'ACTIVE')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-
-        setStaff(data || []);
-      } catch (error) {
-        console.error('Error fetching staff:', error);
-        toast.error('Failed to load staff');
+        // Fetch staff list
+        const staffList = await StaffService.getStaffList(user.school_id)
+        setStaff(staffList)
+      } catch (error: any) {
+        console.error('Load data error:', error)
+        toast.error(error.message || 'Failed to load staff')
       } finally {
-        setIsLoading(false);
+        setLoading(false)
       }
-    };
-
-    fetchStaff();
-  }, [schoolId]);
-
-  // Filter staff
-  const filteredStaff = staff.filter(member => {
-    const matchesSearch =
-      member.user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.position?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'ALL' || member.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
-
-  // Handle edit
-  const handleEditStaff = async (updates: Partial<StaffMember>) => {
-    if (!modal.staffMember) return;
-    try {
-      setIsActionLoading(true);
-      setStaff(staff.map(s =>
-        s.id === modal.staffMember!.id
-          ? { ...s, ...updates, user: { ...s.user, ...updates.user } }
-          : s
-      ));
-      toast.success('Staff updated successfully');
-      setModal({ type: null });
-    } catch (error) {
-      console.error('Error updating staff:', error);
-      toast.error('Failed to update staff');
-    } finally {
-      setIsActionLoading(false);
     }
-  };
 
-  // Handle letter generation
-  const generateStaffLetter = async (staffMember: StaffMember) => {
-    setLetterModal({
-      isOpen: true,
-      staffId: staffMember.id,
-    });
-  };
+    loadData()
+  }, [router])
+
+  const handleEdit = (staffMember: StaffProfile) => {
+    setSelectedStaff(staffMember)
+    setShowEditModal(true)
+  }
+
+  const handleDelete = async (staffId: string) => {
+    if (!window.confirm('Are you sure you want to delete this staff member?')) {
+      return
+    }
+
+    try {
+      setDeleting(staffId)
+      await StaffService.deleteStaff(staffId, schoolId!)
+      setStaff(staff.filter(s => s.id !== staffId))
+      toast.success('Staff member deleted')
+    } catch (error: any) {
+      console.error('Delete error:', error)
+      toast.error(error.message || 'Failed to delete staff member')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  const handleGenerateLetter = (staffMember: StaffProfile) => {
+    setSelectedStaff(staffMember)
+    setShowLetterModal(true)
+  }
+
+  const handleSaveStaff = async (updated: StaffProfile) => {
+    try {
+      setShowEditModal(false)
+      // Refresh staff list
+      if (schoolId) {
+        const staffList = await StaffService.getStaffList(schoolId)
+        setStaff(staffList)
+      }
+      toast.success('Staff member updated')
+    } catch (error: any) {
+      console.error('Save error:', error)
+      toast.error(error.message || 'Failed to save staff member')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p>Loading staff...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-bold mb-6">Staff Management</h2>
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Staff Management</h1>
+          <p className="text-gray-600">Manage teachers, administrators, and support staff</p>
+        </div>
 
-      {/* Search and Filter */}
-      <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <input
-          type="text"
-          placeholder="Search by name, email, or position..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-        />
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as StatusType | 'ALL')}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-        >
-          <option value="ALL">All Status</option>
-          <option value="ACTIVE">Active</option>
-          <option value="PAUSED">Paused</option>
-          <option value="INACTIVE">Inactive</option>
-          <option value="SUSPENDED">Suspended</option>
-        </select>
+        {/* Content */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          {staff.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500 mb-4">No staff members found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100 border-b">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Phone</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Role</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Position</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Department</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {staff.map(member => (
+                    <tr key={member.id} className="hover:bg-gray-50 transition">
+                      <td className="px-6 py-4 text-sm text-gray-900">{member.full_name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{member.email}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{member.phone || '—'}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                          {member.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{member.position || '—'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{member.department || '—'}</td>
+                      <td className="px-6 py-4 text-sm">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          member.status === 'ACTIVE' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {member.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleGenerateLetter(member)}
+                            className="p-2 text-gray-600 hover:text-blue-600 transition"
+                            title="Generate Appointment Letter"
+                          >
+                            <FileText size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleEdit(member)}
+                            className="p-2 text-gray-600 hover:text-blue-600 transition"
+                            title="Edit Staff"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(member.id)}
+                            disabled={deleting === member.id}
+                            className="p-2 text-gray-600 hover:text-red-600 transition disabled:opacity-50"
+                            title="Delete Staff"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Loading State */}
-      {isLoading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-2"></div>
-          <p className="text-gray-600">Loading staff...</p>
-        </div>
-      ) : filteredStaff.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          No staff members found
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-100 border-b-2 border-gray-300">
-              <tr>
-                <th className="px-6 py-3 text-left font-bold text-gray-700">Name</th>
-                <th className="px-6 py-3 text-left font-bold text-gray-700">Email</th>
-                <th className="px-6 py-3 text-left font-bold text-gray-700">Position</th>
-                <th className="px-6 py-3 text-left font-bold text-gray-700">Role</th>
-                <th className="px-6 py-3 text-left font-bold text-gray-700">Status</th>
-                <th className="px-6 py-3 text-center font-bold text-gray-700">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filteredStaff.map((member, idx) => (
-                <tr key={member.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="px-6 py-4 font-semibold text-gray-700">{member.user.full_name}</td>
-                  <td className="px-6 py-4 text-gray-700">{member.user.email}</td>
-                  <td className="px-6 py-4 text-gray-700">{member.position}</td>
-                  <td className="px-6 py-4 text-gray-700">{member.user.role}</td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={member.status} />
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <button
-                      onClick={() => setModal({ type: 'edit', staffMember: member })}
-                      className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm mr-2"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => generateStaffLetter(member)}
-                      className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
-                    >
-                      Letter
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {modal.type === 'edit' && modal.staffMember && (
-        <EditStaffModal
-          staff={modal.staffMember}
-          isOpen={true}
-          onClose={() => setModal({ type: null })}
-          onSave={handleEditStaff}
-          isLoading={isActionLoading}
+      {/* Modals */}
+      {showEditModal && selectedStaff && (
+        <StaffProfileEditModal
+          staffId={selectedStaff.id}
+          schoolId={schoolId!}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleSaveStaff}
         />
       )}
 
-      {/* Letter Preview Modal */}
-      {letterModal.isOpen && letterModal.staffId && (
+      {showLetterModal && selectedStaff && (
         <LetterPreviewModal
-          isOpen={true}
-          onClose={() => setLetterModal({ isOpen: false })}
-          staffId={letterModal.staffId}
-        />
-      )}
-
-      {/* Confirmation Modals */}
-      {modal.type && ['pause', 'activate', 'delete'].includes(modal.type) && modal.staffMember && (
-        <ConfirmationModal
-          title={
-            modal.type === 'pause' ? 'Pause Staff' :
-            modal.type === 'activate' ? 'Activate Staff' :
-            'Delete Staff'
-          }
-          message={
-            modal.type === 'pause' ? `Pause ${modal.staffMember.user.full_name}?` :
-            modal.type === 'activate' ? `Activate ${modal.staffMember.user.full_name}?` :
-            `Delete ${modal.staffMember.user.full_name}? This cannot be undone.`
-          }
-          onConfirm={() => {
-            // Handle confirmation
-            setModal({ type: null });
-          }}
-          onCancel={() => setModal({ type: null })}
-          isLoading={isActionLoading}
-          isDangerous={modal.type === 'delete'}
+          isOpen={showLetterModal}
+          onClose={() => setShowLetterModal(false)}
+          staffId={selectedStaff.user_id}
+          schoolId={schoolId!}
+          letterType="appointment"
         />
       )}
     </div>
-  );
-};
-
-export default StaffPage;
+  )
+}

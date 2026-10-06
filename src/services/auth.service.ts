@@ -87,6 +87,19 @@ export class AuthService {
       if (error) throw error
       if (!data.user) throw new Error('Super Admin registration failed')
 
+      // Sync user to public.users table via pending_auth_users
+      try {
+        await supabase.rpc('register_pending_auth_user', {
+          p_auth_user_id: data.user.id,
+          p_email: input.email,
+          p_role: 'SUPER_ADMIN',
+          p_school_id: null,
+          p_full_name: input.fullName,
+        })
+      } catch (syncError) {
+        console.warn('User sync queueing failed (non-critical):', syncError)
+      }
+
       // For development: Store user as confirmed by doing an immediate sign-in
       // This works because the user just created their account
       try {
@@ -134,6 +147,19 @@ export class AuthService {
       if (error) throw error
       if (!data.user) throw new Error('School Admin registration failed')
 
+      // Sync user to public.users table via pending_auth_users
+      try {
+        await supabase.rpc('register_pending_auth_user', {
+          p_auth_user_id: data.user.id,
+          p_email: input.email,
+          p_role: 'ADMIN',
+          p_school_id: input.school_id,
+          p_full_name: input.fullName,
+        })
+      } catch (syncError) {
+        console.warn('User sync queueing failed (non-critical):', syncError)
+      }
+
       return {
         id: data.user.id,
         email: data.user.email || '',
@@ -166,6 +192,19 @@ export class AuthService {
 
       if (error) throw error
       if (!data.user) throw new Error('Staff registration failed')
+
+      // Sync user to public.users table via pending_auth_users
+      try {
+        await supabase.rpc('register_pending_auth_user', {
+          p_auth_user_id: data.user.id,
+          p_email: input.email,
+          p_role: staffRole,
+          p_school_id: input.school_id,
+          p_full_name: input.fullName,
+        })
+      } catch (syncError) {
+        console.warn('User sync queueing failed (non-critical):', syncError)
+      }
 
       return {
         id: data.user.id,
@@ -218,6 +257,19 @@ export class AuthService {
 
       if (error) throw error
       if (!data.user) throw new Error('Student registration failed')
+
+      // Sync user to public.users table via pending_auth_users
+      try {
+        await supabase.rpc('register_pending_auth_user', {
+          p_auth_user_id: data.user.id,
+          p_email: input.email,
+          p_role: 'STUDENT',
+          p_school_id: input.school_id,
+          p_full_name: input.fullName,
+        })
+      } catch (syncError) {
+        console.warn('User sync queueing failed (non-critical):', syncError)
+      }
 
       return {
         id: data.user.id,
@@ -292,6 +344,13 @@ export class AuthService {
       // If Supabase Auth succeeds, return user with role-based school_id from users table
       if (!error && data?.user) {
         console.log('✅ Primary login successful via Supabase Auth')
+        
+        // Trigger pending user sync to ensure this user's database record exists
+        try {
+          await supabase.rpc('sync_pending_auth_users')
+        } catch (syncError) {
+          console.warn('Pending user sync trigger failed (non-critical):', syncError)
+        }
         
         // Fetch user's role and school_id from users table for proper routing
         let userRole = data.user.user_metadata?.role || 'STUDENT'
