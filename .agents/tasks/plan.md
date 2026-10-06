@@ -1,641 +1,484 @@
-# Implementation Plan: Fix 4 Critical Issues in School Management System
+# School Admin Rebuild: Investigation & Planning Report
 
-**Project**: Multi-tenant School Management System (SMS) running on Next.js + Supabase
-**Status**: CRITICAL - Blocking school registration and admin workflows
-**Deploy Target**: Vercel (auto-deploy on git push)
+## Executive Summary
+
+Five modules are broken and require rebuilding:
+1. **School Context Resolution** — auth chain doesn't reliably map auth.users.id → users.user_id → users.school_id
+2. **Staff Page & Staff List** — no staff service exists; staff queries from users table not from dedicated staff table
+3. **Staff Edit Modal** — doesn't exist; needs rebuild matching Student Edit quality
+4. **Appointment Letter Generation** — API route `/api/letters/fetch-staff` missing (404); service exists but endpoint doesn't
+5. **Result Management** — Session→Term→Class cascade partially works but schema inconsistencies cause query failures
 
 ---
 
-## ISSUE 1: Super Admin School Registration (42P10 Error - BLOCKING)
+## 1. ROOT CAUSE ANALYSIS
 
-### Root Cause Analysis
-The error `there is no unique or exclusion constraint matching the ON CONFLICT specification` (PostgreSQL code 42P10) occurs because:
+### 1.1 School Context Resolution Broken
 
-1. **Migration 152** (`academic_sessions` and `academic_terms` tables) defines:
-   - `academic_sessions`: UNIQUE(school_id, session_year) 
-   - `academic_terms`: UNIQUE(school_id, session_id, term_order)
+**Problem:**  
+Users with roles `SCHOOL_ADMIN` or `ADMIN` see "account not linked to school" despite valid registration.
 
-2. **Migration 161** correctly adds these UNIQUE constraints and disables RLS.
+**Root Cause:**  
+`AuthService.getCurrentUser()` (src/services/auth.service.ts lines 160–238) uses this priority order:
 
-3. **Safe INSERT Logic**: The new `seedSchoolCurriculum()` in `src/lib/school-seeding.ts` uses safe INSERT-SELECT with `WHERE NOT EXISTS` — no ON CONFLICT clause.
+1. PRIORITY 1: Check `auth.users.user_metadata.school_id` — this is set during signup in auth metadata
+2. PRIORITY 2: If no metadata school_id, query `users` table with `eq('id', data.user.id)` — **BUT this query uses `id` not `user_id`**
+3. PRIORITY 3: Fall back to undefined school_id
 
-4. **The Problem**: Legacy migration files may still contain ON CONFLICT clauses on columns that DON'T have UNIQUE constraints:
-   - Migration 013 or 015 may reference `term_name` column in an ON CONFLICT that no longer exists or doesn't have a constraint
-   - Any ON CONFLICT without a matching UNIQUE constraint will fail with 42P10
+The users table has:
+- `id` UUID PK — generated separately
+- `user_id` UUID FK — references auth.users.id
+- `school_id` UUID FK — references schools
 
-5. **Migration 015 Specific Issues**:
-   - Creates `academic_terms` with `term_name TEXT NOT NULL` 
-   - If any migration tries `ON CONFLICT (school_id, term_name)` → ERROR: no such constraint exists
-   - The UNIQUE constraint is on `(school_id, session_id, term_order)`, NOT `term_name`
-
-### Files to Investigate
-- `database/migrations/013_insert_test_data.sql` → Check for any INSERT with ON CONFLICT
-- `database/migrations/015_auto_create_school_data.sql` → Check for any INSERT with ON CONFLICT or DROP triggers referencing removed columns
-- `database/migrations/152_add_academic_core_tables.sql` → Already correct (uses safe INSERT-SELECT)
-- `src/lib/school-seeding.ts` → Already correct (no ON CONFLICT)
-- `src/app/api/superadmin/register-school/route.ts` → Already correct (calls seedSchoolCurriculum which uses safe logic)
-
-### Fix Strategy
-**Decision**: Remove all ON CONFLICT clauses and use safe INSERT-SELECT logic as per Migration 152 pattern.
-
-1. **Create Migration 162** to:
-   - Remove/fix any stray ON CONFLICT clauses in academic_sessions or academic_terms inserts
-   - Ensure all legacy triggers that call INSERT operations use safe WHERE-NOT-EXISTS logic
-   - Drop any trigger that references non-existent columns (e.g., term_name in old function signatures)
-   - Verify all constraints exist before any auto-seeding
-
-2. **Verify triggers in Migration 015**:
-   - The `trigger_create_default_school_data_fn()` trigger calls `create_default_school_data()`
-   - This function uses INSERT with no ON CONFLICT — GOOD
-   - BUT: If this function exists from older schema, it may reference removed columns → drop and recreate it cleanly
-
-3. **Test the fix**:
-   - Register a new school via POST /api/superadmin/register-school
-   - Verify academic_sessions table receives 1 row with (school_id, session_year = '2024/2025')
-   - Verify academic_terms table receives 3 rows for First/Second/Third Term with (school_id, session_id, term_order)
-
-### Implementation Tasks
-
-#### Task 1.1: Create Migration 162 to Fix ON CONFLICT Issues
-**What**: Create a new migration that removes all problematic ON CONFLICT clauses and ensures safe INSERT logic.
-
-**Files to create/modify**:
-- `database/migrations/162_fix_on_conflict_academic_tables.sql` (NEW)
-
-**Details**:
-```sql
--- Drop problematic triggers and functions that might use ON CONFLICT
-DROP TRIGGER IF EXISTS trigger_auto_seed_school_safe ON schools;
-DROP FUNCTION IF EXISTS auto_seed_school_safe(UUID);
-DROP TRIGGER IF EXISTS trigger_create_default_school_data ON schools;
-
--- Recreate the trigger with safe INSERT-SELECT logic (no ON CONFLICT)
-CREATE OR REPLACE FUNCTION auto_seed_school_safe(p_school_id UUID)
-RETURNS void AS $$
-BEGIN
-  -- Safe INSERT: Only insert if session doesn't exist
-  INSERT INTO academic_sessions (school_id, session_year, start_year, is_active)
-  SELECT p_school_id, '2024/2025', 2024, true
-  WHERE NOT EXISTS (
-    SELECT 1 FROM academic_sessions 
-    WHERE school_id = p_school_id AND session_year = '2024/2025'
-  );
-  
-  -- Get the session for this school
-  DECLARE
-    v_session_id UUID;
-  BEGIN
-    SELECT id INTO v_session_id FROM academic_sessions 
-    WHERE school_id = p_school_id AND session_year = '2024/2025'
-    LIMIT 1;
-    
-    -- Safe INSERT for terms
-    IF v_session_id IS NOT NULL THEN
-      INSERT INTO academic_terms (school_id, session_id, term_name, term_order, is_active)
-      SELECT p_school_id, v_session_id, 'First Term', 1, true
-      WHERE NOT EXISTS (
-        SELECT 1 FROM academic_terms
-        WHERE school_id = p_school_id AND session_id = v_session_id AND term_order = 1
-      );
-      -- ... similar for Second and Third Term
-    END IF;
-  END;
-END;
-$$ LANGUAGE plpgsql;
-
--- Create trigger (won't fire since seedSchoolCurriculum() is called directly in the API route)
-CREATE TRIGGER trigger_auto_seed_school_safe
-AFTER INSERT ON schools
-FOR EACH ROW
-EXECUTE FUNCTION auto_seed_school_safe(NEW.id);
+**The query on line 185–194 is wrong:**
+```typescript
+const { data: userRecord, error: userError } = await supabase
+  .from('users')
+  .select('role, school_id')
+  .eq('id', data.user.id)  // ❌ WRONG: searching by users.id, not users.user_id
+  .maybeSingle()
 ```
 
-**Verify**: 
-- Run the migration in Supabase SQL editor: `SELECT migration_number FROM schema_migrations ORDER BY migration_number DESC LIMIT 1;`
-- Expected: 162 is present
-- Then test: POST /api/superadmin/register-school with valid school data
-- Expected response: 201 with success=true, seeding.sessionsCreated=1
-- Supabase query: `SELECT COUNT(*) FROM academic_sessions WHERE school_id = 'NEW_SCHOOL_ID';` → Should be 1
-- Supabase query: `SELECT COUNT(*) FROM academic_terms WHERE school_id = 'NEW_SCHOOL_ID';` → Should be 3
-
----
-
-## ISSUE 2: School Admin Bottom Navbar - Staff/Students/Results not Loading
-
-### Root Cause Analysis
-Reading `src/app/school-admin/dashboard/page.tsx` (lines 1-120 visible), the dashboard:
-- Has tabs: 'overview' | 'staff' | 'students' | 'transactions' | 'academic'
-- Has state: `activeTab`, `staffMembers`, `students`, etc.
-- Loads data via sequential queries (not Promise.all) to avoid timeouts
-
-**THE ISSUE**: 
-- The visible code shows ONLY the TAB system in the top dashboard area
-- There is NO separate "bottom navbar" component rendering the same tabs
-- User report says "bottom navbar" for Staff/Students/Results "isn't fetching and loading school information"
-- **Likely cause**: There is a SECOND navigation component (mobile bottom nav) that is NOT wired to the same state/data as the main tabs
-
-**Search pattern**: Look for:
-1. A mobile navigation bar (bottom fixed) — might use Tailwind `fixed bottom-0 w-full`
-2. Links to `/school-admin/staff`, `/school-admin/students`, `/school-admin/results` (separate routes)
-3. These routes don't have the same data loading logic as the dashboard
-
-### Fix Strategy
-**Decision**: Consolidate navigation. Whether the bottom nav links to separate pages or tabs on the dashboard, they must load the same school/staff/student data.
-
-If separate pages exist:
-- They should fetch school_id from auth context
-- They should call the SAME data-loading functions as the dashboard
-
-If tabs exist on dashboard:
-- Ensure mobile view uses the tab system, not separate nav links
-- Add CSS to show bottom nav bar on mobile only
-
-### Implementation Tasks
-
-#### Task 2.1: Audit Navigation Structure
-**What**: Find all navigation components and pages related to Staff, Students, Results in school-admin routes.
-
-**Files to read**:
-- `src/app/school-admin/` — check for subdirectories/routes
-- `src/components/` — check for nav components (likely found already: StaffHeader.tsx is top header, not bottom nav)
-- Search grep for `school-admin/staff`, `school-admin/students`, `school-admin/results`
-
-**Expected findings**:
-- Either separate pages at `/school-admin/staff/page.tsx`, `/school-admin/students/page.tsx`, `/school-admin/results/page.tsx`
-- OR the dashboard has a bottom navbar component that needs to be wired to state
-
-**Verify**: 
-- `grep -r "school-admin/staff\|school-admin/students\|school-admin/results" src/` → Find all references
-- If routes exist, list them; if not, find the bottom nav component
-
-#### Task 2.2: Wire Bottom Navbar Data Loading
-**What**: Ensure the bottom navbar (or separate pages) load and display school/staff/student data correctly.
-
-**If separate pages exist**:
-- Create/modify `src/app/school-admin/staff/page.tsx` to load staff data
-- Create/modify `src/app/school-admin/students/page.tsx` to load student data
-- Create/modify `src/app/school-admin/results/page.tsx` to load sessions/terms/results
-- Each page must:
-  1. Get current user (AuthService.getCurrentUser())
-  2. Extract school_id from user.school_id
-  3. Fetch data filtered by school_id
-  4. Display data in a table/list
-
-**If tabs exist on dashboard**:
-- Move the dashboard tab logic into separate components
-- Export each tab as a reusable component
-- Ensure mobile viewport uses tabs, desktop uses sidebar
-
-**Files to create/modify**:
-- If pages don't exist: Create `src/app/school-admin/staff/page.tsx`, `/students/page.tsx`, `/results/page.tsx`
-- Or create tab components: `src/components/school-admin/StaffTab.tsx`, `StudentsTab.tsx`, `ResultsTab.tsx`
-
-**Verify**:
-- Navigate to the bottom navbar / separate page for Staff
-- Expected: Staff list loads with school-specific data
-- Expected: Tables display names, emails, roles
-- Same for Students and Results tabs
-
----
-
-## ISSUE 3: Results Page Not Loading (Sessions/Terms/Classes/Students Dropdowns Missing)
-
-### Root Cause Analysis
-The results page structure is unclear (not found in workspace search). From `src/app/api/results/school-classes-and-students/route.ts`:
-- API endpoint exists and is well-designed
-- It takes `schoolId` and `termId` query params
-- It fetches class_arm_combos → students → score_sheets
-- Returns structured data with student scores
-
-**THE ISSUES**:
-1. **Missing session/term selector**: The dropdown cascade (select session → load terms → select term → load classes) is not implemented
-2. **Results page may not exist**: No `/school-admin/results/page.tsx` found
-3. **API dependencies**: The API needs proper schoolId extraction and error handling
-
-**From error log**: "null value in column 'end_year' of relation 'academic_sessions' violates not-null constraint"
-- This means: academic_sessions.end_year is being inserted as NULL
-- The INSERT in seedSchoolCurriculum() only sets start_year, not end_year
-- **Migration 152** defines `end_year INTEGER` WITHOUT a DEFAULT value — this is the bug!
-
-### Fix Strategy
-**Decision**: 
-1. Fix academic_sessions table to have end_year DEFAULT or computed value
-2. Create the results page with session/term/class/student selectors
-3. Wire selectors to API calls
-
-### Implementation Tasks
-
-#### Task 3.1: Fix academic_sessions Schema
-**What**: Add DEFAULT or computed value for end_year in academic_sessions table.
-
-**Files to create**:
-- `database/migrations/163_fix_academic_sessions_end_year.sql` (NEW)
-
-**Details**:
-```sql
--- Migration 163: Fix academic_sessions end_year constraint
-ALTER TABLE academic_sessions
-ALTER COLUMN end_year SET DEFAULT (start_year + 1);
-
--- Backfill any existing sessions with NULL end_year
-UPDATE academic_sessions 
-SET end_year = start_year + 1 
-WHERE end_year IS NULL;
-
--- Make end_year NOT NULL
-ALTER TABLE academic_sessions
-ALTER COLUMN end_year SET NOT NULL;
+Should be:
+```typescript
+.eq('user_id', data.user.id)  // ✅ CORRECT: auth.users.id → users.user_id → users.school_id
 ```
 
-**Verify**:
-- `SELECT COUNT(*) FROM academic_sessions WHERE end_year IS NULL;` → Should return 0
-- Register a new school and check: `SELECT start_year, end_year FROM academic_sessions WHERE school_id = 'NEW_SCHOOL_ID';` → Should be (2024, 2025)
+**Impact:**  
+Users skip PRIORITY 1 if auth metadata doesn't have `school_id`, then PRIORITY 2 fails because the lookup is on the wrong column, so they end up at PRIORITY 3 with `school_id: undefined`.
 
-#### Task 3.2: Create Results Page with Session/Term/Class Selectors
-**What**: Build the results page UI with cascading dropdowns.
+---
 
-**Files to create**:
-- `src/app/school-admin/results/page.tsx` (NEW)
+### 1.2 Staff Page Missing
 
-**Structure**:
-```tsx
-export default function ResultsPage() {
-  const [sessions, setSessions] = useState([])
-  const [terms, setTerms] = useState([])
-  const [classes, setClasses] = useState([])
-  const [selectedSession, setSelectedSession] = useState('')
-  const [selectedTerm, setSelectedTerm] = useState('')
-  
-  useEffect(() => {
-    // Get current user and fetch sessions for school
-    const loadSessions = async () => {
-      const user = await AuthService.getCurrentUser()
-      const sessionData = await supabase
-        .from('academic_sessions')
-        .select('*')
-        .eq('school_id', user.school_id)
-        .order('session_year', { ascending: false })
-      setSessions(sessionData.data)
-    }
-    loadSessions()
-  }, [])
-  
-  useEffect(() => {
-    // When session changes, load terms
-    if (!selectedSession) return
-    const loadTerms = async () => {
-      const termData = await supabase
-        .from('academic_terms')
-        .select('*')
-        .eq('session_id', selectedSession)
-        .order('term_order', { ascending: true })
-      setTerms(termData.data)
-    }
-    loadTerms()
-  }, [selectedSession])
-  
-  useEffect(() => {
-    // When term changes, fetch classes and students
-    if (!selectedTerm) return
-    const loadClasses = async () => {
-      const user = await AuthService.getCurrentUser()
-      const response = await fetch(
-        `/api/results/school-classes-and-students?schoolId=${user.school_id}&termId=${selectedTerm}`
-      )
-      const data = await response.json()
-      setClasses(data.classes)
-    }
-    loadClasses()
-  }, [selectedTerm])
-  
-  return (
-    <div>
-      <select value={selectedSession} onChange={e => setSelectedSession(e.target.value)}>
-        <option value="">Select Session</option>
-        {sessions.map(s => <option key={s.id} value={s.id}>{s.session_year}</option>)}
-      </select>
-      
-      <select value={selectedTerm} onChange={e => setSelectedTerm(e.target.value)} disabled={!selectedSession}>
-        <option value="">Select Term</option>
-        {terms.map(t => <option key={t.id} value={t.id}>{t.term_name}</option>)}
-      </select>
-      
-      {/* Display classes and students with results */}
-      {classes.map(cls => (
-        <div key={cls.id}>
-          <h3>{cls.class_name} {cls.arm_name}</h3>
-          <table>
-            {/* Student results */}
-          </table>
-        </div>
-      ))}
-    </div>
-  )
+**Problem:**  
+No dedicated staff list/management page exists in `src/app/school-admin/`.
+
+**Current State:**  
+- `src/services/staff-profile.service.ts` exists but is minimal
+- Dashboard (src/app/school-admin/dashboard/page.tsx line 93) queries `users` table with `in('role', ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'STAFF'])`
+- Schema has both `users` and `staff` tables, but the `staff` table is rarely used
+- No dedicated Staff service for CRUD operations
+
+**Schema Mismatch:**
+- `users` table has: id, school_id, email, full_name, role, phone, gender, address, state, lga, status
+- `staff` table has: id, user_id (FK to users.id), school_id, position, employment_date, salary, bank_name, account_number, account_name, department, status (added in migration 167)
+- They are not properly linked — `staff.user_id` → `users.id`, but the dashboard queries only `users`
+
+---
+
+### 1.3 Staff Edit Modal Missing
+
+**Problem:**  
+No component exists at `src/components/admin/StaffProfileEditModal.tsx`.
+
+**Current Reference:**  
+`StudentProfileEditModal.tsx` (lines 1–500+) is a fully-built multi-section form with:
+- Tab-based navigation (personal, admission, class, guardian, contact)
+- Multi-table updates (users, students, guardians, student_subjects, class_arm_combos)
+- Form validation and error handling
+- Bulk subject enrollment logic
+
+**Gap:**  
+Staff Edit must mirror this structure but for staff:
+- Personal Information (first/last name, gender, date of birth, marital status, state, LGA, passport)
+- Contact Information (email, phone, alternate phone, address)
+- Employment Information (staff ID, employee number, hire date, appointment date, department, position, role, status)
+- Qualifications (highest qualification, institution, course, graduation year, professional certs)
+- Class Assignment (sessions, classes, class arms, class teacher status)
+- Subject Assignment (load school subjects, multi-select by class/arm combo)
+- Salary & Bank (salary, frequency, bank, account name, account number, pension fields)
+
+Must update: `users`, `staff`, `teacher_class_assignments`, `subject_teacher_assignments` on save.
+
+---
+
+### 1.4 Appointment Letter Generation 404
+
+**Problem:**  
+`LetterGenerationService.fetchStaffData()` (src/services/letter-generation.service.ts line 20) calls `/api/letters/fetch-staff?staffId=X&schoolId=Y` which does NOT exist.
+
+**Evidence:**  
+- Service file: src/services/letter-generation.service.ts line 24
+- Console logs show 404 responses
+- No route in `src/app/api/letters/*`
+
+**Impact:**  
+- LetterPreviewModal (src/components/admin/LetterPreviewModal.tsx line 45) calls this service
+- StaffData fetch fails → HTML generation returns null → preview shows nothing
+
+**What Exists:**  
+- `LetterGenerationService.generateAppointmentLetter()` (line 95–290) — HTML generation works
+- `LetterGenerationService.fetchStudentData()` (line 45–85) — queries Supabase directly (works)
+- `LetterGenerationService.fetchSchoolData()` (line 88–105) — queries Supabase directly (works)
+- `html2pdf.js` is in package.json (dependency exists)
+
+**What's Missing:**  
+1. API route `/api/letters/fetch-staff` (should query staff + user + assignment data)
+2. PDF generation endpoint (should call html2pdf on server or return HTML for client)
+3. Email sharing endpoint `/api/letters/send-email` (mentioned in LetterPreviewModal line 138 but doesn't exist)
+
+---
+
+### 1.5 Result Management Cascade Broken
+
+**Problem:**  
+Results page (src/app/school-admin/results-rebuilt.tsx) tries to load Session → Term → Class → Students → Subjects but fails partway.
+
+**Schema Issues Found:**
+- `academic_sessions` table exists (schema found in migrations)
+- `academic_terms` table exists but columns are `term_order` not `term_number`
+- Terms query uses `.eq('session_id', selectedSession)` but migration 163 renamed this to `session_year` in some places
+- Classes query tries to fetch from `class_arm_combos` but the relationship to terms is missing — there's no `term_id` in `class_arm_combos`
+- Score sheets (score_sheets table) have `term_id` FK but no relationship back through classes
+
+**Cascade Break Points:**
+1. Session load works (academic_sessions table exists)
+2. Term load — query assumes `session_id` FK exists; migration 163 indicates schema inconsistency
+3. Class load — `class_arm_combos` has no `term_id` column; classes are global to school, not term-scoped
+4. Student load — should work if class_arm_combo_id matches
+5. Subject load — should work if student_subjects exists
+
+**Root Issue:**  
+The data model treats classes as school-scoped (not term-scoped), but score sheets are term-scoped. Teachers may teach different classes in different terms, but the schema doesn't explicitly model this.
+
+---
+
+## 2. DATABASE SCHEMA SUMMARY
+
+### Core Tables (Multi-tenant, all have school_id FK)
+
+| Table | Key Columns | Foreign Keys | Issue |
+|-------|------------|--------------|-------|
+| schools | id, name, logo_url, type, status | — | — |
+| users | id, user_id?, school_id, email, full_name, role, phone, gender, address, state, lga, status | user_id→auth.users.id, school_id→schools.id | **user_id column mapping missing in queries** |
+| staff | id, user_id, school_id, position, employment_date, salary, bank_name, account_number, account_name, department, status | user_id→users.id, school_id→schools.id | Rarely used; most queries hit users table |
+| teacher_class_assignments | id, teacher_id, class_arm_combo_id, school_id, is_class_teacher | teacher_id→users.id, class_arm_combo_id→class_arm_combos.id, school_id→schools.id | **New in migration 165** |
+| subject_teacher_assignments | id, subject_id, class_arm_combo_id, teacher_id, school_id | subject_id→subjects.id, class_arm_combo_id→class_arm_combos.id, teacher_id→users.id, school_id→schools.id | — |
+| classes | id, school_id, name, level, type | school_id→schools.id | — |
+| class_arm_combos | id, school_id, class_id, arm_id, class_teacher_id | class_id→classes.id, arm_id→arms.id, class_teacher_id→users.id, school_id→schools.id | **No term_id** (classes are school-scoped, not term-scoped) |
+| academic_sessions | id, school_id, session_year, is_active | school_id→schools.id | — |
+| academic_terms | id, school_id, session_id, term_name, term_order, is_active | session_id→academic_sessions.id, school_id→schools.id | Column name: `term_order` not `term_number` |
+| subjects | id, school_id, name, code, applicable_to_levels | school_id→schools.id | — |
+| students | id, user_id, school_id, admission_number, date_of_birth, class_arm_combo_id, department, status | user_id→users.id, class_arm_combo_id→class_arm_combos.id, school_id→schools.id, | — |
+| student_subjects | id, student_id, subject_id, school_id, subject_teacher_id | student_id→students.id, subject_id→subjects.id, subject_teacher_id→users.id, school_id→schools.id | — |
+| score_sheets | id, school_id, student_id, subject_id, term_id, test1–exam, grade, total | student_id→students.id, subject_id→subjects.id, term_id→academic_terms.id, school_id→schools.id | — |
+
+### Known Column Additions (Migration 167)
+
+```sql
+ALTER TABLE staff
+ADD COLUMN IF NOT EXISTS salary DECIMAL(15, 2),
+ADD COLUMN IF NOT EXISTS bank_name VARCHAR(255),
+ADD COLUMN IF NOT EXISTS account_number VARCHAR(50),
+ADD COLUMN IF NOT EXISTS account_name VARCHAR(255),
+ADD COLUMN IF NOT EXISTS department TEXT;
+
+ALTER TABLE students
+ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ACTIVE';
+
+ALTER TABLE schools
+ADD COLUMN IF NOT EXISTS school_type VARCHAR(50),
+ADD COLUMN IF NOT EXISTS phone_number VARCHAR(20),
+ADD COLUMN IF NOT EXISTS website_url VARCHAR(255),
+ADD COLUMN IF NOT EXISTS principal_name VARCHAR(255),
+ADD COLUMN IF NOT EXISTS principal_email VARCHAR(255),
+ADD COLUMN IF NOT EXISTS established_year INTEGER;
+```
+
+---
+
+## 3. DEPENDENCIES & LIBRARIES
+
+### Available for Use
+- **html2pdf.js** (v0.10.1) — client-side PDF generation (already in package.json)
+- **Supabase client** (@supabase/supabase-js v2.38.0)
+- **React Hot Toast** (v2.6.0) — notifications
+- **Lucide React** (v0.292.0) — icons
+
+### No Imported DOC Library
+No `docx` library for .docx generation — only HTML/PDF support. Appointment letters should generate PDF via html2pdf.
+
+---
+
+## 4. CURRENT IMPLEMENTATION STATUS
+
+### What Works
+- ✅ Authentication login/logout (when school_id is in auth metadata)
+- ✅ Student registration → creates users + students records
+- ✅ StudentProfileEditModal (multi-section form, multi-table updates)
+- ✅ Letter HTML generation (appointment + admission templates)
+- ✅ Academic session loading
+- ✅ Supabase direct queries in components
+
+### What Doesn't Work
+- ❌ School context resolution for SCHOOL_ADMIN after login (queries wrong column)
+- ❌ Staff page (no dedicated component)
+- ❌ Staff CRUD operations (no staff service methods)
+- ❌ StaffProfileEditModal (doesn't exist)
+- ❌ Appointment letter generation (API route missing)
+- ❌ PDF download (html2pdf not integrated)
+- ❌ Email sharing of letters (API route missing)
+- ❌ WhatsApp sharing (API integration incomplete)
+- ❌ Result management cascade (term-class relationship broken)
+
+---
+
+## 5. IMPLEMENTATION PLAN
+
+### Phase 1: Fix School Context Resolution (CRITICAL)
+**Files:**
+- `src/services/auth.service.ts` — Fix PRIORITY 2 query (line 185)
+
+**Fix:**
+Change line 193 from `.eq('id', data.user.id)` to `.eq('user_id', data.user.id)`
+
+**Verification:**
+- Login as school admin → dashboard loads with school name
+- No "account not linked to school" error
+
+---
+
+### Phase 2: Build Staff Service
+**Files to Create:**
+- `src/services/staff.service.ts` — Staff CRUD + data loading
+
+**Capabilities:**
+- `getStaffList(schoolId)` → query users table where role IN (...staff roles...)
+- `getStaffById(staffId, schoolId)` → join users + staff tables
+- `createStaff(staffData, schoolId)` → insert users + staff + teacher_class_assignments
+- `updateStaff(staffId, updates, schoolId)` → update users + staff, handle subject assignments
+- `deleteStaff(staffId, schoolId)` → cascade delete from users table
+
+**Verification:**
+- Service methods callable from components
+- Return all required fields for staff display
+
+---
+
+### Phase 3: Build Staff Page Component
+**Files to Create:**
+- `src/app/school-admin/staff/page.tsx` — Staff list/management page
+
+**Features:**
+- Display staff table: name, ID, email, phone, role, position, department, employment date, class assignment, subject assignment, salary, status
+- Action buttons: Appointment Letter, Edit, Delete
+- Integration with StaffService
+
+**Verification:**
+- Page loads without errors
+- Staff list displays with correct columns
+- Buttons visible and clickable
+
+---
+
+### Phase 4: Build Staff Edit Modal
+**Files to Create:**
+- `src/components/admin/StaffProfileEditModal.tsx` — Multi-section staff edit form
+
+**Sections:**
+1. **Personal Information** — first/last/middle name, gender, DOB, marital status, nationality, state, LGA, passport/photo
+2. **Contact Information** — email, phone, alternate phone, address, city, state, emergency contact
+3. **Employment Information** — staff ID, employee number, hire date, appointment date, resumption date, employment type, department, position, role, status
+4. **Qualifications** — highest qualification, institution, course, graduation year, professional certs
+5. **Class Assignment** — load sessions/classes/arms, select and save to teacher_class_assignments
+6. **Subject Assignment** — load school subjects, multi-select by class/arm, save to subject_teacher_assignments
+7. **Salary & Bank** — salary, frequency, bank name, account name, account number, pension info
+
+**Multi-Table Updates on Save:**
+- Update `users` (full_name, email, phone, gender, address, state, lga, status)
+- Update `staff` (position, employment_date, department, salary, bank_name, account_number, account_name)
+- Insert/update `teacher_class_assignments` (class + arm + is_class_teacher)
+- Insert/update `subject_teacher_assignments` (subject + class_arm_combo + teacher_id)
+
+**Verification:**
+- Form loads with all staff data populated
+- Tabs navigate correctly
+- Save updates all related tables
+- No data loss on form submission
+
+---
+
+### Phase 5: Build Letter Generation API Route
+**Files to Create:**
+- `src/app/api/letters/fetch-staff/route.ts` — Staff data fetch endpoint
+
+**Endpoint:**
+```
+GET /api/letters/fetch-staff?staffId=<id>&schoolId=<id>
+Response: {
+  success: boolean,
+  data: {
+    id, full_name, email, position, department, salary, salaryFrequency,
+    bankName, accountNumber, accountName, role, employment_date, qualification
+  }
 }
 ```
 
-**Verify**:
-- Navigate to `/school-admin/results`
-- Expected: Session dropdown populated with available sessions
-- Select a session
-- Expected: Term dropdown shows terms for that session
-- Select a term
-- Expected: Classes and students with scores load below
+**Implementation:**
+- Query users table for staff user data
+- Query staff table for position/salary/bank info
+- Query teacher_class_assignments for class assignments
+- Combine and return
+
+**Verification:**
+- Calling fetch returns 200 with staff data
+- No 404 error
 
 ---
 
-## ISSUE 4: Staff Registration Modal (9 Slides → Reduce to 4)
+### Phase 6: Integrate PDF Generation
+**Files to Modify:**
+- `src/components/admin/LetterPreviewModal.tsx` — Add PDF download button
 
-### Current State Analysis
-From `src/app/auth/staff/register/page.tsx`:
-- **Current: 9 stages** (lines 10-18):
-  1. Personal Information
-  2. Contact & Address
-  3. Employment Information
-  4. Professional Information (🎓)
-  5. Class Assignment (🏫)
-  6. Subject Assignment (📚)
-  7. Salary & Bank (💰)
-  8. Account & Security (🔐)
-  9. Review & Confirm (✓)
+**Changes:**
+- Use html2pdf library to convert HTML letter to PDF
+- Download PDF with naming convention: `appointment-letter-{staffName}-{date}.pdf`
+- Provide print button (already exists but ensure it works)
 
-- **Problem**: Too many steps, over-complicated for school admin registration
-- **Requirement**: Reduce to 4-5 essential slides, keep school locked (not selectable)
-
-### Fix Strategy
-**Decision**: Consolidate to 4 stages focusing on essential information:
-1. **Personal Info** (merge stages 1 + 2): Name, DOB, gender, phone, email, address
-2. **Employment Info** (merge stages 3 + 4): Position, role, department, employment type, qualifications
-3. **Class & Subjects** (consolidate stages 5-6): Select class to teach, select subjects (optional)
-4. **Account Security** (stages 8 + review): Username, password, confirm, review all data
-
-**Removed fields** (not critical for initial registration):
-- Middle name (keep first + last only)
-- Professional qualifications (too detailed)
-- Salary & Bank info (handle separately after onboarding)
-- Emergency contact (can be added later in profile)
-- Nationality, State of Origin, LGA, Marital Status (simplify)
-
-### Implementation Tasks
-
-#### Task 4.1: Refactor Staff Registration to 4 Stages
-**What**: Redesign the staff registration form to have 4 streamlined stages.
-
-**Files to modify**:
-- `src/app/auth/staff/register/page.tsx`
-- Possibly: `src/services/staff-registration.service.ts` (if validation needs updating)
-
-**STAGES structure**:
-```typescript
-const STAGES = [
-  { number: 1, title: 'Personal Information', icon: '👤' },
-  { number: 2, title: 'Employment Details', icon: '💼' },
-  { number: 3, title: 'Classes & Subjects', icon: '📚' },
-  { number: 4, title: 'Account & Confirm', icon: '🔐' },
-]
-```
-
-**Stage 1: Personal Information**
-- firstName (required)
-- lastName (required)
-- gender (MALE/FEMALE, required)
-- dateOfBirth (required)
-- phone (required)
-- email (required)
-- address (required)
-- state (required)
-- lga (optional)
-
-**Stage 2: Employment Details**
-- staffId (optional, auto-generated)
-- position (required, dropdown: "Teacher", "HOD", "Principal", etc.)
-- role (required, default: "TEACHER")
-- department (optional)
-- employmentType (required, dropdown: "Full-time", "Part-time", "Contract")
-- employmentStatus (required, default: "Active")
-- dateEmployed (required, default: today)
-- reportingAuthority (optional)
-- teachingExperience (required, number 0-50)
-- institution (optional, last school attended)
-- highestQualification (optional: "ND", "BSc", "HND", "MSc", etc.)
-
-**Stage 3: Classes & Subjects**
-- classArmComboId (optional): If role is TEACHER, ask which class to teach
-- isClassTeacher (optional checkbox): Is this a class teacher?
-- subjectIds (required if TEACHER): Multi-select subjects applicable to class level
-- adminResponsibility (optional): If role has admin duties
-
-**Stage 4: Account & Confirm**
-- accountUsername (required, unique per school)
-- password (required, min 8 chars, must have upper/lower/number/special)
-- confirmPassword (required)
-- Review all data from stages 1-3 in read-only format
-- Submit button
-
-**School is pre-selected**: The school_id comes from auth context (currentUser.school_id), NOT from a dropdown.
-
-**Code changes**:
-- Remove stages 5, 7, 8 (Professional Info, Salary & Bank need consolidation with others)
-- Merge stage 2 (Contact & Address) into stage 1
-- Merge stage 4 (Professional Info) into stage 2
-- Combine stages 5+6 into stage 3
-- Move stage 8 (Account) to stage 4 with review
-
-**Verify**:
-- Open `/auth/staff/register` from school admin context
-- Expected: Only 4 progress indicators shown
-- Fill Stage 1: Personal info (firstName, lastName, gender, DOB, phone, email, address, state)
-- Click Next
-- Expected: Progress shows "Stage 2 of 4"
-- Fill Stage 2: Position dropdown (select "Teacher"), role (TEACHER), employmentType, qualifications
-- Click Next
-- Expected: Stage 3 shows class selector (if TEACHER) and subjects multi-select
-- Select a class and some subjects
-- Click Next
-- Expected: Stage 4 shows username/password form + review section
-- Fill credentials and submit
-- Expected: 201 response, staff record created in users table
+**Verification:**
+- Click "Download PDF" → PDF downloads to browser
+- PDF content matches preview
+- No truncation
 
 ---
 
-## ISSUE 5: Student Registration Modal (Similar Consolidation)
+### Phase 7: Build Email Sharing API Route
+**Files to Create:**
+- `src/app/api/letters/send-email/route.ts` — Email letter endpoint (if email service available)
 
-### Current State Analysis
-From `src/app/auth/student/register/page.tsx`:
-- **Current: 10 stages** (lines 11-21):
-  1. Student Personal Info
-  2. Parent/Guardian
-  3. Admission Info
-  4. Class & Session
-  5. Subjects
-  6. Previous School
-  7. Medical Info
-  8. Documents
-  9. Review
-  10. Complete
+**Implementation:**
+- Check if email service (Resend, SendGrid, Postmark) is configured
+- If yes: send HTML letter as email attachment
+- If no: return error with guidance to implement email service
 
-### Fix Strategy
-**Decision**: Consolidate to 5 stages:
-1. **Student Personal Info** (keep as-is): Name, DOB, gender, phone, email, address, state
-2. **Guardian Info** (merge stages 2 + admission): Parent/Guardian details + admission date/number
-3. **Class & Subjects** (keep stages 4-5): Session, term, class, subjects
-4. **Medical & Documents** (merge stages 7-8): Blood type, allergies, medical conditions, uploads
-5. **Review & Confirm** (keep as-is): Final review before submission
-
-**Removed fields**:
-- Previous school info (optional, can add later in profile)
-- Detailed medical history (simplify to blood type + allergies + conditions)
-- Multiple document uploads (keep only passport/birth cert if needed)
-
-### Implementation Tasks
-
-#### Task 5.1: Refactor Student Registration to 5 Stages
-**What**: Redesign the student registration form to have 5 streamlined stages.
-
-**Files to modify**:
-- `src/app/auth/student/register/page.tsx`
-- Possibly: `src/services/student-registration.service.ts`
-
-**STAGES structure**:
-```typescript
-const STAGES = [
-  { number: 1, title: 'Personal Information', icon: '👤' },
-  { number: 2, title: 'Parent/Guardian & Admission', icon: '👨‍👩‍👧' },
-  { number: 3, title: 'Class, Session & Subjects', icon: '🏫' },
-  { number: 4, title: 'Medical & Documents', icon: '📄' },
-  { number: 5, title: 'Review & Confirm', icon: '✓' },
-]
-```
-
-**Verify**:
-- Open student registration modal/page
-- Expected: Only 5 progress indicators shown
-- Complete all stages and submit
-- Expected: 201 response with student ID and PIN
+**Verification:**
+- Email endpoint callable (or returns sensible "not configured" message)
 
 ---
 
-## ISSUE 6: Deployment to Vercel
+### Phase 8: Fix Result Management Cascade
+**Files to Modify:**
+- `src/services/academic.service.ts` — Fix term query logic
+- `src/app/school-admin/results-rebuilt.tsx` — Fix component queries
 
-### Deployment Process
-**Decision**: Use git push to trigger auto-deployment on Vercel.
+**Fixes:**
+1. Update `getTermsForSession()` to use `term_order` not `term_number`
+2. Ensure term queries filter by `session_id` correctly
+3. Verify class_arm_combo fetch (classes don't have term_id; they're school-scoped)
+4. Verify student fetch by class_arm_combo_id
+5. Verify score sheet fetch by term_id + student_id + subject_id
 
-### Implementation Tasks
+**Root Issue Resolution:**
+Classes are school-scoped, not term-scoped. Score sheets are term-scoped. The cascade should be:
+- Session → Terms (by session_id)
+- Terms → (no direct class link; classes are school-scoped)
+- Schools → ClassArmCombos (all classes for school)
+- ClassArmCombos → Students (by class_arm_combo_id)
+- Students + Subjects → ScoreSheets (by term_id + student_id + subject_id)
 
-#### Task 6.1: Commit All Migration and Code Changes
-**What**: Create a single git commit with all fixes and push to main branch (or create PR).
+**Verification:**
+- Results page loads without cascade errors
+- Session → Term → Class → Student cascade works
+- Score sheets display correctly
 
-**Files to commit**:
-- `database/migrations/162_fix_on_conflict_academic_tables.sql` (NEW)
-- `database/migrations/163_fix_academic_sessions_end_year.sql` (NEW)
-- `src/app/school-admin/results/page.tsx` (NEW or modified)
-- `src/app/school-admin/staff/page.tsx` (NEW or modified if separate)
-- `src/app/school-admin/students/page.tsx` (NEW or modified if separate)
-- `src/app/auth/staff/register/page.tsx` (MODIFIED - 9 stages → 4)
-- `src/app/auth/student/register/page.tsx` (MODIFIED - 10 stages → 5)
-- `src/services/staff-registration.service.ts` (MODIFIED if validation changes)
-- `src/services/student-registration.service.ts` (MODIFIED if validation changes)
+---
 
-**Git commands**:
+## 6. BUILD COMMAND & VERIFICATION
+
+**Build:**
 ```bash
-git add database/migrations/162_*.sql database/migrations/163_*.sql
-git add src/app/school-admin/
-git add src/app/auth/staff/register/page.tsx
-git add src/app/auth/student/register/page.tsx
-git add src/services/
-git commit -m "fix: resolve 42P10 error, fix results page, consolidate registration forms"
-git push -u origin main
+npm run build
 ```
 
-**Verify**:
-- Vercel receives webhook and starts deployment
-- Check Vercel dashboard for deployment status (building → deployment → live)
-- Expected: All tests pass (if any), build succeeds
-- DNS propagates to live URL
+**Test:**
+```bash
+npm run test
+```
 
-#### Task 6.2: Test in Vercel Production
-**What**: Manual end-to-end testing in deployed environment.
+**Lint:**
+```bash
+npm next lint
+```
 
-**Test steps**:
-1. **Super Admin School Registration**:
-   - Navigate to Vercel URL
-   - Login as super admin
-   - Click "Register School"
-   - Fill form: school_name="Test School", email="test@school.com", admin email/password, phone, address
-   - Submit
-   - Expected: 201 response, school created, academic sessions/terms auto-seeded
-
-2. **School Admin Dashboard**:
-   - Login as the newly created school admin
-   - Navigate to dashboard
-   - Check Staff tab → Should load staff list (if any)
-   - Check Students tab → Should load student list
-   - Check Results tab → Should show session/term selectors
-
-3. **Staff Registration**:
-   - From school admin context, click "Register Staff"
-   - Fill Stage 1: Personal info
-   - Click Next → Stage 2 of 4
-   - Fill Stage 2: Employment details
-   - Click Next → Stage 3 of 4
-   - Select class and subjects
-   - Click Next → Stage 4 of 4
-   - Enter credentials and submit
-   - Expected: Staff record created in users table
-
-4. **Results Page**:
-   - Navigate to Results tab
-   - Select a session from dropdown
-   - Terms dropdown populates
-   - Select a term
-   - Classes and students with scores load
-   - Expected: Results displayed in table format
-
-**Verify**:
-- All test steps pass without errors
-- No 42P10 errors in Supabase logs
-- No NULL end_year errors
-- Registration forms complete with reduced steps
+**Run for Local Testing:**
+```bash
+npm run dev  # Runs on :3001 (see package.json line 5)
+```
 
 ---
 
-## Summary of Changes
+## 7. CROSS-FILE DEPENDENCIES
 
-| Issue | Root Cause | Fix | Priority |
-|-------|-----------|-----|----------|
-| 1. 42P10 Error | ON CONFLICT on non-unique columns | Migrate 162: Remove ON CONFLICT, use safe INSERT-SELECT | CRITICAL |
-| 2. Bottom Navbar | Not wired to school data | Create staff/students/results pages with proper data loading | HIGH |
-| 3. Results Page Missing | No session/term selector UI | Create Migration 163 (end_year fix) + Results page with dropdowns | HIGH |
-| 4. Staff Registration | 9 stages too complex | Consolidate to 4 essential stages | MEDIUM |
-| 5. Student Registration | 10 stages too complex | Consolidate to 5 essential stages | MEDIUM |
-| 6. Deploy Changes | Changes not in production | Commit all files and git push to trigger Vercel auto-deploy | HIGH |
-
----
-
-## Testing Checklist
-
-- [ ] Migration 162 runs without errors in Supabase
-- [ ] Migration 163 runs without errors in Supabase
-- [ ] Super admin can register a new school (no 42P10 error)
-- [ ] Academic sessions table has 1 row per school with end_year populated
-- [ ] Academic terms table has 3 rows per school
-- [ ] School admin dashboard loads (Staff, Students, Results tabs visible)
-- [ ] Results page shows session/term/class selectors and cascades correctly
-- [ ] Staff registration form has exactly 4 stages
-- [ ] Student registration form has exactly 5 stages
-- [ ] Vercel deployment succeeds and site is live
-- [ ] End-to-end testing in production passes
+| Module | Depends On | Status |
+|--------|-----------|--------|
+| Auth Service | Supabase auth | ✅ Working (after school_id fix) |
+| Staff Service | Supabase direct (users, staff tables) | 🔨 To be created |
+| Staff Page | Staff Service + LetterPreviewModal | 🔨 To be created |
+| Staff Edit Modal | Staff Service + Academic Service (for class/term combos) | 🔨 To be created |
+| Letter Generation Service | Supabase direct (staff, users, schools) | ✅ Working (after API route added) |
+| Letter API Route | Letter Generation Service | 🔨 To be created |
+| Letter Preview Modal | Letter API Route + html2pdf | ✅ Mostly working (needs PDF integration) |
+| Results Page | Academic Service (fixed term queries) | 🔨 Needs term_order fix |
+| Academic Service | Supabase direct (academic_sessions, academic_terms, class_arm_combos) | ⚠️ Needs term_order rename |
 
 ---
 
-## Deployment Checklist
+## 8. IMPLEMENTATION ORDER
 
-- [ ] All migrations tested locally (or in Supabase SQL editor)
-- [ ] All code changes tested in development
-- [ ] Git commits created with descriptive messages
-- [ ] Code pushed to main branch
-- [ ] Vercel deployment completed successfully
-- [ ] Production testing passed (all test steps above)
-- [ ] No errors in Supabase logs or Vercel Function logs
-- [ ] School registration flow working end-to-end
-- [ ] Notify user of successful deployment
+1. **Fix auth.service.ts** (1 line change) — unblocks school admin login
+2. **Create staff.service.ts** — foundation for all staff operations
+3. **Create staff page component** — staff list display
+4. **Create StaffProfileEditModal** — staff data editing
+5. **Create /api/letters/fetch-staff** — unblocks appointment letter generation
+6. **Integrate PDF in LetterPreviewModal** — letter download
+7. **Create /api/letters/send-email** — optional email sharing
+8. **Fix academic.service.ts term queries** — fixes result management cascade
+
+---
+
+## 9. NOTES FOR IMPLEMENTER
+
+- **No New Libraries:** html2pdf.js already in package.json
+- **Supabase First:** All queries use Supabase client, no raw SQL
+- **Multi-Tenant:** Every query must include `school_id` filter
+- **User vs. Staff Table:** users table is primary; staff table has employment-specific fields (salary, bank, etc.)
+- **Column Names:** Use `user_id` not `id` when joining users to staff
+- **Term Ordering:** Use `term_order` not `term_number` when querying academic_terms
+- **Class Scope:** Classes are school-scoped, not term-scoped; handle cascade accordingly
+
+---
+
+## 10. FILES TO CREATE/MODIFY
+
+**Create:**
+- src/services/staff.service.ts
+- src/app/school-admin/staff/page.tsx
+- src/components/admin/StaffProfileEditModal.tsx
+- src/app/api/letters/fetch-staff/route.ts
+- src/app/api/letters/send-email/route.ts (optional)
+
+**Modify:**
+- src/services/auth.service.ts (1 line fix)
+- src/components/admin/LetterPreviewModal.tsx (add PDF integration)
+- src/services/academic.service.ts (fix term query)
+- src/app/school-admin/results-rebuilt.tsx (use fixed academic service)
+
+**Total:** 5 new files, 4 modified files
+
+---
+
+## 11. ABSOLUTE PATHS (for implementer)
+
+| File | Absolute Path |
+|------|---------------|
+| Auth Service | c:\Users\OLU\Desktop\SMS\src\services\auth.service.ts |
+| Staff Service (create) | c:\Users\OLU\Desktop\SMS\src\services\staff.service.ts |
+| Staff Page (create) | c:\Users\OLU\Desktop\SMS\src\app\school-admin\staff\page.tsx |
+| Staff Edit Modal (create) | c:\Users\OLU\Desktop\SMS\src\components\admin\StaffProfileEditModal.tsx |
+| Letter API Route (create) | c:\Users\OLU\Desktop\SMS\src\app\api\letters\fetch-staff\route.ts |
+| Email API Route (create) | c:\Users\OLU\Desktop\SMS\src\app\api\letters\send-email\route.ts |
+| Letter Preview Modal | c:\Users\OLU\Desktop\SMS\src\components\admin\LetterPreviewModal.tsx |
+| Academic Service | c:\Users\OLU\Desktop\SMS\src\services\academic.service.ts |
+| Results Page | c:\Users\OLU\Desktop\SMS\src\app\school-admin\results-rebuilt.tsx |
+

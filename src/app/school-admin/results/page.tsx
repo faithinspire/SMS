@@ -1,598 +1,620 @@
-'use client'
+/**
+ * School Admin Results Management Page - REBUILT
+ * Complete data flow: School → Session → Term → Class → ClassArm → Students → Subjects → Scores
+ * 
+ * KEY FIXES:
+ * 1. School context resolution using SchoolContextService (no more false "not linked" errors)
+ * 2. Proper cascade loading: Don't load next level until previous is selected
+ * 3. Real session/term/class/arm names (not "ACTIVE", not hardcoded)
+ * 4. Students without scores still appear
+ * 5. Scores merged from both manual entry and CBT results
+ * 6. No N+1 queries - batch load students + subjects + scores together
+ * 7. Real UUIDs in state, not display labels
+ */
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase-client'
-import { StaffHeader } from '@/components/StaffHeader'
-import { toast } from 'react-hot-toast'
+'use client';
 
-const supabase = createClient()
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase-client';
+import { toast } from 'react-hot-toast';
+import { SchoolContextService } from '@/services/school-context.service';
+
+const supabase = createClient();
 
 interface Session {
-  id: string
-  session_year: string
-  start_year: number
-  end_year: number
-  is_active: boolean
+  id: string;
+  name: string;
+  status: string;
 }
 
 interface Term {
-  id: string
-  session_id: string
-  term_number: number
-  name: string
-  is_active: boolean
+  id: string;
+  session_id: string;
+  name: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+interface ClassRecord {
+  id: string;
+  name: string;
+  level: string;
 }
 
 interface ClassArm {
-  id: string
-  class_name: string
-  arm_name: string
-  student_count: number
+  id: string;
+  class_id: string;
+  name: string;
+  class: ClassRecord;
 }
 
-interface StudentResult {
-  id: string
-  admission_number: string
-  full_name: string
-  overall_score: number
-  overall_grade: string
-  performance_rating: string
+interface Subject {
+  id: string;
+  name: string;
+  code?: string;
+}
+
+interface Student {
+  id: string;
+  user_id: string;
+  admission_number: string;
+  user: {
+    full_name: string;
+    email: string;
+  };
+}
+
+interface Score {
+  id: string;
+  student_id: string;
+  subject_id: string;
+  score: number;
+  grade?: string;
+  source: 'manual' | 'cbt';
 }
 
 interface PageState {
-  loading: boolean
-  error: string | null
-  user: any
-  school: any
-  sessions: Session[]
-  selectedSession: string | null
-  terms: Term[]
-  selectedTerm: string | null
-  loadingTerms: boolean
-  classes: ClassArm[]
-  selectedClass: string | null
-  loadingClasses: boolean
-  students: StudentResult[]
-  loadingStudents: boolean
+  // School context
+  schoolId: string;
+  schoolName: string;
+
+  // Dropdowns
+  sessions: Session[];
+  selectedSessionId: string;
+
+  terms: Term[];
+  selectedTermId: string;
+
+  classes: ClassRecord[];
+  selectedClassId: string;
+
+  classArms: ClassArm[];
+  selectedClassArmId: string;
+
+  // Data
+  students: Student[];
+  subjects: Subject[];
+  scores: Map<string, Score>;
+
+  // UI
+  isLoading: boolean;
+  error: string | null;
 }
 
-export default function ResultsPage() {
-  const router = useRouter()
+export default function ResultsPageV2() {
+  const router = useRouter();
   const [state, setState] = useState<PageState>({
-    loading: true,
-    error: null,
-    user: null,
-    school: null,
+    schoolId: '',
+    schoolName: '',
     sessions: [],
-    selectedSession: null,
+    selectedSessionId: '',
     terms: [],
-    selectedTerm: null,
-    loadingTerms: false,
+    selectedTermId: '',
     classes: [],
-    selectedClass: null,
-    loadingClasses: false,
+    selectedClassId: '',
+    classArms: [],
+    selectedClassArmId: '',
     students: [],
-    loadingStudents: false,
-  })
+    subjects: [],
+    scores: new Map(),
+    isLoading: true,
+    error: null,
+  });
 
-  // Initialize on mount
+  // STEP 1: Initialize - resolve school context
   useEffect(() => {
-    loadInitialData()
-  }, [])
-
-  // Load terms when session changes
-  useEffect(() => {
-    if (state.selectedSession) {
-      loadTerms()
-    }
-  }, [state.selectedSession])
-
-  // Load classes when term changes
-  useEffect(() => {
-    if (state.selectedTerm) {
-      loadClasses()
-    }
-  }, [state.selectedTerm])
-
-  // Load students when class changes
-  useEffect(() => {
-    if (state.selectedClass) {
-      loadStudents()
-    }
-  }, [state.selectedClass])
-
-  const loadInitialData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-
-      if (!user) {
-        router.push('/landing')
-        return
+    const initializeSchoolContext = async () => {
+      try {
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+        const userSchool = await SchoolContextService.getCurrentUserSchool();
+        console.log('[Results] School context resolved:', {
+          schoolId: userSchool.schoolId,
+          schoolName: userSchool.schoolName || 'Unknown',
+        });
+        setState((prev) => ({
+          ...prev,
+          schoolId: userSchool.schoolId,
+          schoolName: userSchool.schoolName || 'School',
+        }));
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Failed to load school information';
+        console.error('[Results] School context error:', error);
+        setState((prev) => ({ ...prev, error: msg, isLoading: false }));
+        toast.error(msg);
       }
+    };
 
-      // Get user profile with school_id
-      const { data: userProfile } = await supabase
-        .from('users')
-        .select('school_id')
-        .eq('id', user.id)
-        .maybeSingle()
+    initializeSchoolContext();
+  }, []);
 
-      if (!userProfile || !userProfile.school_id) {
-        setState(s => ({
-          ...s,
-          error: '❌ Your account is not linked to a school. Contact your administrator.',
-          loading: false,
-        }))
-        return
+  // STEP 2: Load sessions for school
+  useEffect(() => {
+    if (!state.schoolId) return;
+
+    const loadSessions = async () => {
+      try {
+        console.log('[Results] Loading sessions for school:', state.schoolId);
+        const { data, error } = await supabase
+          .from('academic_sessions')
+          .select('id, name, status')
+          .eq('school_id', state.schoolId)
+          .order('name', { ascending: false });
+
+        if (error) throw error;
+
+        console.log('[Results] ✅ Sessions loaded:', data?.length || 0);
+        setState((prev) => ({
+          ...prev,
+          sessions: data || [],
+          isLoading: false,
+        }));
+      } catch (error) {
+        console.error('[Results] Error loading sessions:', error);
+        toast.error('Failed to load sessions');
+        setState((prev) => ({ ...prev, isLoading: false }));
       }
+    };
 
-      setState(s => ({ ...s, user: userProfile }))
+    loadSessions();
+  }, [state.schoolId]);
 
-      // Load school data
-      const { data: schoolData } = await supabase
-        .from('schools')
-        .select('*')
-        .eq('id', userProfile.school_id)
-        .maybeSingle()
-
-      setState(s => ({ ...s, school: schoolData }))
-
-      // Load sessions - real-time
-      await loadSessions(userProfile.school_id)
-      setState(s => ({ ...s, loading: false }))
-    } catch (error) {
-      console.error('[Results] Error loading initial data:', error)
-      setState(s => ({
-        ...s,
-        error: error instanceof Error ? error.message : 'Failed to load data',
-        loading: false,
-      }))
-    }
-  }
-
-  const loadSessions = async (schoolId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('academic_sessions')
-        .select('id, session_year, start_year, end_year, is_active')
-        .eq('school_id', schoolId)
-        .order('start_year', { ascending: false })
-
-      if (error) throw error
-
-      if (!data || data.length === 0) {
-        setState(s => ({
-          ...s,
-          sessions: [],
-          selectedSession: null,
-          error: '📭 No academic sessions found. Create sessions first.',
-        }))
-        return
-      }
-
-      setState(s => ({
-        ...s,
-        sessions: data,
-        selectedSession: data.length > 0 ? data[0].id : null,
+  // STEP 3: Load terms when session selected
+  useEffect(() => {
+    if (!state.selectedSessionId) {
+      setState((prev) => ({
+        ...prev,
         terms: [],
-        selectedTerm: null,
+        selectedTermId: '',
         classes: [],
-        selectedClass: null,
+        selectedClassId: '',
+        classArms: [],
+        selectedClassArmId: '',
         students: [],
-        error: '',
-      }))
-    } catch (error) {
-      console.error('[Results] Error loading sessions:', error)
-      toast.error('Failed to load sessions')
+        subjects: [],
+        scores: new Map(),
+      }));
+      return;
     }
-  }
 
-  const loadTerms = async () => {
-    try {
-      if (!state.selectedSession || !state.user?.school_id) return
+    const loadTerms = async () => {
+      try {
+        console.log('[Results] Loading terms for session:', state.selectedSessionId);
+        const { data, error } = await supabase
+          .from('terms')
+          .select('id, name, session_id, start_date, end_date')
+          .eq('session_id', state.selectedSessionId)
+          .order('name', { ascending: true });
 
-      setState(s => ({ ...s, loadingTerms: true }))
+        if (error) throw error;
 
-      const { data, error } = await supabase
-        .from('academic_terms')
-        .select('id, session_id, term_number, name, is_active')
-        .eq('session_id', state.selectedSession)
-        .eq('school_id', state.user.school_id)
-        .order('term_number', { ascending: true })
-
-      if (error) throw error
-
-      setState(s => ({
-        ...s,
-        terms: data || [],
-        selectedTerm: data && data.length > 0 ? data[0].id : null,
-        classes: [],
-        selectedClass: null,
-        students: [],
-        loadingTerms: false,
-      }))
-    } catch (error) {
-      console.error('[Results] Error loading terms:', error)
-      setState(s => ({ ...s, loadingTerms: false }))
-      toast.error('Failed to load terms')
-    }
-  }
-
-  const loadClasses = async () => {
-    try {
-      if (!state.selectedTerm || !state.user?.school_id) return
-
-      setState(s => ({ ...s, loadingClasses: true }))
-
-      // Get classes for this term
-      const { data, error } = await supabase
-        .from('class_arm_combos')
-        .select(`
-          id,
-          class:class_id (id, name),
-          arm:arm_id (id, name)
-        `)
-        .eq('school_id', state.user.school_id)
-        .order('created_at', { ascending: true })
-
-      if (error) throw error
-
-      // Count students for each class
-      const classesWithCounts = await Promise.all(
-        (data || []).map(async (combo) => {
-          const { count } = await supabase
-            .from('students')
-            .select('id', { count: 'exact' })
-            .eq('class_arm_combo_id', combo.id)
-            .eq('school_id', state.user.school_id)
-
-          return {
-            id: combo.id,
-            class_name: combo.class?.name || 'Unknown',
-            arm_name: combo.arm?.name || 'N/A',
-            student_count: count || 0,
-          }
-        })
-      )
-
-      setState(s => ({
-        ...s,
-        classes: classesWithCounts,
-        selectedClass: classesWithCounts.length > 0 ? classesWithCounts[0].id : null,
-        students: [],
-        loadingClasses: false,
-      }))
-    } catch (error) {
-      console.error('[Results] Error loading classes:', error)
-      setState(s => ({ ...s, loadingClasses: false }))
-      toast.error('Failed to load classes')
-    }
-  }
-
-  const loadStudents = async () => {
-    try {
-      if (!state.selectedClass || !state.selectedTerm) return
-
-      setState(s => ({ ...s, loadingStudents: true }))
-
-      // Get students for this class
-      const { data: studentsData, error: studentError } = await supabase
-        .from('students')
-        .select('id, user_id, admission_number')
-        .eq('class_arm_combo_id', state.selectedClass)
-        .order('user_id', { ascending: true })
-
-      if (studentError) throw studentError
-
-      if (!studentsData || studentsData.length === 0) {
-        setState(s => ({
-          ...s,
+        console.log('[Results] ✅ Terms loaded:', data?.length || 0);
+        setState((prev) => ({
+          ...prev,
+          terms: data || [],
+          selectedTermId: '',
+          classes: [],
+          selectedClassId: '',
+          classArms: [],
+          selectedClassArmId: '',
           students: [],
-          loadingStudents: false,
-        }))
-        return
+          subjects: [],
+          scores: new Map(),
+        }));
+      } catch (error) {
+        console.error('[Results] Error loading terms:', error);
+        toast.error('Failed to load terms');
       }
+    };
 
-      // Get student names and scores
-      const studentsWithScores = await Promise.all(
-        (studentsData || []).map(async (student) => {
-          // Get student name
-          const { data: userData } = await supabase
-            .from('users')
-            .select('full_name')
-            .eq('id', student.user_id)
-            .maybeSingle()
+    loadTerms();
+  }, [state.selectedSessionId]);
 
-          // Get student score
-          const { data: scoreData } = await supabase
-            .from('score_sheets')
-            .select('overall_score, overall_grade, performance_rating')
-            .eq('student_id', student.id)
-            .eq('term_id', state.selectedTerm)
-            .maybeSingle()
-
-          return {
-            id: student.id,
-            admission_number: student.admission_number || 'N/A',
-            full_name: userData?.full_name || 'Unknown',
-            overall_score: scoreData?.overall_score || 0,
-            overall_grade: scoreData?.overall_grade || 'N/A',
-            performance_rating: scoreData?.performance_rating || 'No Rating',
-          }
-        })
-      )
-
-      setState(s => ({
-        ...s,
-        students: studentsWithScores,
-        loadingStudents: false,
-      }))
-    } catch (error) {
-      console.error('[Results] Error loading students:', error)
-      setState(s => ({ ...s, loadingStudents: false }))
-      toast.error('Failed to load students')
+  // STEP 4: Load classes when term selected
+  useEffect(() => {
+    if (!state.selectedTermId) {
+      setState((prev) => ({
+        ...prev,
+        classes: [],
+        selectedClassId: '',
+        classArms: [],
+        selectedClassArmId: '',
+        students: [],
+        subjects: [],
+        scores: new Map(),
+      }));
+      return;
     }
-  }
 
-  const getSessionYear = () => {
-    const session = state.sessions.find(s => s.id === state.selectedSession)
-    return session ? session.session_year : 'Select a session'
-  }
+    const loadClasses = async () => {
+      try {
+        console.log('[Results] Loading classes for school:', state.schoolId);
+        const { data, error } = await supabase
+          .from('classes')
+          .select('id, name, level')
+          .eq('school_id', state.schoolId)
+          .order('name', { ascending: true });
 
-  const getTermName = () => {
-    const term = state.terms.find(t => t.id === state.selectedTerm)
-    return term ? term.name || `Term ${term.term_number}` : 'Select a term'
-  }
+        if (error) throw error;
 
-  const getClassName = () => {
-    const cls = state.classes.find(c => c.id === state.selectedClass)
-    return cls ? `${cls.class_name} ${cls.arm_name}` : 'Select a class'
-  }
+        console.log('[Results] ✅ Classes loaded:', data?.length || 0);
+        setState((prev) => ({
+          ...prev,
+          classes: data || [],
+          selectedClassId: '',
+          classArms: [],
+          selectedClassArmId: '',
+          students: [],
+          subjects: [],
+          scores: new Map(),
+        }));
+      } catch (error) {
+        console.error('[Results] Error loading classes:', error);
+        toast.error('Failed to load classes');
+      }
+    };
 
-  // Loading state
-  if (state.loading) {
+    loadClasses();
+  }, [state.selectedTermId, state.schoolId]);
+
+  // STEP 5: Load class arms when class selected
+  useEffect(() => {
+    if (!state.selectedClassId) {
+      setState((prev) => ({
+        ...prev,
+        classArms: [],
+        selectedClassArmId: '',
+        students: [],
+        subjects: [],
+        scores: new Map(),
+      }));
+      return;
+    }
+
+    const loadClassArms = async () => {
+      try {
+        console.log('[Results] Loading class arms for class:', state.selectedClassId);
+        const { data, error } = await supabase
+          .from('class_arm_combos')
+          .select(
+            `
+            id,
+            class_id,
+            name,
+            class:class_id (id, name, level)
+          `
+          )
+          .eq('class_id', state.selectedClassId)
+          .order('name', { ascending: true });
+
+        if (error) throw error;
+
+        console.log('[Results] ✅ Class arms loaded:', data?.length || 0);
+        setState((prev) => ({
+          ...prev,
+          classArms: data || [],
+          selectedClassArmId: '',
+          students: [],
+          subjects: [],
+          scores: new Map(),
+        }));
+      } catch (error) {
+        console.error('[Results] Error loading class arms:', error);
+        toast.error('Failed to load class arms');
+      }
+    };
+
+    loadClassArms();
+  }, [state.selectedClassId]);
+
+  // STEP 6 & 7: Load students, subjects, and scores together when class arm selected
+  useEffect(() => {
+    if (!state.selectedClassArmId || !state.selectedTermId) {
+      setState((prev) => ({
+        ...prev,
+        students: [],
+        subjects: [],
+        scores: new Map(),
+      }));
+      return;
+    }
+
+    const loadResultsData = async () => {
+      try {
+        setState((prev) => ({ ...prev, isLoading: true }));
+        console.log('[Results] Loading students, subjects, and scores...');
+
+        // Fetch ALL students in this class/arm (including those without scores)
+        const { data: studentData, error: studentError } = await supabase
+          .from('student_class_enrollments')
+          .select(
+            `
+            student:student_id (
+              id,
+              user_id,
+              admission_number,
+              user:user_id (full_name, email)
+            )
+          `
+          )
+          .eq('class_arm_combo_id', state.selectedClassArmId);
+
+        if (studentError) throw studentError;
+
+        const students: Student[] = (studentData || [])
+          .map((enrollment: any) => enrollment.student)
+          .filter(Boolean);
+
+        console.log('[Results] ✅ Students loaded:', students.length);
+
+        // Fetch subjects for this class/session
+        const { data: subjectData, error: subjectError } = await supabase
+          .from('class_subjects')
+          .select(
+            `
+            subject:subject_id (
+              id,
+              name,
+              code
+            )
+          `
+          )
+          .eq('class_id', state.selectedClassId);
+
+        if (subjectError) throw subjectError;
+
+        const subjects: Subject[] = (subjectData || [])
+          .map((cs: any) => cs.subject)
+          .filter(Boolean);
+
+        console.log('[Results] ✅ Subjects loaded:', subjects.length);
+
+        // Fetch scores (both manual and CBT)
+        const { data: scoreData, error: scoreError } = await supabase
+          .from('score_sheets')
+          .select('id, student_id, subject_id, score, grade, term_id')
+          .eq('term_id', state.selectedTermId);
+
+        if (scoreError) throw scoreError;
+
+        const scoresMap = new Map<string, Score>();
+        (scoreData || []).forEach((score: any) => {
+          const key = `${score.student_id}_${score.subject_id}`;
+          scoresMap.set(key, {
+            id: score.id,
+            student_id: score.student_id,
+            subject_id: score.subject_id,
+            score: score.score || 0,
+            grade: score.grade,
+            source: 'manual',
+          });
+        });
+
+        // Also fetch CBT scores
+        const { data: cbtData, error: cbtError } = await supabase
+          .from('cbt_results')
+          .select('student_id, subject_id, score')
+          .eq('term_id', state.selectedTermId);
+
+        if (!cbtError && cbtData) {
+          cbtData.forEach((cbt: any) => {
+            const key = `${cbt.student_id}_${cbt.subject_id}`;
+            if (!scoresMap.has(key)) {
+              scoresMap.set(key, {
+                id: '',
+                student_id: cbt.student_id,
+                subject_id: cbt.subject_id,
+                score: cbt.score || 0,
+                source: 'cbt',
+              });
+            }
+          });
+        }
+
+        console.log('[Results] ✅ Scores loaded:', scoresMap.size);
+
+        setState((prev) => ({
+          ...prev,
+          students,
+          subjects,
+          scores: scoresMap,
+          isLoading: false,
+        }));
+      } catch (error) {
+        console.error('[Results] Error loading results data:', error);
+        toast.error('Failed to load results data');
+        setState((prev) => ({ ...prev, isLoading: false }));
+      }
+    };
+
+    loadResultsData();
+  }, [state.selectedClassArmId, state.selectedTermId, state.selectedClassId]);
+
+  // Render
+  if (state.error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-purple-500 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-semibold">Loading results page...</p>
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+          <p className="text-red-800 font-semibold">{state.error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-3 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Retry
+          </button>
         </div>
       </div>
-    )
-  }
-
-  // Error state
-  if (state.error && state.sessions.length === 0) {
-    return (
-      <div className="p-6 bg-red-50 rounded-lg border border-red-200">
-        <p className="text-red-700 font-semibold">{state.error}</p>
-        <button
-          onClick={() => loadInitialData()}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-        >
-          Retry
-        </button>
-      </div>
-    )
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pb-24">
-      {/* Header */}
-      <div className="sticky top-0 z-50">
-        <StaffHeader
-          staffName="School Administrator"
-          schoolName={state.school?.name || 'School'}
-          section="Results Management"
-        />
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h2 className="text-2xl font-bold mb-6">Results Management</h2>
+
+      {/* School Context Display */}
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <p className="text-sm text-blue-800">
+          <strong>📍 School:</strong> {state.schoolName}
+        </p>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Error Message */}
-        {state.error && state.sessions.length > 0 && (
-          <div className="mb-6 p-4 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-700">
-            {state.error}
-          </div>
-        )}
-
-        {/* Selectors Section */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          {/* Session Selector */}
-          <div className="bg-white rounded-lg shadow-lg p-4 border-l-4 border-blue-600">
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              📅 Academic Session
-            </label>
-            <select
-              value={state.selectedSession || ''}
-              onChange={(e) =>
-                setState(s => ({
-                  ...s,
-                  selectedSession: e.target.value || null,
-                  selectedTerm: null,
-                  selectedClass: null,
-                  terms: [],
-                  classes: [],
-                  students: [],
-                }))
-              }
-              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none bg-white"
-            >
-              <option value="">Select a session</option>
-              {state.sessions.map(session => (
-                <option key={session.id} value={session.id}>
-                  {session.session_year}
-                  {session.is_active ? ' ✓ Active' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Term Selector */}
-          <div className="bg-white rounded-lg shadow-lg p-4 border-l-4 border-purple-600">
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              📋 Term
-            </label>
-            <select
-              value={state.selectedTerm || ''}
-              onChange={(e) =>
-                setState(s => ({
-                  ...s,
-                  selectedTerm: e.target.value || null,
-                  selectedClass: null,
-                  classes: [],
-                  students: [],
-                }))
-              }
-              disabled={!state.selectedSession || state.loadingTerms}
-              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
-            >
-              <option value="">
-                {state.loadingTerms ? '⏳ Loading...' : 'Select a term'}
+      {/* Cascade Selectors */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Session Selector */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Session</label>
+          <select
+            value={state.selectedSessionId}
+            onChange={(e) => setState((prev) => ({ ...prev, selectedSessionId: e.target.value }))}
+            disabled={state.isLoading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            <option value="">Select session...</option>
+            {state.sessions.map((session) => (
+              <option key={session.id} value={session.id}>
+                {session.name}
               </option>
-              {state.terms.map(term => (
-                <option key={term.id} value={term.id}>
-                  {term.name || `Term ${term.term_number}`}
-                  {term.is_active ? ' (Active)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Class Selector */}
-          <div className="bg-white rounded-lg shadow-lg p-4 border-l-4 border-green-600">
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              🎓 Class
-            </label>
-            <select
-              value={state.selectedClass || ''}
-              onChange={(e) =>
-                setState(s => ({
-                  ...s,
-                  selectedClass: e.target.value || null,
-                  students: [],
-                }))
-              }
-              disabled={!state.selectedTerm || state.loadingClasses}
-              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-green-600 focus:outline-none bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
-            >
-              <option value="">
-                {state.loadingClasses ? '⏳ Loading...' : 'Select a class'}
-              </option>
-              {state.classes.map(cls => (
-                <option key={cls.id} value={cls.id}>
-                  {cls.class_name} {cls.arm_name} ({cls.student_count} students)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Students Count */}
-          <div className="bg-white rounded-lg shadow-lg p-4 border-l-4 border-orange-600 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-sm font-bold text-gray-700">👥 Students</p>
-              <p className="text-3xl font-bold text-orange-600">{state.students.length}</p>
-            </div>
-          </div>
+            ))}
+          </select>
         </div>
 
-        {/* Results Section */}
-        {state.selectedClass && (
-          <div>
-            <div className="mb-6">
-              <h2 className="text-3xl font-bold text-gray-900">
-                📊 Results - {getSessionYear()} • {getTermName()}
-              </h2>
-              <p className="text-gray-600 mt-2">Class: {getClassName()}</p>
-            </div>
+        {/* Term Selector */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Term</label>
+          <select
+            value={state.selectedTermId}
+            onChange={(e) => setState((prev) => ({ ...prev, selectedTermId: e.target.value }))}
+            disabled={!state.selectedSessionId || state.isLoading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            <option value="">Select term...</option>
+            {state.terms.map((term) => (
+              <option key={term.id} value={term.id}>
+                {term.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-            {state.loadingStudents ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-purple-500 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading student results...</p>
-              </div>
-            ) : state.students.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-                <p className="text-gray-600">📭 No students in this class</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-                <table className="w-full">
-                  <thead className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-sm font-bold">Admission #</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold">Student Name</th>
-                      <th className="px-6 py-3 text-center text-sm font-bold">Score</th>
-                      <th className="px-6 py-3 text-center text-sm font-bold">Grade</th>
-                      <th className="px-6 py-3 text-left text-sm font-bold">Performance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {state.students.map((student, idx) => (
-                      <tr
-                        key={student.id}
-                        className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                      >
-                        <td className="px-6 py-4 font-semibold text-gray-700">
-                          {student.admission_number}
-                        </td>
-                        <td className="px-6 py-4 text-gray-700">{student.full_name}</td>
-                        <td className="px-6 py-4 text-center font-bold text-gray-900">
-                          {student.overall_score}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <span
-                            className={`px-3 py-1 rounded-full text-sm font-bold text-white ${
-                              student.overall_grade === 'A'
-                                ? 'bg-green-600'
-                                : student.overall_grade === 'B'
-                                ? 'bg-blue-600'
-                                : student.overall_grade === 'C'
-                                ? 'bg-yellow-600'
-                                : student.overall_grade === 'D'
-                                ? 'bg-orange-600'
-                                : 'bg-red-600'
-                            }`}
-                          >
-                            {student.overall_grade}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              student.performance_rating === 'Excellent'
-                                ? 'bg-green-100 text-green-800'
-                                : student.performance_rating === 'Very Good'
-                                ? 'bg-blue-100 text-blue-800'
-                                : student.performance_rating === 'Good'
-                                ? 'bg-cyan-100 text-cyan-800'
-                                : student.performance_rating === 'Fair'
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : student.performance_rating === 'Poor'
-                                ? 'bg-orange-100 text-orange-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {student.performance_rating}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Class Selector */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Class</label>
+          <select
+            value={state.selectedClassId}
+            onChange={(e) => setState((prev) => ({ ...prev, selectedClassId: e.target.value }))}
+            disabled={!state.selectedTermId || state.isLoading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            <option value="">Select class...</option>
+            {state.classes.map((cls) => (
+              <option key={cls.id} value={cls.id}>
+                {cls.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        {/* No Selection Message */}
-        {!state.selectedClass && state.selectedSession && (
-          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-            <p className="text-gray-600 text-lg">👆 Select a class to view student results</p>
-          </div>
-        )}
+        {/* Class Arm Selector */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Class Arm</label>
+          <select
+            value={state.selectedClassArmId}
+            onChange={(e) => setState((prev) => ({ ...prev, selectedClassArmId: e.target.value }))}
+            disabled={!state.selectedClassId || state.isLoading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            <option value="">Select arm...</option>
+            {state.classArms.map((arm) => (
+              <option key={arm.id} value={arm.id}>
+                {arm.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      {/* Results Table */}
+      {state.isLoading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+          <p className="text-gray-600">Loading results...</p>
+        </div>
+      ) : state.selectedClassArmId && state.students.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-gray-100 border-b-2 border-gray-300">
+              <tr>
+                <th className="px-4 py-3 text-left font-bold text-gray-700">Student</th>
+                <th className="px-4 py-3 text-left font-bold text-gray-700">Admission #</th>
+                {state.subjects.map((subject) => (
+                  <th key={subject.id} className="px-4 py-3 text-center font-bold text-gray-700">
+                    {subject.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {state.students.map((student, idx) => (
+                <tr key={student.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="px-4 py-3 font-semibold text-gray-700">{student.user.full_name}</td>
+                  <td className="px-4 py-3 text-gray-700">{student.admission_number}</td>
+                  {state.subjects.map((subject) => {
+                    const scoreKey = `${student.id}_${subject.id}`;
+                    const score = state.scores.get(scoreKey);
+                    return (
+                      <td key={subject.id} className="px-4 py-3 text-center">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={score?.score || ''}
+                          onChange={(e) => {
+                            // Handle score update
+                            const newScore = parseFloat(e.target.value) || 0;
+                            const updatedScores = new Map(state.scores);
+                            updatedScores.set(scoreKey, {
+                              ...score,
+                              student_id: student.id,
+                              subject_id: subject.id,
+                              score: newScore,
+                            } as Score);
+                            setState((prev) => ({ ...prev, scores: updatedScores }));
+                          }}
+                          className="w-16 px-2 py-1 border border-gray-300 rounded text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : state.selectedClassArmId ? (
+        <div className="text-center py-8 text-gray-500">No students found in this class</div>
+      ) : (
+        <div className="text-center py-8 text-gray-500">Select a class arm to view results</div>
+      )}
     </div>
-  )
+  );
 }
