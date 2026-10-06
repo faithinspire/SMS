@@ -6,6 +6,9 @@ import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
 import toast from 'react-hot-toast'
 
+// ✅ Mark as dynamic - Client Component using useSearchParams() can't be statically rendered
+export const dynamic = 'force-dynamic'
+
 // Dynamically import html2pdf to avoid build errors
 const html2pdf = typeof window !== 'undefined' ? require('html2pdf.js/dist/html2pdf.bundle.min') : null
 

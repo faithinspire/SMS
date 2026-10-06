@@ -6,6 +6,9 @@ import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
 import Link from 'next/link'
 
+// ✅ Mark as dynamic - Client Component using useSearchParams() can't be statically rendered
+export const dynamic = 'force-dynamic'
+
 interface Question {
   id: string
   question_text: string

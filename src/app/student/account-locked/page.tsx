@@ -4,6 +4,9 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AuthService } from '@/services/auth.service';
 
+// ✅ Mark as dynamic - Client Component using useSearchParams() can't be statically rendered
+export const dynamic = 'force-dynamic'
+
 export default function AccountLockedPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
