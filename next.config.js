@@ -3,10 +3,12 @@
 // Attempt to load next-pwa, but run without it if not installed
 let withPWA;
 try {
-  const pwaConfig = require('next-pwa')({
+  const PWA = require('next-pwa')
+  withPWA = PWA({
     dest: 'public',
     register: true,
     skipWaiting: true,
+    disable: process.env.NODE_ENV === 'development',
     runtimeCaching: [
       // Don't cache localhost pages during development - they change frequently
       {
@@ -69,9 +71,8 @@ try {
       },
     ],
   })
-  withPWA = pwaConfig
 } catch (error) {
-  console.warn('⚠️ next-pwa not installed. Install with: npm install next-pwa')
+  console.warn('⚠️ next-pwa not installed or error loading. Building without PWA.')
   withPWA = (config) => config // passthrough if not installed
 }
 
@@ -88,9 +89,7 @@ const nextConfig = {
   },
   // NUCLEAR: Disable static page generation for build to prevent Supabase init errors
   // All pages/routes will be Server-Side Rendered (SSR) instead
-  experimental: {
-    staticPageGenerationTimeout: undefined,
-  },
+  experimental: {},
   // NUCLEAR BYPASS: Use rewrites to prevent static generation of API routes
   async rewrites() {
     return {
