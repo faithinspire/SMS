@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
 
+// ✅ Mark as dynamic - uses request.url (searchParams) which requires request context
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/school-admin/lessons/pending
  *

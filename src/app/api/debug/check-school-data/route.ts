@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
+// ✅ Mark as dynamic - uses request.url (searchParams) which requires request context
+export const dynamic = 'force-dynamic'
+
 // Admin client
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
