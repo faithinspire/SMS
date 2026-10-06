@@ -70,6 +70,26 @@ export default function StudentDashboard() {
 
         setUser(currentUser)
 
+        // ✅ CHECK ACCOUNT STATUS: Prevent paused/suspended students from accessing dashboard
+        const { data: studentRecord } = await supabase
+          .from('students')
+          .select('id, status')
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+
+        if (studentRecord) {
+          const statusCheck = await StudentAuthService.verifyStudentAccountActive(studentRecord.id);
+          if (!statusCheck.isActive) {
+            // Account is locked/paused/suspended - show error and redirect
+            const router_instance = router;
+            setTimeout(() => {
+              // Show locked message on a special page or modal
+              router_instance.push(`/student/account-locked?reason=${encodeURIComponent(statusCheck.message || 'Account locked')}`);
+            }, 100);
+            return;
+          }
+        }
+
         // Load school
         if (currentUser.school_id) {
           const { data: schoolData } = await supabase
