@@ -201,10 +201,10 @@ export default function ResultsPageV2() {
       try {
         console.log('[Results] Loading terms for session:', state.selectedSessionId);
         const { data, error } = await supabase
-          .from('terms')
-          .select('id, name, session_id, start_date, end_date')
+          .from('academic_terms')
+          .select('id, term_name as name, session_id, is_active')
           .eq('session_id', state.selectedSessionId)
-          .order('name', { ascending: true });
+          .order('term_name', { ascending: true });
 
         if (error) throw error;
 
@@ -300,19 +300,29 @@ export default function ResultsPageV2() {
             `
             id,
             class_id,
-            name,
-            class:class_id (id, name, level)
+            arm_id,
+            classes (id, name, level),
+            arms (id, name)
           `
           )
           .eq('class_id', state.selectedClassId)
-          .order('name', { ascending: true });
+          .eq('school_id', state.schoolId)
+          .order('arms(name)', { ascending: true });
 
         if (error) throw error;
 
-        console.log('[Results] ✅ Class arms loaded:', data?.length || 0);
+        // Map the nested data to the ClassArm interface
+        const arms = (data || []).map(combo => ({
+          id: combo.id,
+          class_id: combo.class_id,
+          name: (combo.arms as any)?.name || '',
+          class: (combo.classes as any) || { id: '', name: '', level: '' },
+        }));
+
+        console.log('[Results] ✅ Class arms loaded:', arms.length || 0);
         setState((prev) => ({
           ...prev,
-          classArms: data || [],
+          classArms: arms,
           selectedClassArmId: '',
           students: [],
           subjects: [],
@@ -346,46 +356,66 @@ export default function ResultsPageV2() {
 
         // Fetch ALL students in this class/arm (including those without scores)
         const { data: studentData, error: studentError } = await supabase
-          .from('student_class_enrollments')
+          .from('students')
           .select(
             `
-            student:student_id (
-              id,
-              user_id,
-              admission_number,
-              user:user_id (full_name, email)
-            )
+            id,
+            user_id,
+            admission_number,
+            users (full_name, email)
           `
           )
-          .eq('class_arm_combo_id', state.selectedClassArmId);
+          .eq('class_arm_combo_id', state.selectedClassArmId)
+          .eq('school_id', state.schoolId);
 
         if (studentError) throw studentError;
 
         const students: Student[] = (studentData || [])
-          .map((enrollment: any) => enrollment.student)
+          .map((student: any) => ({
+            id: student.id,
+            user_id: student.user_id,
+            admission_number: student.admission_number || '',
+            user: {
+              full_name: (student.users as any)?.full_name || 'Unknown',
+              email: (student.users as any)?.email || '',
+            },
+          }))
           .filter(Boolean);
 
         console.log('[Results] ✅ Students loaded:', students.length);
 
-        // Fetch subjects for this class/session
+        // Fetch subjects assigned to teachers in this class/arm
         const { data: subjectData, error: subjectError } = await supabase
-          .from('class_subjects')
+          .from('subject_teacher_assignments')
           .select(
             `
-            subject:subject_id (
+            subject_id,
+            subjects (
               id,
               name,
               code
             )
           `
           )
-          .eq('class_id', state.selectedClassId);
+          .eq('class_arm_combo_id', state.selectedClassArmId)
+          .eq('school_id', state.schoolId);
 
         if (subjectError) throw subjectError;
 
-        const subjects: Subject[] = (subjectData || [])
-          .map((cs: any) => cs.subject)
-          .filter(Boolean);
+        // Deduplicate subjects
+        const subjectMap = new Map<string, Subject>();
+        (subjectData || []).forEach((sa: any) => {
+          const subject = (sa.subjects as any);
+          if (subject && !subjectMap.has(subject.id)) {
+            subjectMap.set(subject.id, {
+              id: subject.id,
+              name: subject.name || '',
+              code: subject.code || '',
+            });
+          }
+        });
+
+        const subjects = Array.from(subjectMap.values());
 
         console.log('[Results] ✅ Subjects loaded:', subjects.length);
 
