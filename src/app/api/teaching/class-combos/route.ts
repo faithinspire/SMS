@@ -5,7 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
  * GET /api/teaching/class-combos
  * Fetch class-arm combos bypassing the broken nested query
  * Query params: schoolId, section (optional)
+ * 
+ * ⚠️ DYNAMIC: Uses nextUrl.searchParams - cannot be statically rendered
  */
+
+// ✅ Mark as dynamic - uses searchParams which requires request context
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   try {
     const schoolId = req.nextUrl.searchParams.get('schoolId')

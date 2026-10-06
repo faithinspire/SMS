@@ -4,7 +4,14 @@ import { supabase } from '@/lib/supabase-client'
 /**
  * GET /api/teacher/subject-students
  * Fetch all students enrolled in a teacher's subject
+ * Query params: teacherId, subjectId, classId (optional), schoolId (optional)
+ * 
+ * ⚠️ DYNAMIC: Uses nextUrl.searchParams - cannot be statically rendered
  */
+
+// ✅ Mark as dynamic - uses searchParams which requires request context
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
