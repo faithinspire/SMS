@@ -500,7 +500,7 @@ export class AuthService {
           const { data: userRecord, error: userError } = await supabase
             .from('users')
             .select('role, school_id, full_name')
-            .eq('id', data.user.id)
+            .eq('user_id', data.user.id)
             .maybeSingle()
 
           if (!userError && userRecord?.school_id) {
