@@ -1,7 +1,12 @@
 /**
  * School Admin Staff Management Page
- * Lists all staff with edit modal matching student modal structure
- * Features: Real-time data, edit modal with personal/contact/employment/assignment sections
+ * Lists all staff for the authenticated school
+ * Features: Real school context resolution, edit modal, appointment letter generation
+ * 
+ * KEY FIX: Uses SchoolContextService for reliable school resolution
+ * - No more "account not linked to school" false errors
+ * - Comprehensive error logging for diagnostics
+ * - Fetches ONLY staff belonging to authenticated school
  */
 
 'use client';
@@ -11,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
+import { SchoolContextService } from '@/services/school-context.service';
 import { LetterGenerationService } from '@/services/letter-generation.service';
 import { LetterPreviewModal } from '@/components/admin/LetterPreviewModal';
 
@@ -340,37 +346,25 @@ const StaffPage: React.FC = () => {
     staffId?: string;
   }>({ isOpen: false });
 
-  // Get current user's school
+  // Get current user's school using centralized service
   useEffect(() => {
-    const getCurrentSchool = async () => {
+    const loadUserSchoolContext = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data: userProfile, error } = await supabase
-          .from('users')
-          .select('school_id')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (error) {
-          console.error('Error getting user profile:', error);
-          toast.error('Failed to load your school information');
-          return;
-        }
-
-        if (userProfile && userProfile.school_id) {
-          setSchoolId(userProfile.school_id);
-        } else {
-          toast.error('Your account is not linked to a school');
-        }
+        console.log('[Staff Page] 🚀 Loading school context...');
+        const userSchool = await SchoolContextService.getCurrentUserSchool();
+        console.log('[Staff Page] ✅ School context loaded:', {
+          userId: userSchool.userId,
+          schoolId: userSchool.schoolId,
+        });
+        setSchoolId(userSchool.schoolId);
       } catch (error) {
-        console.error('Error getting school:', error);
-        toast.error('Failed to load school information');
+        console.error('[Staff Page] ❌ Failed to load school context:', error);
+        const errorMsg = error instanceof Error ? error.message : 'Failed to load school information';
+        toast.error(errorMsg);
       }
     };
 
-    getCurrentSchool();
+    loadUserSchoolContext();
   }, []);
 
   // Fetch staff from Supabase
