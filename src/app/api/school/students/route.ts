@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
         school_id,
         admission_number,
         date_of_birth,
+        status,
         class_arm_combo_id,
         photo_url,
         created_at,
@@ -41,14 +42,14 @@ export async function GET(request: NextRequest) {
           status,
           photo_url
         ),
-        class:class_arm_combo_id (
+        class_arm_combo (
           id,
-          classes (
+          class:classes (
             id,
             name,
             level
           ),
-          arms (
+          arm:arms (
             id,
             name
           )

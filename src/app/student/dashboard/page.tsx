@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
+import { StudentAuthService } from '@/services/student-auth.service'
 import { supabase } from '@/lib/supabase-client'
 import { User } from '@/types'
 import StudentPhotoDisplay from '@/components/StudentPhotoDisplay'

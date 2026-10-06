@@ -1,0 +1,427 @@
+diff --git a/src/app/school-admin/results/page.tsx b/src/app/school-admin/results/page.tsx
+index 7bc52d4..37566f5 100644
+--- a/src/app/school-admin/results/page.tsx
++++ b/src/app/school-admin/results/page.tsx
+@@ -201,10 +201,10 @@ export default function ResultsPageV2() {
+       try {
+         console.log('[Results] Loading terms for session:', state.selectedSessionId);
+         const { data, error } = await supabase
+-          .from('terms')
+-          .select('id, name, session_id, start_date, end_date')
++          .from('academic_terms')
++          .select('id, term_name as name, session_id, is_active')
+           .eq('session_id', state.selectedSessionId)
+-          .order('name', { ascending: true });
++          .order('term_name', { ascending: true });
+ 
+         if (error) throw error;
+ 
+@@ -300,19 +300,29 @@ export default function ResultsPageV2() {
+             `
+             id,
+             class_id,
+-            name,
+-            class:class_id (id, name, level)
++            arm_id,
++            classes (id, name, level),
++            arms (id, name)
+           `
+           )
+           .eq('class_id', state.selectedClassId)
+-          .order('name', { ascending: true });
++          .eq('school_id', state.schoolId)
++          .order('arms(name)', { ascending: true });
+ 
+         if (error) throw error;
+ 
+-        console.log('[Results] ✅ Class arms loaded:', data?.length || 0);
++        // Map the nested data to the ClassArm interface
++        const arms = (data || []).map(combo => ({
++          id: combo.id,
++          class_id: combo.class_id,
++          name: (combo.arms as any)?.name || '',
++          class: (combo.classes as any) || { id: '', name: '', level: '' },
++        }));
++
++        console.log('[Results] ✅ Class arms loaded:', arms.length || 0);
+         setState((prev) => ({
+           ...prev,
+-          classArms: data || [],
++          classArms: arms,
+           selectedClassArmId: '',
+           students: [],
+           subjects: [],
+@@ -346,46 +356,66 @@ export default function ResultsPageV2() {
+ 
+         // Fetch ALL students in this class/arm (including those without scores)
+         const { data: studentData, error: studentError } = await supabase
+-          .from('student_class_enrollments')
++          .from('students')
+           .select(
+             `
+-            student:student_id (
+-              id,
+-              user_id,
+-              admission_number,
+-              user:user_id (full_name, email)
+-            )
++            id,
++            user_id,
++            admission_number,
++            users (full_name, email)
+           `
+           )
+-          .eq('class_arm_combo_id', state.selectedClassArmId);
++          .eq('class_arm_combo_id', state.selectedClassArmId)
++          .eq('school_id', state.schoolId);
+ 
+         if (studentError) throw studentError;
+ 
+         const students: Student[] = (studentData || [])
+-          .map((enrollment: any) => enrollment.student)
++          .map((student: any) => ({
++            id: student.id,
++            user_id: student.user_id,
++            admission_number: student.admission_number || '',
++            user: {
++              full_name: (student.users as any)?.full_name || 'Unknown',
++              email: (student.users as any)?.email || '',
++            },
++          }))
+           .filter(Boolean);
+ 
+         console.log('[Results] ✅ Students loaded:', students.length);
+ 
+-        // Fetch subjects for this class/session
++        // Fetch subjects assigned to teachers in this class/arm
+         const { data: subjectData, error: subjectError } = await supabase
+-          .from('class_subjects')
++          .from('subject_teacher_assignments')
+           .select(
+             `
+-            subject:subject_id (
++            subject_id,
++            subjects (
+               id,
+               name,
+               code
+             )
+           `
+           )
+-          .eq('class_id', state.selectedClassId);
++          .eq('class_arm_combo_id', state.selectedClassArmId)
++          .eq('school_id', state.schoolId);
+ 
+         if (subjectError) throw subjectError;
+ 
+-        const subjects: Subject[] = (subjectData || [])
+-          .map((cs: any) => cs.subject)
+-          .filter(Boolean);
++        // Deduplicate subjects
++        const subjectMap = new Map<string, Subject>();
++        (subjectData || []).forEach((sa: any) => {
++          const subject = (sa.subjects as any);
++          if (subject && !subjectMap.has(subject.id)) {
++            subjectMap.set(subject.id, {
++              id: subject.id,
++              name: subject.name || '',
++              code: subject.code || '',
++            });
++          }
++        });
++
++        const subjects = Array.from(subjectMap.values());
+ 
+         console.log('[Results] ✅ Subjects loaded:', subjects.length);
+ 
+diff --git a/src/services/school-context.service.ts b/src/services/school-context.service.ts
+index 7bfc0e5..fb13fd1 100644
+--- a/src/services/school-context.service.ts
++++ b/src/services/school-context.service.ts
+@@ -1,171 +1,87 @@
+-/**
+- * Centralized School Context Service
+- * Single source of truth for resolving authenticated user → school
+- * 
+- * PROBLEM BEING SOLVED:
+- * - Multiple pages independently looked up school_id
+- * - Many failed silently or threw errors
+- * - Users saw "account not linked to school" even when it was
+- * 
+- * SOLUTION:
+- * - One reliable method: getCurrentUserSchool()
+- * - Comprehensive logging for diagnostics
+- * - Three-tier fallback (auth metadata → users table → error with context)
+- * - Used by: Staff Page, Student Page, Results Page, Navigation, etc.
+- */
+-
+-import { createClient } from '@/lib/supabase-client'
++import { AuthService } from './auth.service'
++import { supabase } from '@/lib/supabase-client'
+ 
+-const supabase = createClient()
+-
+-export interface UserWithSchool {
+-  userId: string
+-  email: string
++export interface SchoolContext {
+   schoolId: string
+-  schoolName?: string
+-  fullName?: string
+-  role?: string
++  schoolName: string
++  userId: string
++  userRole: string
+ }
+ 
++/**
++ * SchoolContextService
++ * Handles resolving and managing school context for authenticated users
++ * Replaces fragmented context resolution logic across the app
++ */
+ export class SchoolContextService {
+   /**
+-   * Get the authenticated user's school with comprehensive debugging
+-   * 
+-   * Returns: { userId, email, schoolId, schoolName, fullName, role }
+-   * Throws: Error with descriptive message if user not found or not linked to school
+-   * 
+-   * RESOLUTION STRATEGY:
+-   * 1. Get authenticated user from Supabase Auth
+-   * 2. Check auth user_metadata for school_id (fastest)
+-   * 3. Fallback to users table lookup for school_id (if needed)
+-   * 4. Fallback to school name lookup (optional, for UI display)
+-   * 5. Throw with context if all fail
++   * Get the current user's school context
++   * Combines auth resolution with school data lookup
+    */
+-  static async getCurrentUserSchool(): Promise<UserWithSchool> {
+-    console.log('[SchoolContextService] 🚀 Resolving user school context...')
+-
++  static async getCurrentUserSchool(): Promise<SchoolContext> {
+     try {
+-      // STEP 1: Get authenticated user
+-      const { data: authData, error: authError } = await supabase.auth.getUser()
+-
+-      if (authError || !authData.user) {
+-        console.error('[SchoolContextService] ❌ No authenticated user found')
+-        throw new Error('Not authenticated. Please log in.')
++      // Step 1: Get current user from auth
++      const user = await AuthService.getCurrentUser()
++      if (!user) {
++        throw new Error('User not authenticated')
+       }
+ 
+-      const authUser = authData.user
+-      console.log('[SchoolContextService] ✅ Authenticated user:', {
+-        id: authUser.id,
+-        email: authUser.email,
+-      })
+-
+-      // STEP 2: Try auth metadata first (fastest)
+-      const metadataSchoolId = authUser.user_metadata?.school_id as string | undefined
+-      const metadataRole = authUser.user_metadata?.role as string | undefined
+-      const metadataName = authUser.user_metadata?.name as string | undefined
+-
+-      if (metadataSchoolId) {
+-        console.log(
+-          '[SchoolContextService] ✅ PRIORITY 1: Found school_id in auth metadata:',
+-          metadataSchoolId
+-        )
+-        return {
+-          userId: authUser.id,
+-          email: authUser.email || '',
+-          schoolId: metadataSchoolId,
+-          fullName: metadataName,
+-          role: metadataRole,
+-        }
++      // Step 2: Verify school_id is available
++      if (!user.school_id) {
++        throw new Error('Account not linked to a school. Please contact your administrator.')
+       }
+ 
+-      console.log(
+-        '[SchoolContextService] ⚠️  No school_id in auth metadata, checking users table...'
+-      )
+-
+-      // STEP 3: Query users table for school_id
+-      const { data: userRecord, error: userError } = await supabase
+-        .from('users')
+-        .select('id, school_id, full_name, role, email')
+-        .eq('id', authUser.id)
++      // Step 3: Fetch school details
++      const { data: school, error: schoolError } = await supabase
++        .from('schools')
++        .select('id, name')
++        .eq('id', user.school_id)
+         .maybeSingle()
+ 
+-      if (userError) {
+-        console.error('[SchoolContextService] ❌ Database error:', userError.message)
+-        throw new Error(
+-          `Failed to look up school relationship: ${userError.message}`
+-        )
+-      }
+-
+-      if (!userRecord) {
+-        console.error('[SchoolContextService] ❌ User record not found in users table')
+-        throw new Error(
+-          `User profile not found. Contact your administrator. (User ID: ${authUser.id})`
+-        )
++      if (schoolError) {
++        console.error('School lookup error:', schoolError)
++        throw new Error('Failed to load school information')
+       }
+ 
+-      if (!userRecord.school_id) {
+-        console.error(
+-          '[SchoolContextService] ❌ User found but has NO school_id:',
+-          userRecord
+-        )
+-        throw new Error(
+-          `Your account is not linked to a school. Contact your administrator.`
+-        )
++      if (!school) {
++        throw new Error('School not found')
+       }
+ 
+-      console.log('[SchoolContextService] ✅ PRIORITY 2: Found school_id in users table:', {
+-        userId: userRecord.id,
+-        schoolId: userRecord.school_id,
+-      })
+-
+       return {
+-        userId: authUser.id,
+-        email: authUser.email || userRecord.email || '',
+-        schoolId: userRecord.school_id,
+-        fullName: userRecord.full_name,
+-        role: userRecord.role,
++        schoolId: user.school_id,
++        schoolName: school.name || 'Unknown School',
++        userId: user.id,
++        userRole: user.role || 'UNKNOWN',
+       }
+-    } catch (error) {
+-      console.error('[SchoolContextService] ❌ CRITICAL ERROR:', error)
++    } catch (error: any) {
++      console.error('SchoolContextService error:', error)
+       throw error
+     }
+   }
+ 
+   /**
+-   * Get school details (name, logo, etc.)
++   * Get school data by ID
+    */
+-  static async getSchoolDetails(schoolId: string) {
+-    console.log('[SchoolContextService] Fetching school details for:', schoolId)
+-
++  static async getSchoolById(schoolId: string): Promise<{ id: string; name: string } | null> {
+     try {
+-      const { data: school, error } = await supabase
++      const { data, error } = await supabase
+         .from('schools')
+-        .select('id, name, logo_url, email, phone, address, website, motto')
++        .select('id, name')
+         .eq('id', schoolId)
+         .maybeSingle()
+ 
+-      if (error) {
+-        console.error('[SchoolContextService] Error fetching school:', error)
+-        throw error
+-      }
+-
+-      if (!school) {
+-        console.warn('[SchoolContextService] School not found:', schoolId)
+-        return null
+-      }
+-
+-      console.log('[SchoolContextService] ✅ School details loaded:', school.name)
+-      return school
+-    } catch (error) {
+-      console.error('[SchoolContextService] Error:', error)
+-      throw error
++      if (error) throw error
++      return data
++    } catch (error: any) {
++      console.error('Get school by ID error:', error)
++      return null
+     }
+   }
+ 
+   /**
+-   * Validate that user belongs to school (security check)
++   * Verify user belongs to a school
+    */
+-  static async validateUserBelongsToSchool(userId: string, schoolId: string): Promise<boolean> {
++  static async verifyUserBelongsToSchool(userId: string, schoolId: string): Promise<boolean> {
+     try {
+       const { data, error } = await supabase
+         .from('users')
+@@ -175,19 +91,57 @@ export class SchoolContextService {
+         .maybeSingle()
+ 
+       if (error) {
+-        console.error('[SchoolContextService] Validation error:', error)
++        console.error('Verify user school error:', error)
+         return false
+       }
+ 
+-      const isValid = !!data
+-      console.log(
+-        `[SchoolContextService] User ${userId} belongs to school ${schoolId}:`,
+-        isValid
+-      )
+-      return isValid
+-    } catch (error) {
+-      console.error('[SchoolContextService] Validation failed:', error)
++      return !!data
++    } catch (error: any) {
++      console.error('Verify user school exception:', error)
+       return false
+     }
+   }
++
++  /**
++   * Get all staff for a school
++   */
++  static async getSchoolStaff(schoolId: string): Promise<Array<{ id: string; full_name: string; role: string }>> {
++    try {
++      const { data, error } = await supabase
++        .from('users')
++        .select('id, full_name, role')
++        .eq('school_id', schoolId)
++        .in('role', ['TEACHER', 'HEAD_TEACHER', 'PRINCIPAL', 'ACCOUNTANT', 'STAFF'])
++        .order('full_name', { ascending: true })
++
++      if (error) throw error
++      return data || []
++    } catch (error: any) {
++      console.error('Get school staff error:', error)
++      return []
++    }
++  }
++
++  /**
++   * Get all students for a school
++   */
++  static async getSchoolStudents(schoolId: string): Promise<Array<{ id: string; full_name: string; admission_number: string }>> {
++    try {
++      const { data, error } = await supabase
++        .from('students')
++        .select('id, user_id, admission_number, users(full_name)')
++        .eq('school_id', schoolId)
++        .order('admission_number', { ascending: true })
++
++      if (error) throw error
++      return (data || []).map(s => ({
++        id: s.id,
++        full_name: (s.users as any)?.full_name || 'Unknown',
++        admission_number: s.admission_number || '',
++      }))
++    } catch (error: any) {
++      console.error('Get school students error:', error)
++      return []
++    }
++  }
+ }
