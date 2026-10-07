@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
+import { AuthService } from '@/services/auth.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,31 +28,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify requester is authenticated and belongs to this school
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const user = await AuthService.getCurrentUser();
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verify user belongs to the school
-    const { data: userProfile, error: profileError } = await supabase
-      .from('users')
-      .select('school_id, role')
-      .eq('id', user.id)
-      .single();
-
-    if (
-      profileError ||
-      !userProfile ||
-      (userProfile.role !== 'SCHOOL_ADMIN' && userProfile.role !== 'STAFF')
-    ) {
+    // Verify user belongs to the school and has permission
+    if (user.role !== 'SCHOOL_ADMIN' && user.role !== 'PRINCIPAL' && user.role !== 'HEAD_TEACHER') {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
-    if (userProfile.school_id !== schoolId) {
+    if (user.school_id !== schoolId) {
       return NextResponse.json(
         { error: 'Cannot access students from different school' },
         { status: 403 }

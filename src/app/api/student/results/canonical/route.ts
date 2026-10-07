@@ -85,13 +85,13 @@ export async function GET(request: NextRequest): Promise<NextResponse<StudentCan
     // Get session and term info
     const { data: session } = await supabase
       .from('academic_sessions')
-      .select('id, name')
+      .select('id, session_year')
       .eq('id', sessionId)
       .single();
 
     const { data: term } = await supabase
       .from('academic_terms')
-      .select('id, name')
+      .select('id, term_name')
       .eq('id', termId)
       .single();
 
@@ -150,11 +150,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<StudentCan
         },
         session: {
           id: session.id,
-          name: session.name,
+          name: session.session_year,  // Map database column to expected API field
         },
         term: {
           id: term.id,
-          name: term.name,
+          name: term.term_name,  // Map database column to expected API field
         },
         results,
         summary: {

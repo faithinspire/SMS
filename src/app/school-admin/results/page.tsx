@@ -24,8 +24,9 @@ const supabase = createClient();
 
 interface Session {
   id: string;
-  name: string;
-  status: string;
+  session_year: string;  // The actual database column
+  is_active: boolean;
+  name?: string; // Optional mapped display name
 }
 
 interface Term {
@@ -157,9 +158,9 @@ export default function ResultsPageV2() {
         console.log('[Results] Loading sessions for school:', state.schoolId);
         const { data, error } = await supabase
           .from('academic_sessions')
-          .select('id, name, status')
+          .select('id, session_year, is_active')
           .eq('school_id', state.schoolId)
-          .order('name', { ascending: false });
+          .order('session_year', { ascending: false });
 
         if (error) throw error;
 
