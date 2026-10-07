@@ -151,29 +151,49 @@ export default function ResultsPageV2() {
 
   // STEP 2: Load sessions for school
   useEffect(() => {
-    if (!state.schoolId) return;
+    if (!state.schoolId) {
+      console.log('[Results] No schoolId available yet, skipping session load');
+      return;
+    }
 
     const loadSessions = async () => {
       try {
         console.log('[Results] Loading sessions for school:', state.schoolId);
+        
+        // Query Supabase directly with proper error handling
         const { data, error } = await supabase
           .from('academic_sessions')
           .select('id, session_year, is_active')
           .eq('school_id', state.schoolId)
           .order('session_year', { ascending: false });
 
-        if (error) throw error;
+        if (error) {
+          console.error('[Results] Database error:', error);
+          throw error;
+        }
 
-        console.log('[Results] ✅ Sessions loaded:', data?.length || 0);
+        console.log('[Results] ✅ Sessions loaded:', data?.length || 0, 'sessions');
+        
+        if (!data || data.length === 0) {
+          console.warn('[Results] No sessions found for school. Sessions may need to be created.');
+          toast.error('No academic sessions configured for this school. Please create sessions first.');
+          setState(prev => ({
+            ...prev,
+            sessions: [],
+            isLoading: false,
+          }));
+          return;
+        }
+
         setState((prev) => ({
           ...prev,
           sessions: data || [],
           isLoading: false,
         }));
-      } catch (error) {
-        console.error('[Results] Error loading sessions:', error);
-        toast.error('Failed to load sessions');
-        setState((prev) => ({ ...prev, isLoading: false }));
+      } catch (error: any) {
+        console.error('[Results] Error loading sessions:', error?.message || error);
+        toast.error(`Failed to load sessions: ${error?.message || 'Unknown error'}`);
+        setState((prev) => ({ ...prev, isLoading: false, sessions: [] }));
       }
     };
 
