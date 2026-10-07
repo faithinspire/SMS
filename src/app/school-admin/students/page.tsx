@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, createClient } from '@/lib/supabase-client';
+import { AuthService } from '@/services/auth.service';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
 import { LetterGenerationService } from '@/services/letter-generation.service';
@@ -237,7 +238,7 @@ const StudentsPage: React.FC = () => {
   const [filterClass, setFilterClass] = useState<string>('ALL');
   const [schoolId, setSchoolId] = useState<string>('');
   const [modal, setModal] = useState<{
-    type: 'pause' | 'activate' | 'delete' | 'edit' | null;
+    type: 'pause' | 'activate' | 'delete' | 'edit' | 'lock' | 'unlock' | null;
     student?: Student;
   }>({ type: null });
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -245,6 +246,7 @@ const StudentsPage: React.FC = () => {
     isOpen: boolean;
     studentId?: string;
   }>({ isOpen: false });
+  const [lockReason, setLockReason] = useState('');
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -306,46 +308,37 @@ const StudentsPage: React.FC = () => {
     }
   }, []);
 
-  // Get current user's school
+  // Get current user's school - FIXED to use AuthService like Staff page
   useEffect(() => {
     const getCurrentSchool = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        // ✅ USE AuthService.getCurrentUser() - same pattern as Staff page
+        const user = await AuthService.getCurrentUser();
+        
         if (!user) {
           console.log('[Students Page] No authenticated user');
+          router.push('/auth/login');
           return;
         }
 
-        console.log('[Students Page] Authenticated user:', user.id);
-
-        // ✅ HOTFIX: Use .maybeSingle() instead of .single() to handle missing user records gracefully
-        const { data: userProfile, error } = await supabase
-          .from('users')
-          .select('school_id')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (error) {
-          console.error('[Students Page] Error getting user profile:', error);
-          toast.error('Failed to load your school information');
-          return;
-        }
-
-        if (userProfile && userProfile.school_id) {
-          console.log('[Students Page] Setting schoolId:', userProfile.school_id);
-          setSchoolId(userProfile.school_id);
-        } else {
-          console.warn('[Students Page] No school_id in user profile - user record may not exist yet');
+        if (!user.school_id) {
+          console.error('[Students Page] User has no school_id:', user.id);
           toast.error('Your account is not linked to a school');
+          setIsLoading(false);
+          return;
         }
+
+        console.log('[Students Page] Set schoolId from AuthService:', user.school_id);
+        setSchoolId(user.school_id);
       } catch (error) {
-        console.error('[Students Page] Error getting school:', error);
+        console.error('[Students Page] Error getting current user:', error);
         toast.error('Failed to load school information');
+        setIsLoading(false);
       }
     };
 
     getCurrentSchool();
-  }, []);
+  }, [router]);
 
   // Fetch classes
   useEffect(() => {
@@ -487,6 +480,78 @@ const StudentsPage: React.FC = () => {
     }
   };
 
+  // Handle lock student
+  const handleLockStudent = async () => {
+    if (!modal.student) return;
+    try {
+      setIsActionLoading(true);
+      const response = await fetch(
+        `/api/school-admin/students/${modal.student.id}/lock`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            reason: lockReason || undefined,
+            schoolId 
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to lock student');
+      }
+
+      setStudents(students.map(s =>
+        s.id === modal.student!.id 
+          ? { ...s } // UI will show updated lock status on next fetch
+          : s
+      ));
+      toast.success('Student locked successfully');
+      setModal({ type: null });
+      setLockReason('');
+    } catch (error) {
+      console.error('Error locking student:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to lock student');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Handle unlock student
+  const handleUnlockStudent = async () => {
+    if (!modal.student) return;
+    try {
+      setIsActionLoading(true);
+      const response = await fetch(
+        `/api/school-admin/students/${modal.student.id}/unlock`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ schoolId }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to unlock student');
+      }
+
+      setStudents(students.map(s =>
+        s.id === modal.student!.id 
+          ? { ...s } // UI will show updated lock status on next fetch
+          : s
+      ));
+      toast.success('Student unlocked successfully');
+      setModal({ type: null });
+    } catch (error) {
+      console.error('Error unlocking student:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to unlock student');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-2xl font-bold mb-6">Students Management</h2>
@@ -619,6 +684,20 @@ const StudentsPage: React.FC = () => {
                         </button>
                       ) : null}
                       <button
+                        onClick={() => setModal({ type: 'lock', student })}
+                        className="px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600"
+                        title="Lock Student Account"
+                      >
+                        🔒 Lock
+                      </button>
+                      <button
+                        onClick={() => setModal({ type: 'unlock', student })}
+                        className="px-3 py-1 bg-teal-500 text-white rounded text-sm hover:bg-teal-600"
+                        title="Unlock Student Account"
+                      >
+                        🔓 Unlock
+                      </button>
+                      <button
                         onClick={() => setModal({ type: 'delete', student })}
                         className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
                       >
@@ -686,6 +765,58 @@ const StudentsPage: React.FC = () => {
           onCancel={() => setModal({ type: null })}
           isLoading={isActionLoading}
           isDangerous
+        />
+      )}
+
+      {/* Lock Student Modal */}
+      {modal.type === 'lock' && modal.student && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
+            <h3 className="text-lg font-bold mb-2">🔒 Lock Student</h3>
+            <p className="text-gray-600 mb-4">
+              Lock "{modal.student.user.full_name}"? They will not be able to access their account.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Lock Reason (optional)</label>
+              <textarea
+                value={lockReason}
+                onChange={(e) => setLockReason(e.target.value)}
+                placeholder="e.g., Disciplinary action, Payment due, etc."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setModal({ type: null });
+                  setLockReason('');
+                }}
+                disabled={isActionLoading}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLockStudent}
+                disabled={isActionLoading}
+                className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
+              >
+                {isActionLoading ? 'Locking...' : 'Lock Student'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unlock Student Modal */}
+      {modal.type === 'unlock' && modal.student && (
+        <ConfirmationModal
+          title="🔓 Unlock Student"
+          message={`Unlock "${modal.student.user.full_name}"? They will regain access to their account immediately.`}
+          onConfirm={handleUnlockStudent}
+          onCancel={() => setModal({ type: null })}
+          isLoading={isActionLoading}
         />
       )}
     </div>

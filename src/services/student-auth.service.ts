@@ -1,111 +1,248 @@
 /**
- * StudentAuthService
- * Enforces server-side checks for student account status
- * Used to prevent paused/suspended students from accessing protected endpoints
+ * StudentAuthService - Server-side student access control
+ * Manages student lock/unlock system with persistent database state
+ * Lock enforcement is server-side and cannot be bypassed by client
  */
 
 import { supabase } from '@/lib/supabase-client';
 
-export type StudentStatus = 'ACTIVE' | 'INACTIVE' | 'PAUSED' | 'SUSPENDED' | 'TRANSFERRED' | 'GRADUATED';
+export interface StudentLockStatus {
+  id: string;
+  is_locked: boolean;
+  locked_at: string | null;
+  locked_by_user_id: string | null;
+  lock_reason: string | null;
+  school_id: string;
+}
 
 export class StudentAuthService {
   /**
-   * Check if a student account is active and allowed to access the system
-   * Returns locked response if account is paused/suspended
+   * Check if a student is locked
+   * This is used for API route guards and before rendering dashboards
    */
-  static async verifyStudentAccountActive(studentId: string): Promise<{
-    isActive: boolean;
-    status?: StudentStatus;
-    message?: string;
-  }> {
+  static async isStudentLocked(studentId: string, schoolId: string): Promise<boolean> {
     try {
-      const { data: student, error } = await supabase
+      const { data, error } = await supabase
         .from('students')
-        .select('id, status')
+        .select('is_locked')
         .eq('id', studentId)
-        .maybeSingle();
+        .eq('school_id', schoolId)
+        .single();
 
-      if (error || !student) {
-        return {
-          isActive: false,
-          message: 'Student record not found',
-        };
+      if (error) {
+        console.error('[StudentAuthService] Error checking lock status:', error);
+        return false;
       }
 
-      if (student.status === 'PAUSED' || student.status === 'SUSPENDED') {
-        return {
-          isActive: false,
-          status: student.status,
-          message: 'ACCOUNT LOCKED - Your student account has been temporarily locked by your school administrator. Please contact your school administrator for assistance.',
-        };
-      }
-
-      if (student.status === 'INACTIVE' || student.status === 'TRANSFERRED' || student.status === 'GRADUATED') {
-        return {
-          isActive: false,
-          status: student.status,
-          message: `Your account is ${student.status.toLowerCase()} and cannot access the system.`,
-        };
-      }
-
-      // Status is ACTIVE
-      return {
-        isActive: true,
-        status: student.status,
-      };
+      return data?.is_locked || false;
     } catch (error) {
-      console.error('[StudentAuthService] Error checking student status:', error);
-      return {
-        isActive: false,
-        message: 'Failed to verify account status',
-      };
+      console.error('[StudentAuthService] Unexpected error checking lock:', error);
+      return false;
     }
   }
 
   /**
-   * Get student's current status
+   * Get detailed lock information for a student
    */
-  static async getStudentStatus(studentId: string): Promise<StudentStatus | null> {
+  static async getStudentLockStatus(
+    studentId: string,
+    schoolId: string
+  ): Promise<StudentLockStatus | null> {
     try {
-      const { data: student } = await supabase
+      const { data, error } = await supabase
         .from('students')
-        .select('status')
+        .select(
+          'id, is_locked, locked_at, locked_by_user_id, lock_reason, school_id'
+        )
         .eq('id', studentId)
-        .maybeSingle();
+        .eq('school_id', schoolId)
+        .single();
 
-      return (student?.status as StudentStatus) || null;
+      if (error) {
+        console.error('[StudentAuthService] Error getting lock status:', error);
+        return null;
+      }
+
+      return data as StudentLockStatus;
     } catch (error) {
-      console.error('[StudentAuthService] Error getting student status:', error);
+      console.error('[StudentAuthService] Unexpected error:', error);
       return null;
     }
   }
 
   /**
-   * Update student account status
-   * Used by school admins and system for status changes
+   * Lock a student (school admin action)
+   * Persists to database - cannot be bypassed by refreshing or client action
    */
-  static async updateStudentStatus(studentId: string, newStatus: StudentStatus): Promise<{
-    success: boolean;
-    message?: string;
-  }> {
+  static async lockStudent(
+    studentId: string,
+    schoolId: string,
+    adminUserId: string,
+    reason?: string
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase
+      const { data: student, error: fetchError } = await supabase
         .from('students')
-        .update({ status: newStatus })
-        .eq('id', studentId);
+        .select('id, school_id')
+        .eq('id', studentId)
+        .eq('school_id', schoolId)
+        .single();
 
-      if (error) throw error;
+      if (fetchError || !student) {
+        return {
+          success: false,
+          error: 'Student not found in this school',
+        };
+      }
 
-      return {
-        success: true,
-        message: `Student status updated to ${newStatus}`,
-      };
+      const { error: updateError } = await supabase
+        .from('students')
+        .update({
+          is_locked: true,
+          locked_at: new Date().toISOString(),
+          locked_by_user_id: adminUserId,
+          lock_reason: reason || null,
+        })
+        .eq('id', studentId)
+        .eq('school_id', schoolId);
+
+      if (updateError) {
+        console.error('[StudentAuthService] Error locking student:', updateError);
+        return {
+          success: false,
+          error: 'Failed to lock student',
+        };
+      }
+
+      console.log('[StudentAuthService] Student locked:', studentId);
+      return { success: true };
     } catch (error) {
-      console.error('[StudentAuthService] Error updating status:', error);
+      console.error('[StudentAuthService] Unexpected error locking student:', error);
       return {
         success: false,
-        message: error instanceof Error ? error.message : 'Failed to update status',
+        error: 'An unexpected error occurred',
       };
+    }
+  }
+
+  /**
+   * Unlock a student (school admin action)
+   * Removes lock - student regains access immediately
+   */
+  static async unlockStudent(
+    studentId: string,
+    schoolId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data: student, error: fetchError } = await supabase
+        .from('students')
+        .select('id, school_id')
+        .eq('id', studentId)
+        .eq('school_id', schoolId)
+        .single();
+
+      if (fetchError || !student) {
+        return {
+          success: false,
+          error: 'Student not found in this school',
+        };
+      }
+
+      const { error: updateError } = await supabase
+        .from('students')
+        .update({
+          is_locked: false,
+          locked_at: null,
+          locked_by_user_id: null,
+          lock_reason: null,
+        })
+        .eq('id', studentId)
+        .eq('school_id', schoolId);
+
+      if (updateError) {
+        console.error('[StudentAuthService] Error unlocking student:', updateError);
+        return {
+          success: false,
+          error: 'Failed to unlock student',
+        };
+      }
+
+      console.log('[StudentAuthService] Student unlocked:', studentId);
+      return { success: true };
+    } catch (error) {
+      console.error('[StudentAuthService] Unexpected error unlocking student:', error);
+      return {
+        success: false,
+        error: 'An unexpected error occurred',
+      };
+    }
+  }
+
+  /**
+   * Check if a student can access a specific API/page
+   * Server-side enforcement: cannot be bypassed by client
+   * Returns { allowed: boolean, lockReason?: string }
+   */
+  static async canStudentAccess(
+    studentId: string,
+    schoolId: string
+  ): Promise<{ allowed: boolean; lockReason?: string }> {
+    try {
+      const lockStatus = await this.getStudentLockStatus(studentId, schoolId);
+
+      if (!lockStatus) {
+        // Student doesn't exist in this school
+        return { allowed: false, lockReason: 'Student not found' };
+      }
+
+      if (lockStatus.is_locked) {
+        return {
+          allowed: false,
+          lockReason:
+            lockStatus.lock_reason ||
+            'Your account has been temporarily locked by your school administrator.',
+        };
+      }
+
+      return { allowed: true };
+    } catch (error) {
+      console.error('[StudentAuthService] Error checking access:', error);
+      return {
+        allowed: false,
+        lockReason: 'Unable to verify access status',
+      };
+    }
+  }
+
+  /**
+   * Bulk check lock status for multiple students
+   * Useful for filtering student lists
+   */
+  static async getMultipleStudentLockStatus(
+    studentIds: string[],
+    schoolId: string
+  ): Promise<Map<string, boolean>> {
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('id, is_locked')
+        .eq('school_id', schoolId)
+        .in('id', studentIds);
+
+      if (error) {
+        console.error('[StudentAuthService] Error checking multiple locks:', error);
+        return new Map();
+      }
+
+      const lockMap = new Map<string, boolean>();
+      data?.forEach((student: any) => {
+        lockMap.set(student.id, student.is_locked || false);
+      });
+
+      return lockMap;
+    } catch (error) {
+      console.error('[StudentAuthService] Unexpected error:', error);
+      return new Map();
     }
   }
 }
