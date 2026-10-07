@@ -5,9 +5,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
 import toast from 'react-hot-toast'
-
-// ✅ Mark as dynamic - Client Component using useSearchParams() can't be statically rendered
-export const dynamic = 'force-dynamic'
+import { Suspense } from 'react'
 
 // Dynamically import html2pdf to avoid build errors
 const html2pdf = typeof window !== 'undefined' ? require('html2pdf.js/dist/html2pdf.bundle.min') : null
@@ -27,11 +25,9 @@ interface StudentResult {
   status?: 'PASS' | 'FAIL'
 }
 
-export default function StudentDetailPage() {
+function StudentDetailContent({ studentId }: { studentId: string }) {
   const router = useRouter()
-  const params = useParams()
   const searchParams = useSearchParams()
-  const studentId = params.studentId as string
   
   // ===== FIX: Get term from URL parameters =====
   const termIdFromUrl = searchParams.get('termId')
@@ -631,5 +627,23 @@ ${comment ? `\nTeacher Comment:\n${comment}` : ''}
         </div>
       </div>
     </div>
+  )
+}
+
+export default function StudentDetailPage() {
+  const params = useParams()
+  const studentId = params.studentId as string
+
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-700">Loading...</p>
+        </div>
+      </div>
+    }>
+      <StudentDetailContent studentId={studentId} />
+    </Suspense>
   )
 }

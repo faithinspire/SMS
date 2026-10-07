@@ -2,12 +2,10 @@
 
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Suspense } from 'react';
 import { AuthService } from '@/services/auth.service';
 
-// ✅ Mark as dynamic - Client Component using useSearchParams() can't be statically rendered
-export const dynamic = 'force-dynamic'
-
-export default function AccountLockedPage() {
+function AccountLockedContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -60,5 +58,20 @@ export default function AccountLockedPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function AccountLockedPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
+          <p className="text-gray-700">Loading...</p>
+        </div>
+      </div>
+    }>
+      <AccountLockedContent />
+    </Suspense>
   );
 }

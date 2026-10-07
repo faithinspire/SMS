@@ -5,9 +5,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { AuthService } from '@/services/auth.service'
 import { supabase } from '@/lib/supabase-client'
 import Link from 'next/link'
-
-// ✅ Mark as dynamic - Client Component using useSearchParams() can't be statically rendered
-export const dynamic = 'force-dynamic'
+import { Suspense } from 'react'
 
 interface Question {
   id: string
@@ -45,12 +43,8 @@ interface Submission {
   }
 }
 
-export default function CBTResultsPage() {
+function CBTResultsContent({ examId, submissionId }: { examId: string; submissionId: string }) {
   const router = useRouter()
-  const params = useParams()
-  const searchParams = useSearchParams()
-  const examId = params.id as string
-  const submissionId = searchParams.get('submission') as string
 
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -338,3 +332,22 @@ export default function CBTResultsPage() {
   )
 }
 
+export default function CBTResultsPage() {
+  const params = useParams()
+  const searchParams = useSearchParams()
+  const examId = params.id as string
+  const submissionId = searchParams.get('submission') as string
+
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-indigo-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <CBTResultsContent examId={examId} submissionId={submissionId} />
+    </Suspense>
+  )
+}
