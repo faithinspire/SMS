@@ -1,26 +1,10 @@
-/**
- * School Admin Students Management Page with Letter Preview and Share
- */
-
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, createClient } from '@/lib/supabase-client';
 import { AuthService } from '@/services/auth.service';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
-import { LetterGenerationService } from '@/services/letter-generation.service';
-import { LetterPreviewModal as LetterPreviewModalComponent } from '@/components/admin/LetterPreviewModal';
-
-// Helper to get fresh Supabase client
-let supabaseClient: any = null;
-function getSupabaseClient() {
-  if (!supabaseClient) {
-    supabaseClient = createClient();
-  }
-  return supabaseClient;
-}
 
 interface Student {
   id: string;
@@ -32,7 +16,6 @@ interface Student {
   status: 'ACTIVE' | 'INACTIVE' | 'PAUSED' | 'SUSPENDED';
   is_locked: boolean;
   locked_at: string | null;
-  locked_by_user_id: string | null;
   lock_reason: string | null;
   class_arm_combo_id: string | null;
   users?: {
@@ -40,7 +23,6 @@ interface Student {
     full_name: string;
     email: string;
     photo_url: string | null;
-    status: string;
     phone?: string;
   };
   class_arm_combos?: {
@@ -56,11 +38,6 @@ interface Student {
   };
 }
 
-interface Class {
-  id: string;
-  name: string;
-}
-
 type StatusType = 'ACTIVE' | 'INACTIVE' | 'PAUSED' | 'SUSPENDED';
 
 const StatusBadge: React.FC<{ status: StatusType; isLocked?: boolean }> = ({ status, isLocked }) => {
@@ -71,14 +48,10 @@ const StatusBadge: React.FC<{ status: StatusType; isLocked?: boolean }> = ({ sta
     SUSPENDED: 'bg-red-100 text-red-800',
   };
 
-  // If locked, show lock status regardless of other status
   if (isLocked) {
     return (
-      <div className="flex flex-col gap-1">
-        <span className="px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800">
-          🔒 LOCKED
-        </span>
-        <span className="text-xs text-gray-600">{status}</span>
+      <div className="px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800">
+        🔒 LOCKED
       </div>
     );
   }
@@ -90,758 +63,221 @@ const StatusBadge: React.FC<{ status: StatusType; isLocked?: boolean }> = ({ sta
   );
 };
 
-const ConfirmationModal: React.FC<{
-  title: string;
-  message: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-  isLoading?: boolean;
-  isDangerous?: boolean;
-}> = ({ title, message, onConfirm, onCancel, isLoading = false, isDangerous = false }) => (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
-      <h3 className="text-lg font-bold mb-2">{title}</h3>
-      <p className="text-gray-600 mb-6">{message}</p>
-      <div className="flex gap-3 justify-end">
-        <button
-          onClick={onCancel}
-          disabled={isLoading}
-          className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onConfirm}
-          disabled={isLoading}
-          className={`px-4 py-2 text-white rounded ${
-            isDangerous ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
-          } disabled:opacity-50`}
-        >
-          {isLoading ? 'Processing...' : 'Confirm'}
-        </button>
-      </div>
-    </div>
-  </div>
-);
-
-// ✅ HOTFIX: Add EditStudentModal component
-const EditStudentModal: React.FC<{
-  student: Student;
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (updates: Partial<Student>) => Promise<void>;
-  isLoading?: boolean;
-}> = ({ student, isOpen, onClose, onSave, isLoading = false }) => {
-  const [formData, setFormData] = useState(student);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    setFormData(student);
-  }, [student]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      await onSave(formData);
-      onClose();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 border-b border-blue-800">
-          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            ✏️ Edit Student
-          </h3>
-          <p className="text-blue-100 text-sm mt-1">Update student information</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              👤 Personal Information
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  value={formData.user.full_name}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      user: { ...formData.user, full_name: e.target.value },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={formData.user.email}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      user: { ...formData.user, email: e.target.value },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Admission Number</label>
-                <input
-                  type="text"
-                  value={formData.admission_number}
-                  onChange={(e) => setFormData({ ...formData, admission_number: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as StatusType })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
-                  <option value="PAUSED">Paused</option>
-                  <option value="SUSPENDED">Suspended</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-3 justify-end border-t pt-6">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-const StudentsPage: React.FC = () => {
+export default function StudentsPage() {
   const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
-  const [classes, setClasses] = useState<Class[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<StatusType | 'ALL'>('ALL');
-  const [filterClass, setFilterClass] = useState<string>('ALL');
   const [schoolId, setSchoolId] = useState<string>('');
-  const [modal, setModal] = useState<{
-    type: 'pause' | 'activate' | 'delete' | 'edit' | 'lock' | 'unlock' | null;
-    student?: Student;
-  }>({ type: null });
-  const [isActionLoading, setIsActionLoading] = useState(false);
-  const [letterModal, setLetterModal] = useState<{
-    isOpen: boolean;
-    studentId?: string;
-  }>({ isOpen: false });
-  const [lockReason, setLockReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Fetch students with abort controller to prevent race conditions
-  const fetchStudents = useCallback(async (school: string) => {
-    if (!school) {
-      setIsLoading(false);
-      return;
-    }
-
-    // Cancel any previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
-
-    try {
-      setIsLoading(true);
-      console.log('[Students Page] Fetching students for school:', school);
-
-      // Call the API endpoint instead of direct database query
-      const response = await fetch(`/api/school/students?schoolId=${school}`, {
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (!signal.aborted) {
-        setStudents(result.data || []);
-        console.log('[Students Page] Students set in state:', result.data?.length || 0);
-      }
-    } catch (error) {
-      if (signal.aborted) {
-        console.log('[Students Page] Request was cancelled');
-        return;
-      }
-
-      console.error('[Students Page] Critical error fetching students:', error);
-      let errorMsg = 'Failed to load students';
-      if (error instanceof Error) {
-        if (error.message.includes('timeout')) {
-          errorMsg = 'Student data is taking too long to load. Try again in a moment.';
-        } else if (error.message.includes('cancelled')) {
-          return;
-        } else {
-          errorMsg = error.message;
-        }
-      }
-      toast.error(errorMsg);
-      setStudents([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Get current user's school - FIXED to use AuthService like Staff page
+  // Get authenticated school on mount
   useEffect(() => {
-    const getCurrentSchool = async () => {
+    const getSchoolContext = async () => {
       try {
-        // ✅ USE AuthService.getCurrentUser() - same pattern as Staff page
         const user = await AuthService.getCurrentUser();
-        
         if (!user) {
-          console.log('[Students Page] No authenticated user');
           router.push('/auth/login');
           return;
         }
 
         if (!user.school_id) {
-          console.error('[Students Page] User has no school_id:', user.id);
-          toast.error('Your account is not linked to a school');
+          setError('Your account is not linked to a school');
           setIsLoading(false);
           return;
         }
 
-        console.log('[Students Page] Set schoolId from AuthService:', user.school_id);
         setSchoolId(user.school_id);
-      } catch (error) {
-        console.error('[Students Page] Error getting current user:', error);
-        toast.error('Failed to load school information');
+      } catch (err) {
+        console.error('Error getting school context:', err);
+        setError('Failed to load school information');
         setIsLoading(false);
       }
     };
 
-    getCurrentSchool();
+    getSchoolContext();
   }, [router]);
 
-  // Fetch classes
+  // Fetch students when school ID is available
   useEffect(() => {
-    const fetchClasses = async () => {
-      if (!schoolId) return;
-      try {
-        const { data, error } = await getSupabaseClient()
-          .from('classes')
-          .select('id, name')
-          .eq('school_id', schoolId)
-          .order('name', { ascending: true });
+    if (!schoolId) return;
 
-        if (error) throw error;
-        setClasses(data || []);
-      } catch (error) {
-        console.error('[Students Page] Error fetching classes:', error);
+    const fetchStudents = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const response = await fetch(`/api/school/students?schoolId=${schoolId}`);
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch students: ${response.status}`);
+        }
+
+        const result = await response.json();
+        setStudents(result.data || []);
+      } catch (err: any) {
+        console.error('Error fetching students:', err);
+        setError(err.message || 'Failed to load students');
+        setStudents([]);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    fetchClasses();
+    fetchStudents();
   }, [schoolId]);
 
-  // Fetch students when schoolId changes
-  useEffect(() => {
-    if (!schoolId) {
-      console.log('[Students Page] No schoolId, skipping fetch');
-      setIsLoading(false);
-      return;
-    }
-
-    console.log('[Students Page] Effect triggered for schoolId:', schoolId);
-    fetchStudents(schoolId);
-
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [schoolId, fetchStudents]);
-
   // Filter students
-  const filteredStudents = students.filter(student => {
+  const filteredStudents = students.filter((student) => {
     const matchesSearch =
+      !searchTerm ||
       student.users?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.users?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.admission_number?.toLowerCase().includes(searchTerm.toLowerCase());
+
     const matchesStatus = filterStatus === 'ALL' || student.status === filterStatus;
-    const matchesClass = filterClass === 'ALL' || student.class_arm_combos?.classes?.name === filterClass;
-    return matchesSearch && matchesStatus && matchesClass;
+
+    return matchesSearch && matchesStatus;
   });
 
-  // Update student status
-  const handleStatusChange = async (studentId: string, newStatus: StatusType) => {
-    try {
-      setIsActionLoading(true);
-      const response = await fetch(`/api/school-admin/students/${studentId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (!response.ok) throw new Error('Failed to update status');
-
-      setStudents(students.map(s =>
-        s.id === studentId ? { ...s, status: newStatus } : s
-      ));
-      toast.success(`Student ${newStatus.toLowerCase()}`);
-      setModal({ type: null });
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast.error('Failed to update student status');
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
-
-  // Delete student
-  const handleDelete = async (studentId: string) => {
-    try {
-      setIsActionLoading(true);
-      
-      const { data: { session } } = await getSupabaseClient().auth.getSession();
-      const token = session?.access_token;
-      
-      if (!token) {
-        toast.error('Authentication required');
-        return;
-      }
-
-      const response = await fetch(`/api/school-admin/students/${studentId}/delete`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to delete student');
-      }
-
-      setStudents(students.filter(s => s.id !== studentId));
-      toast.success('Student deleted successfully');
-      setModal({ type: null });
-    } catch (error) {
-      console.error('Error deleting student:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to delete student');
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
-
-  // Generate Admission Letter - Open in modal
-  const generateAdmissionLetter = async (student: Student) => {
-    setLetterModal({
-      isOpen: true,
-      studentId: student.id,
-    });
-  };
-
-  // ✅ HOTFIX: Handle edit for students
-  const handleEditStudent = async (updates: Partial<Student>) => {
-    if (!modal.student) return;
-    try {
-      setIsActionLoading(true);
-      setStudents(students.map(s => 
-        s.id === modal.student!.id 
-          ? { ...s, ...updates, user: { ...s.user, ...updates.user } }
-          : s
-      ));
-      toast.success('Student updated successfully');
-      setModal({ type: null });
-    } catch (error) {
-      console.error('Error updating student:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to update student');
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
-
-  // Handle lock student
-  const handleLockStudent = async () => {
-    if (!modal.student) return;
-    try {
-      setIsActionLoading(true);
-      const response = await fetch(
-        `/api/school-admin/students/${modal.student.id}/lock`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            reason: lockReason || undefined,
-            schoolId 
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to lock student');
-      }
-
-      setStudents(students.map(s =>
-        s.id === modal.student!.id 
-          ? { ...s } // UI will show updated lock status on next fetch
-          : s
-      ));
-      toast.success('Student locked successfully');
-      setModal({ type: null });
-      setLockReason('');
-    } catch (error) {
-      console.error('Error locking student:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to lock student');
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
-
-  // Handle unlock student
-  const handleUnlockStudent = async () => {
-    if (!modal.student) return;
-    try {
-      setIsActionLoading(true);
-      const response = await fetch(
-        `/api/school-admin/students/${modal.student.id}/unlock`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ schoolId }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to unlock student');
-      }
-
-      setStudents(students.map(s =>
-        s.id === modal.student!.id 
-          ? { ...s } // UI will show updated lock status on next fetch
-          : s
-      ));
-      toast.success('Student unlocked successfully');
-      setModal({ type: null });
-    } catch (error) {
-      console.error('Error unlocking student:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to unlock student');
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
-
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-bold mb-6">Students Management</h2>
-
-      {/* Action Buttons */}
-      <div className="mb-6 flex flex-wrap gap-3">
-        <button
-          onClick={() => router.push('/auth/student/register')}
-          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center gap-2 transition-colors"
-        >
-          ➕ Register New Student
-        </button>
-      </div>
-
-      {/* Search and Filter */}
-      <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-        <input
-          type="text"
-          placeholder="Search by name, email, or admission..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <select
-          value={filterClass}
-          onChange={(e) => setFilterClass(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="ALL">All Classes</option>
-          {classes.map(cls => (
-            <option key={cls.id} value={cls.name}>{cls.name}</option>
-          ))}
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as StatusType | 'ALL')}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="ALL">All Status</option>
-          <option value="ACTIVE">Active</option>
-          <option value="PAUSED">Paused</option>
-          <option value="INACTIVE">Inactive</option>
-          <option value="SUSPENDED">Suspended</option>
-        </select>
-        <div className="text-sm text-gray-600 flex items-center">
-          Total: {filteredStudents.length} students
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="bg-white rounded-lg shadow-md p-6 m-6">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Students Management</h1>
+          <p className="text-gray-600 mt-2">Manage all registered students in your school</p>
         </div>
-      </div>
 
-      {/* Students Table */}
-      {isLoading ? (
-        <div className="text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="mt-2 text-gray-600">Loading students...</p>
+        {/* Error State */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-800 font-semibold">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="mb-6 flex gap-3 flex-wrap">
+          <button
+            onClick={() => router.push('/auth/student/register')}
+            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center gap-2"
+          >
+            ➕ Register New Student
+          </button>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
+          >
+            🔄 Refresh
+          </button>
         </div>
-      ) : filteredStudents.length === 0 ? (
-        <div className="text-center py-8 text-gray-600">
-          No students found. Try adjusting your search or filters.
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-gray-200">
-                <th className="text-left py-3 px-4">Photo</th>
-                <th className="text-left py-3 px-4">Name</th>
-                <th className="text-left py-3 px-4">Email</th>
-                <th className="text-left py-3 px-4">Admission #</th>
-                <th className="text-left py-3 px-4">Class</th>
-                <th className="text-left py-3 px-4">Status</th>
-                <th className="text-center py-3 px-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredStudents.map((student) => (
-                <tr key={student.id} className="border-b border-gray-200 hover:bg-gray-50">
-                  <td className="py-3 px-4">
-                    {student.users?.photo_url ? (
-                      <div className="relative w-10 h-10">
-                        <Image
-                          src={student.users.photo_url}
-                          alt={student.users.full_name}
-                          fill
-                          className="rounded-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-gray-600 text-sm font-bold">
-                        {student.users?.full_name?.[0] || 'S'}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 font-semibold text-gray-900">{student.users?.full_name}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{student.users?.email}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{student.admission_number}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">
-                    {student.class_arm_combos?.classes?.name} {student.class_arm_combos?.arms?.name}
-                  </td>
-                  <td className="py-3 px-4">
-                    <StatusBadge status={student.status} isLocked={student.is_locked} />
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex gap-2 justify-center flex-wrap">
-                      <button
-                        onClick={() => setModal({ type: 'edit', student })}
-                        className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-                        title="Edit Student"
-                      >
-                        ✏️ Edit
-                      </button>
-                      <button
-                        onClick={() => generateAdmissionLetter(student)}
-                        className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
-                      >
-                        📄 Letter
-                      </button>
-                      {student.status === 'ACTIVE' ? (
-                        <button
-                          onClick={() => setModal({ type: 'pause', student })}
-                          className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600"
-                        >
-                          Pause
-                        </button>
-                      ) : student.status !== 'SUSPENDED' ? (
-                        <button
-                          onClick={() => setModal({ type: 'activate', student })}
-                          className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
-                        >
-                          Activate
-                        </button>
-                      ) : null}
-                      {!student.is_locked ? (
-                        <button
-                          onClick={() => setModal({ type: 'lock', student })}
-                          className="px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600"
-                          title="Lock Student Account"
-                        >
-                          🔒 Lock
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setModal({ type: 'unlock', student })}
-                          className="px-3 py-1 bg-teal-500 text-white rounded text-sm hover:bg-teal-600"
-                          title="Unlock Student Account"
-                        >
-                          🔓 Unlock
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setModal({ type: 'delete', student })}
-                        className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
 
-      {/* Letter Preview Modal */}
-      {letterModal.isOpen && letterModal.studentId && (
-        <LetterPreviewModalComponent
-          isOpen={letterModal.isOpen}
-          onClose={() => setLetterModal({ isOpen: false })}
-          letterType="admission"
-          recipientId={letterModal.studentId}
-          schoolId={schoolId}
-          recipientEmail={students.find((s) => s.id === letterModal.studentId)?.user?.email}
-          recipientPhone={students.find((s) => s.id === letterModal.studentId)?.user?.phone}
-        />
-      )}
-
-      {/* Confirmation Modals */}
-      {modal.type === 'pause' && modal.student && (
-        <ConfirmationModal
-          title="Pause Student"
-          message={`Pause "${modal.student?.users?.full_name}"? They will not be able to access the system.`}
-          onConfirm={() => handleStatusChange(modal.student!.id, 'PAUSED')}
-          onCancel={() => setModal({ type: null })}
-          isLoading={isActionLoading}
-        />
-      )}
-
-      {modal.type === 'activate' && modal.student && (
-        <ConfirmationModal
-          title="Activate Student"
-          message={`Activate "${modal.student?.users?.full_name}"? They will regain access to the system.`}
-          onConfirm={() => handleStatusChange(modal.student!.id, 'ACTIVE')}
-          onCancel={() => setModal({ type: null })}
-          isLoading={isActionLoading}
-        />
-      )}
-
-      {/* Edit Student Modal */}
-      {modal.type === 'edit' && modal.student && (
-        <EditStudentModal
-          student={modal.student}
-          isOpen={true}
-          onClose={() => setModal({ type: null })}
-          onSave={handleEditStudent}
-          isLoading={isActionLoading}
-        />
-      )}
-
-      {modal.type === 'delete' && modal.student && (
-        <ConfirmationModal
-          title="Delete Student"
-          message={`Delete "${modal.student?.users?.full_name}"? This action cannot be undone.`}
-          onConfirm={() => handleDelete(modal.student!.id)}
-          onCancel={() => setModal({ type: null })}
-          isLoading={isActionLoading}
-          isDangerous
-        />
-      )}
-
-      {/* Lock Student Modal */}
-      {modal.type === 'lock' && modal.student && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
-            <h3 className="text-lg font-bold mb-2">🔒 Lock Student</h3>
-            <p className="text-gray-600 mb-4">
-              Lock "{modal.student?.users?.full_name}"? They will not be able to access their account.
-            </p>
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Lock Reason (optional)</label>
-              <textarea
-                value={lockReason}
-                onChange={(e) => setLockReason(e.target.value)}
-                placeholder="e.g., Disciplinary action, Payment due, etc."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                rows={3}
-              />
-            </div>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setModal({ type: null });
-                  setLockReason('');
-                }}
-                disabled={isActionLoading}
-                className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleLockStudent}
-                disabled={isActionLoading}
-                className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
-              >
-                {isActionLoading ? 'Locking...' : 'Lock Student'}
-              </button>
-            </div>
+        {/* Search and Filters */}
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <input
+            type="text"
+            placeholder="Search by name, email, or admission number..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as StatusType | 'ALL')}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="ALL">All Status</option>
+            <option value="ACTIVE">Active</option>
+            <option value="PAUSED">Paused</option>
+            <option value="INACTIVE">Inactive</option>
+            <option value="SUSPENDED">Suspended</option>
+          </select>
+          <div className="px-4 py-2 bg-gray-100 rounded-lg flex items-center">
+            <span className="text-gray-700 font-semibold">
+              Total: {filteredStudents.length} students
+            </span>
           </div>
         </div>
-      )}
 
-      {/* Unlock Student Modal */}
-      {modal.type === 'unlock' && modal.student && (
-        <ConfirmationModal
-          title="🔓 Unlock Student"
-          message={`Unlock "${modal.student?.users?.full_name}"? They will regain access to their account immediately.`}
-          onConfirm={handleUnlockStudent}
-          onCancel={() => setModal({ type: null })}
-          isLoading={isActionLoading}
-        />
-      )}
+        {/* Loading State */}
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-600">Loading students...</p>
+          </div>
+        ) : filteredStudents.length === 0 ? (
+          <div className="text-center py-12 bg-gray-50 rounded-lg">
+            <p className="text-gray-600 text-lg">
+              {students.length === 0 ? 'No students registered yet' : 'No students match your filters'}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-100 border-b-2 border-gray-300">
+                <tr>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Photo</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Admission #</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Email</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Class</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y border-gray-200">
+                {filteredStudents.map((student, idx) => (
+                  <tr key={student.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="py-3 px-4">
+                      {student.users?.photo_url ? (
+                        <div className="relative w-10 h-10 rounded-full overflow-hidden">
+                          <Image
+                            src={student.users.photo_url}
+                            alt={student.users.full_name}
+                            fill
+                            className="object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 bg-blue-200 rounded-full flex items-center justify-center text-blue-700 font-bold text-sm">
+                          {student.users?.full_name?.[0] || 'S'}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-gray-900">
+                      {student.users?.full_name || 'Unknown'}
+                    </td>
+                    <td className="py-3 px-4 text-gray-700">{student.admission_number || '—'}</td>
+                    <td className="py-3 px-4 text-gray-600 text-sm">{student.users?.email || '—'}</td>
+                    <td className="py-3 px-4 text-gray-700">
+                      {student.class_arm_combos?.classes?.name && student.class_arm_combos?.arms?.name
+                        ? `${student.class_arm_combos.classes.name} - ${student.class_arm_combos.arms.name}`
+                        : '—'}
+                    </td>
+                    <td className="py-3 px-4">
+                      <StatusBadge status={student.status} isLocked={student.is_locked} />
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => router.push(`/school-admin/students/${student.id}`)}
+                        className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
-};
-
-export default StudentsPage;
+}
