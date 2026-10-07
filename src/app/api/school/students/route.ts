@@ -109,8 +109,7 @@ export async function GET(request: NextRequest) {
         )
       `
       )
-      .eq('school_id', schoolId)
-      .order('users.full_name');
+      .eq('school_id', schoolId);
 
     if (error) {
       console.error('[Students API] Database error:', error.message);
@@ -123,9 +122,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('[Students API] ✅ Fetched', data?.length || 0, 'students');
+    // Sort in JavaScript instead of trying to order by related table
+    const sorted = (data || []).sort((a: any, b: any) => {
+      const nameA = a.users?.full_name || '';
+      const nameB = b.users?.full_name || '';
+      return nameA.localeCompare(nameB);
+    });
 
-    return NextResponse.json({ data: data || [] });
+    console.log('[Students API] ✅ Fetched', sorted?.length || 0, 'students');
+
+    return NextResponse.json({ data: sorted || [] });
   } catch (error: any) {
     console.error('[Students API] Unexpected error:', error?.message || error);
     return NextResponse.json(

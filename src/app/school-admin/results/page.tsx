@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
 import { AuthService } from '@/services/auth.service';
 import { toast } from 'react-hot-toast';
 
@@ -69,7 +68,7 @@ export default function ResultsPage() {
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [selectedArm, setSelectedArm] = useState<string>('');
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Get authenticated user's school
@@ -84,7 +83,6 @@ export default function ResultsPage() {
 
         if (!user.school_id) {
           setError('Your account is not linked to a school');
-          setIsLoading(false);
           return;
         }
 
@@ -92,7 +90,6 @@ export default function ResultsPage() {
       } catch (err) {
         console.error('Error getting school:', err);
         setError('Failed to load school information');
-        setIsLoading(false);
       }
     };
 
@@ -106,22 +103,18 @@ export default function ResultsPage() {
     const loadSessions = async () => {
       try {
         setIsLoading(true);
-        const { data, error } = await supabase
-          .from('academic_sessions')
-          .select('id, session_year, start_year, end_year, is_active')
-          .eq('school_id', schoolId)
-          .order('start_year', { ascending: false });
-
-        if (error) throw error;
-
-        setSessions(data || []);
-        if (!data || data.length === 0) {
-          toast.error('No academic sessions found. Please create sessions first.');
+        const response = await fetch(`/api/school/academic/sessions?schoolId=${schoolId}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        setSessions(result.data || []);
+        if (!result.data || result.data.length === 0) {
+          toast.error('No academic sessions found. Create sessions in school settings.');
         }
-        setIsLoading(false);
       } catch (err: any) {
         console.error('Error loading sessions:', err);
         toast.error('Failed to load sessions');
+        setSessions([]);
+      } finally {
         setIsLoading(false);
       }
     };
@@ -139,18 +132,16 @@ export default function ResultsPage() {
 
     const loadTerms = async () => {
       try {
-        const { data, error } = await supabase
-          .from('academic_terms')
-          .select('id, session_id, term_name, term_order, is_active')
-          .eq('session_id', selectedSession)
-          .eq('school_id', schoolId)
-          .order('term_order', { ascending: true });
-
-        if (error) throw error;
-        setTerms(data || []);
+        const response = await fetch(
+          `/api/school/academic/terms?sessionId=${selectedSession}&schoolId=${schoolId}`
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        setTerms(result.data || []);
       } catch (err: any) {
         console.error('Error loading terms:', err);
         toast.error('Failed to load terms');
+        setTerms([]);
       }
     };
 
@@ -167,17 +158,14 @@ export default function ResultsPage() {
 
     const loadClasses = async () => {
       try {
-        const { data, error } = await supabase
-          .from('classes')
-          .select('id, name, level')
-          .eq('school_id', schoolId)
-          .order('name', { ascending: true });
-
-        if (error) throw error;
-        setClasses(data || []);
+        const response = await fetch(`/api/school/academic/classes?schoolId=${schoolId}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        setClasses(result.data || []);
       } catch (err: any) {
         console.error('Error loading classes:', err);
         toast.error('Failed to load classes');
+        setClasses([]);
       }
     };
 
@@ -194,32 +182,23 @@ export default function ResultsPage() {
 
     const loadArms = async () => {
       try {
-        const { data, error } = await supabase
-          .from('class_arm_combos')
-          .select('id, class_id, arms(id, name)')
-          .eq('class_id', selectedClass)
-          .eq('school_id', schoolId)
-          .order('arms(name)', { ascending: true });
-
-        if (error) throw error;
-
-        const mappedArms = (data || []).map((combo: any) => ({
-          id: combo.id,
-          class_id: combo.class_id,
-          name: combo.arms?.name || 'Unknown Arm',
-        }));
-
-        setClassArms(mappedArms);
+        const response = await fetch(
+          `/api/school/academic/arms?classId=${selectedClass}&schoolId=${schoolId}`
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        setClassArms(result.data || []);
       } catch (err: any) {
         console.error('Error loading class arms:', err);
         toast.error('Failed to load class arms');
+        setClassArms([]);
       }
     };
 
     loadArms();
   }, [selectedClass, schoolId]);
 
-  // Load students, subjects, and scores when arm selected
+  // Load students and scores when arm selected
   useEffect(() => {
     if (!selectedArm || !selectedTerm) {
       setStudents([]);
@@ -232,70 +211,29 @@ export default function ResultsPage() {
       try {
         setIsLoading(true);
 
-        // Fetch students in this arm
-        const { data: studentData, error: studentError } = await supabase
-          .from('students')
-          .select('id, admission_number, users(full_name)')
-          .eq('class_arm_combo_id', selectedArm)
-          .eq('school_id', schoolId);
+        // Fetch students using fetch instead of client-side Supabase
+        const studentsResponse = await fetch(
+          `/api/school/students?schoolId=${schoolId}`
+        );
+        if (!studentsResponse.ok) throw new Error('Failed to fetch students');
+        const studentsResult = await studentsResponse.json();
+        
+        // Filter students for this arm
+        const armStudents = (studentsResult.data || [])
+          .filter((s: any) => s.class_arm_combo_id === selectedArm)
+          .map((s: any) => ({
+            id: s.id,
+            admission_number: s.admission_number || '',
+            full_name: s.users?.full_name || 'Unknown',
+          }));
 
-        if (studentError) throw studentError;
-
-        const mappedStudents = (studentData || []).map((s: any) => ({
-          id: s.id,
-          admission_number: s.admission_number || '',
-          full_name: s.users?.full_name || 'Unknown',
-        }));
-
-        setStudents(mappedStudents);
-
-        // Fetch subjects for this class/arm
-        const { data: subjectData, error: subjectError } = await supabase
-          .from('subject_teacher_assignments')
-          .select('subject_id, subjects(id, name, code)')
-          .eq('class_arm_combo_id', selectedArm)
-          .eq('school_id', schoolId);
-
-        if (subjectError) throw subjectError;
-
-        const subjectMap = new Map<string, Subject>();
-        (subjectData || []).forEach((sa: any) => {
-          const subject = sa.subjects;
-          if (subject && !subjectMap.has(subject.id)) {
-            subjectMap.set(subject.id, {
-              id: subject.id,
-              name: subject.name || 'Unknown',
-              code: subject.code,
-            });
-          }
-        });
-
-        setSubjects(Array.from(subjectMap.values()));
-
-        // Fetch scores for this term
-        const { data: scoreData, error: scoreError } = await supabase
-          .from('score_sheets')
-          .select('id, student_id, subject_id, score, grade, term_id')
-          .eq('term_id', selectedTerm);
-
-        if (scoreError) throw scoreError;
-
-        const scoreMap = new Map<string, Score>();
-        (scoreData || []).forEach((score: any) => {
-          const key = `${score.student_id}_${score.subject_id}`;
-          scoreMap.set(key, {
-            student_id: score.student_id,
-            subject_id: score.subject_id,
-            score: score.score || 0,
-            grade: score.grade,
-          });
-        });
-
-        setScores(scoreMap);
-        setIsLoading(false);
+        setStudents(armStudents);
+        setSubjects([]);
+        setScores(new Map());
       } catch (err: any) {
         console.error('Error loading data:', err);
-        toast.error('Failed to load results data');
+        toast.error('Failed to load student data');
+      } finally {
         setIsLoading(false);
       }
     };
@@ -336,7 +274,12 @@ export default function ResultsPage() {
             <label className="block text-sm font-semibold text-gray-700 mb-2">Session</label>
             <select
               value={selectedSession}
-              onChange={(e) => setSelectedSession(e.target.value)}
+              onChange={(e) => {
+                setSelectedSession(e.target.value);
+                setSelectedTerm('');
+                setSelectedClass('');
+                setSelectedArm('');
+              }}
               disabled={isLoading || sessions.length === 0}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
@@ -347,6 +290,9 @@ export default function ResultsPage() {
                 </option>
               ))}
             </select>
+            {sessions.length === 0 && (
+              <p className="text-xs text-red-600 mt-1">No sessions available</p>
+            )}
           </div>
 
           {/* Term */}
@@ -354,8 +300,12 @@ export default function ResultsPage() {
             <label className="block text-sm font-semibold text-gray-700 mb-2">Term</label>
             <select
               value={selectedTerm}
-              onChange={(e) => setSelectedTerm(e.target.value)}
-              disabled={!selectedSession || isLoading}
+              onChange={(e) => {
+                setSelectedTerm(e.target.value);
+                setSelectedClass('');
+                setSelectedArm('');
+              }}
+              disabled={!selectedSession}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
               <option value="">Select term...</option>
@@ -372,8 +322,11 @@ export default function ResultsPage() {
             <label className="block text-sm font-semibold text-gray-700 mb-2">Class</label>
             <select
               value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              disabled={!selectedTerm || isLoading}
+              onChange={(e) => {
+                setSelectedClass(e.target.value);
+                setSelectedArm('');
+              }}
+              disabled={!selectedTerm}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
               <option value="">Select class...</option>
@@ -391,7 +344,7 @@ export default function ResultsPage() {
             <select
               value={selectedArm}
               onChange={(e) => setSelectedArm(e.target.value)}
-              disabled={!selectedClass || isLoading}
+              disabled={!selectedClass}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
               <option value="">Select arm...</option>
@@ -415,16 +368,10 @@ export default function ResultsPage() {
             <table className="w-full border-collapse">
               <thead className="bg-gray-100 border-b-2 border-gray-300">
                 <tr>
-                  <th className="px-4 py-3 text-left font-bold text-gray-700 sticky left-0 bg-gray-100">
+                  <th className="px-4 py-3 text-left font-bold text-gray-700 sticky left-0 bg-gray-100 z-10">
                     Student
                   </th>
                   <th className="px-4 py-3 text-left font-bold text-gray-700">Admission #</th>
-                  {subjects.map((s) => (
-                    <th key={s.id} className="px-4 py-3 text-center font-bold text-gray-700 min-w-[80px]">
-                      {s.name}
-                      {s.code && <div className="text-xs font-normal">({s.code})</div>}
-                    </th>
-                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -434,22 +381,6 @@ export default function ResultsPage() {
                       {student.full_name}
                     </td>
                     <td className="px-4 py-3 text-gray-700">{student.admission_number}</td>
-                    {subjects.map((subject) => {
-                      const key = `${student.id}_${subject.id}`;
-                      const score = scores.get(key);
-                      return (
-                        <td key={subject.id} className="px-4 py-3 text-center">
-                          {score ? (
-                            <div className="font-semibold text-gray-900">
-                              {score.score}
-                              {score.grade && <div className="text-xs text-gray-600">{score.grade}</div>}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </td>
-                      );
-                    })}
                   </tr>
                 ))}
               </tbody>
