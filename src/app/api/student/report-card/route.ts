@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+import { guardStudentAccess } from '@/lib/api-guards'
 export const dynamic = 'force-dynamic'
 
 
@@ -26,17 +27,16 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(request: NextRequest) {
   try {
+    // ✅ CHECK: Student lock status and access
+    const accessCheck = await guardStudentAccess(request);
+    if (!accessCheck.allowed) {
+      return accessCheck.response!;
+    }
+
     const { searchParams } = new URL(request.url)
-    const schoolId = searchParams.get('school_id')
-    const studentId = searchParams.get('student_id')
     const termId = searchParams.get('term_id')
 
-    if (!schoolId || !studentId) {
-      return NextResponse.json(
-        { error: 'Missing required query parameters: school_id, student_id' },
-        { status: 400 }
-      )
-    }
+    const { schoolId, studentId } = accessCheck;
 
     // Fetch student information
     const { data: student, error: studentError } = await supabase

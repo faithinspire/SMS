@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-client'
+import { guardStudentAccess } from '@/lib/api-guards'
 export const dynamic = 'force-dynamic'
 
 
@@ -22,15 +23,19 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
+    // ✅ CHECK: Student lock status and access
+    const accessCheck = await guardStudentAccess(request);
+    if (!accessCheck.allowed) {
+      return accessCheck.response!;
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File | null
-    const student_id = formData.get('student_id') as string | null
-    const school_id = formData.get('school_id') as string | null
 
     // Validate inputs
-    if (!file || !student_id || !school_id) {
+    if (!file) {
       return NextResponse.json(
-        { error: 'Missing file, student_id, or school_id' },
+        { error: 'Missing file' },
         { status: 400 }
       )
     }

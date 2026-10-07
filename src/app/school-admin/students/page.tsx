@@ -30,8 +30,12 @@ interface Student {
   date_of_birth: string | null;
   photo_url: string | null;
   status: 'ACTIVE' | 'INACTIVE' | 'PAUSED' | 'SUSPENDED';
-  class_arm_combo_id: string;
-  user: {
+  is_locked: boolean;
+  locked_at: string | null;
+  locked_by_user_id: string | null;
+  lock_reason: string | null;
+  class_arm_combo_id: string | null;
+  users?: {
     id: string;
     full_name: string;
     email: string;
@@ -39,12 +43,14 @@ interface Student {
     status: string;
     phone?: string;
   };
-  class_arm_combo: {
+  class_arm_combos?: {
     id: string;
-    class: {
+    classes?: {
+      id: string;
       name: string;
     };
-    arm: {
+    arms?: {
+      id: string;
       name: string;
     };
   };
@@ -57,13 +63,25 @@ interface Class {
 
 type StatusType = 'ACTIVE' | 'INACTIVE' | 'PAUSED' | 'SUSPENDED';
 
-const StatusBadge: React.FC<{ status: StatusType }> = ({ status }) => {
+const StatusBadge: React.FC<{ status: StatusType; isLocked?: boolean }> = ({ status, isLocked }) => {
   const variants: Record<StatusType, string> = {
     ACTIVE: 'bg-green-100 text-green-800',
     PAUSED: 'bg-yellow-100 text-yellow-800',
     INACTIVE: 'bg-gray-100 text-gray-800',
     SUSPENDED: 'bg-red-100 text-red-800',
   };
+
+  // If locked, show lock status regardless of other status
+  if (isLocked) {
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800">
+          🔒 LOCKED
+        </span>
+        <span className="text-xs text-gray-600">{status}</span>
+      </div>
+    );
+  }
 
   return (
     <span className={`px-3 py-1 rounded-full text-sm font-semibold ${variants[status]}`}>
@@ -382,11 +400,11 @@ const StudentsPage: React.FC = () => {
   // Filter students
   const filteredStudents = students.filter(student => {
     const matchesSearch =
-      student.user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.users?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.users?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.admission_number?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'ALL' || student.status === filterStatus;
-    const matchesClass = filterClass === 'ALL' || student.class_arm_combo?.class?.name === filterClass;
+    const matchesClass = filterClass === 'ALL' || student.class_arm_combos?.classes?.name === filterClass;
     return matchesSearch && matchesStatus && matchesClass;
   });
 
@@ -629,29 +647,29 @@ const StudentsPage: React.FC = () => {
               {filteredStudents.map((student) => (
                 <tr key={student.id} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="py-3 px-4">
-                    {student.user.photo_url ? (
+                    {student.users?.photo_url ? (
                       <div className="relative w-10 h-10">
                         <Image
-                          src={student.user.photo_url}
-                          alt={student.user.full_name}
+                          src={student.users.photo_url}
+                          alt={student.users.full_name}
                           fill
                           className="rounded-full object-cover"
                         />
                       </div>
                     ) : (
                       <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center text-gray-600 text-sm font-bold">
-                        {student.user.full_name?.[0] || 'S'}
+                        {student.users?.full_name?.[0] || 'S'}
                       </div>
                     )}
                   </td>
-                  <td className="py-3 px-4 font-semibold text-gray-900">{student.user.full_name}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{student.user.email}</td>
+                  <td className="py-3 px-4 font-semibold text-gray-900">{student.users?.full_name}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">{student.users?.email}</td>
                   <td className="py-3 px-4 text-sm text-gray-600">{student.admission_number}</td>
                   <td className="py-3 px-4 text-sm text-gray-600">
-                    {student.class_arm_combo?.class?.name} {student.class_arm_combo?.arm?.name}
+                    {student.class_arm_combos?.classes?.name} {student.class_arm_combos?.arms?.name}
                   </td>
                   <td className="py-3 px-4">
-                    <StatusBadge status={student.status} />
+                    <StatusBadge status={student.status} isLocked={student.is_locked} />
                   </td>
                   <td className="py-3 px-4 text-center">
                     <div className="flex gap-2 justify-center flex-wrap">
@@ -683,20 +701,23 @@ const StudentsPage: React.FC = () => {
                           Activate
                         </button>
                       ) : null}
-                      <button
-                        onClick={() => setModal({ type: 'lock', student })}
-                        className="px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600"
-                        title="Lock Student Account"
-                      >
-                        🔒 Lock
-                      </button>
-                      <button
-                        onClick={() => setModal({ type: 'unlock', student })}
-                        className="px-3 py-1 bg-teal-500 text-white rounded text-sm hover:bg-teal-600"
-                        title="Unlock Student Account"
-                      >
-                        🔓 Unlock
-                      </button>
+                      {!student.is_locked ? (
+                        <button
+                          onClick={() => setModal({ type: 'lock', student })}
+                          className="px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600"
+                          title="Lock Student Account"
+                        >
+                          🔒 Lock
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setModal({ type: 'unlock', student })}
+                          className="px-3 py-1 bg-teal-500 text-white rounded text-sm hover:bg-teal-600"
+                          title="Unlock Student Account"
+                        >
+                          🔓 Unlock
+                        </button>
+                      )}
                       <button
                         onClick={() => setModal({ type: 'delete', student })}
                         className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
@@ -729,7 +750,7 @@ const StudentsPage: React.FC = () => {
       {modal.type === 'pause' && modal.student && (
         <ConfirmationModal
           title="Pause Student"
-          message={`Pause "${modal.student.user.full_name}"? They will not be able to access the system.`}
+          message={`Pause "${modal.student?.users?.full_name}"? They will not be able to access the system.`}
           onConfirm={() => handleStatusChange(modal.student!.id, 'PAUSED')}
           onCancel={() => setModal({ type: null })}
           isLoading={isActionLoading}
@@ -739,7 +760,7 @@ const StudentsPage: React.FC = () => {
       {modal.type === 'activate' && modal.student && (
         <ConfirmationModal
           title="Activate Student"
-          message={`Activate "${modal.student.user.full_name}"? They will regain access to the system.`}
+          message={`Activate "${modal.student?.users?.full_name}"? They will regain access to the system.`}
           onConfirm={() => handleStatusChange(modal.student!.id, 'ACTIVE')}
           onCancel={() => setModal({ type: null })}
           isLoading={isActionLoading}
@@ -760,7 +781,7 @@ const StudentsPage: React.FC = () => {
       {modal.type === 'delete' && modal.student && (
         <ConfirmationModal
           title="Delete Student"
-          message={`Delete "${modal.student.user.full_name}"? This action cannot be undone.`}
+          message={`Delete "${modal.student?.users?.full_name}"? This action cannot be undone.`}
           onConfirm={() => handleDelete(modal.student!.id)}
           onCancel={() => setModal({ type: null })}
           isLoading={isActionLoading}
@@ -774,7 +795,7 @@ const StudentsPage: React.FC = () => {
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
             <h3 className="text-lg font-bold mb-2">🔒 Lock Student</h3>
             <p className="text-gray-600 mb-4">
-              Lock "{modal.student.user.full_name}"? They will not be able to access their account.
+              Lock "{modal.student?.users?.full_name}"? They will not be able to access their account.
             </p>
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Lock Reason (optional)</label>
@@ -813,7 +834,7 @@ const StudentsPage: React.FC = () => {
       {modal.type === 'unlock' && modal.student && (
         <ConfirmationModal
           title="🔓 Unlock Student"
-          message={`Unlock "${modal.student.user.full_name}"? They will regain access to their account immediately.`}
+          message={`Unlock "${modal.student?.users?.full_name}"? They will regain access to their account immediately.`}
           onConfirm={handleUnlockStudent}
           onCancel={() => setModal({ type: null })}
           isLoading={isActionLoading}

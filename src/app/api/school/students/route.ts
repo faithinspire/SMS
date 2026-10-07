@@ -1,83 +1,128 @@
-import { createClient } from '@supabase/supabase-js'
-import { NextRequest, NextResponse } from 'next/server'
+/**
+ * GET /api/school/students?schoolId=...
+ * 
+ * Fetches all students for a school with their lock status and details.
+ * Used by School Admin Students page to display student list.
+ * 
+ * Query Parameters:
+ * - schoolId (required): The school ID
+ * 
+ * Returns: Array of students with full details
+ */
 
-// ✅ Mark as dynamic - uses searchParams which requires request context
-export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase-client';
 
-// ✅ HOTFIX: Use service role key for unrestricted school data access
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const schoolId = searchParams.get('schoolId')
+    const schoolId = request.nextUrl.searchParams.get('schoolId');
 
     if (!schoolId) {
       return NextResponse.json(
-        { error: 'schoolId is required' },
+        { error: 'schoolId parameter is required' },
         { status: 400 }
-      )
+      );
     }
 
-    console.log(`[Students API] Fetching students for school: ${schoolId}`)
+    // Verify requester is authenticated and belongs to this school
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    // Get all students with their related data
-    const { data: students, error: studentError } = await supabase
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Verify user belongs to the school
+    const { data: userProfile, error: profileError } = await supabase
+      .from('users')
+      .select('school_id, role')
+      .eq('id', user.id)
+      .single();
+
+    if (
+      profileError ||
+      !userProfile ||
+      (userProfile.role !== 'SCHOOL_ADMIN' && userProfile.role !== 'STAFF')
+    ) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+    }
+
+    if (userProfile.school_id !== schoolId) {
+      return NextResponse.json(
+        { error: 'Cannot access students from different school' },
+        { status: 403 }
+      );
+    }
+
+    // Fetch all students for the school with related data
+    // Use nested select for relationships to avoid Supabase ordering issues
+    const { data, error } = await supabase
       .from('students')
-      .select(`
+      .select(
+        `
         id,
         user_id,
         school_id,
         admission_number,
         date_of_birth,
-        status,
-        class_arm_combo_id,
         photo_url,
-        created_at,
-        user:user_id (
+        status,
+        is_locked,
+        locked_at,
+        locked_by_user_id,
+        lock_reason,
+        class_arm_combo_id,
+        users (
           id,
           full_name,
           email,
-          phone,
+          photo_url,
           status,
-          photo_url
+          phone
         ),
-        class_arm_combo (
+        class_arm_combos (
           id,
-          class:classes (
+          classes (
             id,
-            name,
-            level
+            name
           ),
-          arm:arms (
+          arms (
             id,
             name
           )
         )
-      `)
-      .eq('school_id', schoolId)
-      .order('created_at', { ascending: false })
+      `
+      )
+      .eq('school_id', schoolId);
 
-    if (studentError) {
-      console.error('[Students API] Error fetching students:', studentError)
-      throw studentError
+    if (error) {
+      console.error('[Students API] Error fetching students:', error.message);
+      return NextResponse.json(
+        { 
+          error: 'Failed to fetch students',
+          detail: error.message 
+        },
+        { status: 500 }
+      );
     }
 
-    console.log(`[Students API] Found ${students?.length || 0} students`)
+    // Sort in memory by user full_name to avoid Supabase ordering issues
+    const sortedData = (data || []).sort((a: any, b: any) => {
+      const nameA = a.users?.full_name || '';
+      const nameB = b.users?.full_name || '';
+      return nameA.localeCompare(nameB);
+    });
 
-    return NextResponse.json({
-      success: true,
-      count: students?.length || 0,
-      data: students || [],
-    })
-  } catch (error: any) {
-    console.error('[Students API] Error:', error)
+    return NextResponse.json({ data: sortedData });
+  } catch (error) {
+    console.error('[Students API] Unexpected error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch students' },
+      { error: 'Internal server error' },
       { status: 500 }
-    )
+    );
   }
 }

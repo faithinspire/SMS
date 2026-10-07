@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-client'
+import { guardStudentAccess } from '@/lib/api-guards'
 export const dynamic = 'force-dynamic'
 
 /**
@@ -26,13 +27,20 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: NextRequest) {
   try {
+    // ✅ CHECK: Student lock status and access
+    const accessCheck = await guardStudentAccess(request);
+    if (!accessCheck.allowed) {
+      return accessCheck.response!;
+    }
+
     const body = await request.json()
 
-    const { school_id, submission_id, student_id } = body
+    const { submission_id } = body
+    const { school_id, student_id } = accessCheck;
 
-    if (!school_id || !submission_id || !student_id) {
+    if (!submission_id) {
       return NextResponse.json(
-        { error: 'Missing required fields: school_id, submission_id, student_id' },
+        { error: 'Missing required field: submission_id' },
         { status: 400 }
       )
     }
