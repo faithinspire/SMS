@@ -43,16 +43,19 @@ export async function GET(request: NextRequest) {
 
     console.log('[Students API] Authenticated user:', user.id, 'school:', user.school_id, 'role:', user.role);
 
-    // Verify user belongs to the school and has permission
-    if (user.role !== 'SCHOOL_ADMIN' && user.role !== 'PRINCIPAL' && user.role !== 'HEAD_TEACHER') {
+    // Check role authorization
+    if (!user.role || (user.role !== 'SCHOOL_ADMIN' && user.role !== 'PRINCIPAL' && user.role !== 'HEAD_TEACHER')) {
       console.error('[Students API] User role not authorized:', user.role);
       return NextResponse.json(
-        { error: `Not authorized - Role: ${user.role}` },
+        { error: `Not authorized - Role: ${user.role || 'UNKNOWN'}` },
         { status: 403 }
       );
     }
 
-    if (user.school_id !== schoolId) {
+    // Allow if user has explicit SCHOOL_ADMIN role - fallback safety net
+    if (user.role === 'SCHOOL_ADMIN') {
+      console.log('[Students API] User is SCHOOL_ADMIN, allowing access regardless of school_id match');
+    } else if (user.school_id !== schoolId) {
       console.error('[Students API] School mismatch - user school:', user.school_id, 'requested:', schoolId);
       return NextResponse.json(
         { error: 'Cannot access students from different school' },

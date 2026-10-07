@@ -16,11 +16,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase-client';
+import { supabase } from '@/lib/supabase-client';
 import { toast } from 'react-hot-toast';
+import { AuthService } from '@/services/auth.service';
 import { SchoolContextService } from '@/services/school-context.service';
-
-const supabase = createClient();
 
 interface Session {
   id: string;
@@ -543,7 +542,7 @@ export default function ResultsPageV2() {
             <option value="">Select session...</option>
             {state.sessions.map((session) => (
               <option key={session.id} value={session.id}>
-                {session.name}
+                {session.session_year}
               </option>
             ))}
           </select>
