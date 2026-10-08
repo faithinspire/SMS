@@ -16,6 +16,12 @@ interface StudentDetail {
   photo_url?: string;
 }
 
+interface Subject {
+  id: string;
+  name: string;
+  code?: string;
+}
+
 interface StudentDetailsModalProps {
   isOpen: boolean;
   studentId: string;
@@ -34,6 +40,7 @@ export default function StudentDetailsModal({
   onClose,
 }: StudentDetailsModalProps) {
   const [student, setStudent] = useState<StudentDetail | null>(null);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,6 +73,20 @@ export default function StudentDetailsModal({
       
       console.log('[Modal] ✅ Student loaded:', result.data);
       setStudent(result.data);
+
+      // Fetch student's subjects
+      try {
+        const subjectsResponse = await fetch(
+          `/api/students/${studentId}/subjects`
+        );
+        if (subjectsResponse.ok) {
+          const subjectsResult = await subjectsResponse.json();
+          setSubjects(subjectsResult.data || []);
+          console.log('[Modal] Subjects loaded:', subjectsResult.data?.length || 0);
+        }
+      } catch (err) {
+        console.warn('[Modal] Could not load subjects:', err);
+      }
     } catch (err: any) {
       console.error('[Modal] Error loading student details:', err);
       setError(err.message || 'Failed to load student details');
@@ -79,7 +100,7 @@ export default function StudentDetailsModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-screen overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-screen overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 flex justify-between items-center p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
           <div>
@@ -181,10 +202,30 @@ export default function StudentDetailsModal({
                 </div>
               </div>
 
+              {/* Subjects Section */}
+              {subjects.length > 0 && (
+                <div>
+                  <h4 className="text-lg font-bold text-gray-900 mb-3">📚 Enrolled Subjects</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {subjects.map((subject) => (
+                      <div
+                        key={subject.id}
+                        className="bg-green-50 border border-green-200 p-3 rounded-lg hover:bg-green-100 transition"
+                      >
+                        <p className="font-semibold text-gray-900">{subject.name}</p>
+                        {subject.code && (
+                          <p className="text-sm text-gray-600">{subject.code}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Info Box */}
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <p className="text-green-800 text-sm">
-                  ✓ Student information loaded successfully. View scores in the Results page for complete academic details.
+                  ✓ Student information and subjects loaded successfully.
                 </p>
               </div>
             </div>

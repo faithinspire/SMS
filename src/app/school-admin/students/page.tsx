@@ -6,6 +6,7 @@ import { AuthService } from '@/services/auth.service';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
 import { Lock, Unlock, Edit, Eye } from 'lucide-react';
+import StudentDetailsModal from '@/components/StudentDetailsModal';
 
 interface Student {
   id: string;
@@ -62,6 +63,9 @@ export default function StudentsPage() {
   const [filterLocked, setFilterLocked] = useState<string>('ALL');
   const [schoolId, setSchoolId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [selectedStudentName, setSelectedStudentName] = useState<string>('');
+  const [selectedAdmissionNumber, setSelectedAdmissionNumber] = useState<string>('');
 
   // Load authenticated school
   useEffect(() => {
@@ -359,7 +363,11 @@ export default function StudentsPage() {
                     <td className="py-3 px-4 text-center">
                       <div className="flex gap-2 justify-center">
                         <button
-                          onClick={() => router.push(`/school-admin/students/${student.id}`)}
+                          onClick={() => {
+                            setSelectedStudentId(student.id);
+                            setSelectedStudentName(student.full_name);
+                            setSelectedAdmissionNumber(student.admission_number);
+                          }}
                           className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 flex items-center gap-1"
                         >
                           <Eye size={12} /> View
@@ -373,6 +381,19 @@ export default function StudentsPage() {
           </div>
         )}
       </div>
+
+      {/* Student Details Modal */}
+      <StudentDetailsModal
+        isOpen={selectedStudentId !== null}
+        studentId={selectedStudentId || ''}
+        studentName={selectedStudentName}
+        admissionNumber={selectedAdmissionNumber}
+        onClose={() => {
+          setSelectedStudentId(null);
+          setSelectedStudentName('');
+          setSelectedAdmissionNumber('');
+        }}
+      />
     </div>
   );
 }
