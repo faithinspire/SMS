@@ -584,11 +584,10 @@ export class TeacherDataService {
     try {
       const { data, error } = await supabase
         .from('academic_terms')
-        .select('id, term_name, start_date, end_date, academic_sessions(session_year)')
+        .select('id, name, start_date, end_date, term_number, academic_sessions(session_year)')
         .eq('school_id', schoolId)
         // REMOVED: .eq('is_active', true) - Now fetches ALL terms
-        .order('academic_sessions(session_year)', { ascending: false })
-        .order('term_name', { ascending: true })
+        .order('term_number', { ascending: true })
 
       if (error) {
         throw new Error(`Query failed: ${error.message}`)
@@ -596,7 +595,7 @@ export class TeacherDataService {
 
       const terms: TermInfo[] = (data as any[]).map((t) => ({
         id: t.id,
-        name: t.term_name,
+        name: t.name,
         sessionYear: t.academic_sessions?.session_year || '',
         startDate: t.start_date,
         endDate: t.end_date,

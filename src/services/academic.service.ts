@@ -28,16 +28,21 @@ export class AcademicService {
     try {
       const { data, error } = await supabase
         .from('academic_terms')
-        .select('id, session_id, term_name, term_order, is_active, school_id')
+        .select('id, session_id, name, term_number, is_active, school_id')
         .eq('school_id', schoolId)
-        .order('term_order', { ascending: true })
+        .order('term_number', { ascending: true })
 
       if (error) throw new Error(`Failed to fetch terms: ${error.message}`)
       
-      // Map term_order to term_number for backwards compatibility
+      // Map database columns to expected format
       return (data || []).map(term => ({
-        ...term,
-        term_number: term.term_order // Alias for compatibility
+        id: term.id,
+        session_id: term.session_id,
+        term_name: term.name,
+        term_order: term.term_number,
+        term_number: term.term_number,
+        is_active: term.is_active,
+        school_id: term.school_id,
       }))
     } catch (error) {
       console.error('[AcademicService] getTerms error:', error)
@@ -52,17 +57,21 @@ export class AcademicService {
     try {
       const { data, error } = await supabase
         .from('academic_terms')
-        .select('id, session_id, term_name, term_order, is_active')
+        .select('id, session_id, name, term_number, is_active')
         .eq('school_id', schoolId)
         .eq('session_id', sessionId)
-        .order('term_order', { ascending: true })
+        .order('term_number', { ascending: true })
 
       if (error) throw new Error(`Failed to fetch terms for session: ${error.message}`)
       
-      // Map term_order to term_number for backwards compatibility
+      // Map database columns to expected format
       return (data || []).map(term => ({
-        ...term,
-        term_number: term.term_order // Alias for compatibility
+        id: term.id,
+        session_id: term.session_id,
+        term_name: term.name,
+        term_order: term.term_number,
+        term_number: term.term_number,
+        is_active: term.is_active,
       }))
     } catch (error) {
       console.error('[AcademicService] getTermsForSession error:', error)
