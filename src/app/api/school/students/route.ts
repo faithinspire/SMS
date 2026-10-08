@@ -72,19 +72,68 @@ export async function GET(request: NextRequest) {
     if (fullError) {
       console.warn('[Students API] Full relation query failed, trying basic query:', fullError.message);
       
-      // Attempt 2: Fall back to basic query without relations
+      // Attempt 2: Fall back to basic query but still include users join for names
       const { data: basicData, error: basicError } = await supabase
         .from('students')
-        .select('*')
+        .select(`
+          id,
+          user_id,
+          school_id,
+          admission_number,
+          date_of_birth,
+          photo_url,
+          status,
+          is_locked,
+          locked_at,
+          locked_by_user_id,
+          lock_reason,
+          class_arm_combo_id,
+          users (
+            id,
+            full_name,
+            email,
+            photo_url,
+            status,
+            phone
+          )
+        `)
         .eq('school_id', schoolId)
         .order('created_at', { ascending: false });
 
       if (basicError) {
         console.error('[Students API] Even basic query failed:', basicError.message);
-        data = null;
-        error = basicError;
+        // Last resort: fetch without any joins
+        const { data: minimalData, error: minimalError } = await supabase
+          .from('students')
+          .select('id, user_id, school_id, admission_number, class_arm_combo_id, status, is_locked')
+          .eq('school_id', schoolId)
+          .order('created_at', { ascending: false });
+        
+        if (minimalError) {
+          data = null;
+          error = minimalError;
+        } else {
+          // Try to fetch user names separately for minimal data
+          if (minimalData && minimalData.length > 0) {
+            const userIds = minimalData.map(s => s.user_id);
+            const { data: users } = await supabase
+              .from('users')
+              .select('id, full_name')
+              .in('id', userIds);
+            
+            // Merge user names into students
+            const userMap = new Map(users?.map(u => [u.id, u.full_name]) || []);
+            data = minimalData.map(s => ({
+              ...s,
+              users: { full_name: userMap.get(s.user_id) || 'Unknown', id: s.user_id }
+            }));
+          } else {
+            data = minimalData;
+          }
+          error = null;
+        }
       } else {
-        console.log('[Students API] Basic query succeeded, returning simple data');
+        console.log('[Students API] Basic query with users join succeeded');
         data = basicData;
         error = null;
       }
