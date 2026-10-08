@@ -9,11 +9,14 @@ export async function GET(request: NextRequest) {
     const schoolId = request.nextUrl.searchParams.get('schoolId');
 
     if (!sessionId || !schoolId) {
+      console.error('[Terms API] Missing sessionId or schoolId');
       return NextResponse.json(
         { error: 'sessionId and schoolId are required' },
         { status: 400 }
       );
     }
+
+    console.log('[Terms API] Fetching terms for session:', sessionId, 'school:', schoolId);
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,18 +25,29 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('academic_terms')
-      .select('id, session_id, term_name, term_order, is_active')
+      .select('*')
       .eq('session_id', sessionId)
       .eq('school_id', schoolId)
       .order('term_order', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[Terms API] Database error:', error.message);
+      throw error;
+    }
 
-    return NextResponse.json({ data: data || [] });
+    console.log('[Terms API] ✅ Found', data?.length || 0, 'terms');
+
+    return NextResponse.json({ 
+      data: data || [],
+      meta: { count: data?.length || 0 }
+    });
   } catch (error: any) {
-    console.error('[Terms API]', error);
+    console.error('[Terms API] Error:', error?.message || error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch terms' },
+      { 
+        error: error.message || 'Failed to fetch terms',
+        detail: error.details || null
+      },
       { status: 500 }
     );
   }

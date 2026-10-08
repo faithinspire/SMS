@@ -103,16 +103,30 @@ export default function ResultsPage() {
     const loadSessions = async () => {
       try {
         setIsLoading(true);
+        setError(null);
+        
+        console.log('[Results] Loading sessions for school:', schoolId);
+        
         const response = await fetch(`/api/school/academic/sessions?schoolId=${schoolId}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const result = await response.json();
-        setSessions(result.data || []);
-        if (!result.data || result.data.length === 0) {
-          toast.error('No academic sessions found. Create sessions in school settings.');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
+        
+        const result = await response.json();
+        
+        if (!result.data || result.data.length === 0) {
+          console.warn('[Results] No sessions found for school:', schoolId);
+          setSessions([]);
+          setError('No academic sessions configured. Contact your school administrator.');
+          return;
+        }
+        
+        console.log('[Results] ✅ Loaded', result.data.length, 'sessions');
+        setSessions(result.data);
       } catch (err: any) {
-        console.error('Error loading sessions:', err);
-        toast.error('Failed to load sessions');
+        console.error('[Results] Error loading sessions:', err);
+        setError(`Failed to load sessions: ${err.message}`);
         setSessions([]);
       } finally {
         setIsLoading(false);
