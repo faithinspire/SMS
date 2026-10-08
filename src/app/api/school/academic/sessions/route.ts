@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('academic_sessions')
-      .select('id, session_year, name, start_year, end_year, is_active, is_current, created_at')
+      .select('id, session_year, start_year, end_year, is_active, created_at')
       .eq('school_id', schoolId)
       .order('start_year', { ascending: false });
 
@@ -40,11 +40,10 @@ export async function GET(request: NextRequest) {
     // Transform data to ensure consistent format
     const transformedData = (data || []).map((session: any) => ({
       id: session.id,
-      session_year: session.session_year || session.name || `${session.start_year}/${session.end_year}`,
-      name: session.name || `${session.start_year}/${session.end_year}`,
+      session_year: session.session_year || `${session.start_year}/${session.end_year}`,
       start_year: session.start_year,
       end_year: session.end_year,
-      is_active: session.is_active || session.is_current || false,
+      is_active: session.is_active || false,
       created_at: session.created_at,
     }));
 
