@@ -12,10 +12,10 @@ export const dynamic = 'force-dynamic';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const studentId = params.id;
+    const { id: studentId } = await params;
     const { is_locked, lock_reason } = await request.json();
 
     if (!studentId) {

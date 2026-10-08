@@ -18,13 +18,13 @@ export const revalidate = 0
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { studentId: string } }
+  { params }: { params: Promise<{ studentId: string }> }
 ) {
   try {
     const { searchParams } = new URL(request.url)
+    const { studentId } = await params
     const schoolId = searchParams.get('schoolId')
     const termId = searchParams.get('termId')
-    const studentId = params.studentId
 
     const timestamp = new Date().toISOString()
     console.log(`[RESULTS API] ${timestamp} - START fetch for student:`, {

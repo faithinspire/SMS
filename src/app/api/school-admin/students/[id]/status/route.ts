@@ -49,19 +49,10 @@ async function verifySchoolAdmin(token: string, schoolId: string) {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: 'Missing authorization' },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.substring(7);
-    const studentId = params.id;
+    const { id: studentId } = await params;
     const body = await request.json();
     const { status } = body;
 
