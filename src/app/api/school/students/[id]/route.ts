@@ -5,10 +5,10 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const studentId = params.id;
+    const { id: studentId } = await params;
 
     if (!studentId) {
       return NextResponse.json(
@@ -22,7 +22,9 @@ export async function GET(
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
-    // Fetch student with user details
+    console.log('[Student Details API] Fetching student:', studentId);
+
+    // Fetch student with user details - simplified query
     const { data: student, error } = await supabase
       .from('students')
       .select(`
@@ -40,18 +42,13 @@ export async function GET(
           email,
           phone,
           photo_url
-        ),
-        class_arm_combos (
-          id,
-          classes (name),
-          arms (name)
         )
       `)
       .eq('id', studentId)
       .single();
 
     if (error) {
-      console.error('[Student Details API] Error:', error);
+      console.error('[Student Details API] Supabase error:', error.message);
       throw error;
     }
 
@@ -61,6 +58,8 @@ export async function GET(
         { status: 404 }
       );
     }
+
+    console.log('[Student Details API] ✅ Student found:', student.id);
 
     // Format response
     const formattedStudent = {
@@ -73,10 +72,7 @@ export async function GET(
       status: student.status,
       is_locked: student.is_locked,
       date_of_birth: student.date_of_birth,
-      class_name:
-        student.class_arm_combos && student.class_arm_combos.length > 0
-          ? `${student.class_arm_combos[0].classes?.name || ''} ${student.class_arm_combos[0].arms?.name || ''}`
-          : 'Not Assigned',
+      class_name: 'N/A',
     };
 
     return NextResponse.json({
@@ -87,6 +83,7 @@ export async function GET(
     return NextResponse.json(
       {
         error: error.message || 'Failed to fetch student details',
+        details: error?.details || null,
       },
       { status: 500 }
     );
