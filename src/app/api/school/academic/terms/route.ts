@@ -28,18 +28,29 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('session_id', sessionId)
       .eq('school_id', schoolId)
-      .order('term_order', { ascending: true });
+      .order('term_number', { ascending: true });
 
     if (error) {
       console.error('[Terms API] Database error:', error.message);
       throw error;
     }
 
-    console.log('[Terms API] ✅ Found', data?.length || 0, 'terms');
+    // Map database column names to API response format
+    // Database uses: name, term_number
+    // API expects: term_name, term_order
+    const mappedData = (data || []).map((term: any) => ({
+      id: term.id,
+      session_id: term.session_id,
+      term_name: term.name || term.term_name || '', // Handle both column names
+      term_order: term.term_number || term.term_order || 0, // Handle both column names
+      is_active: term.is_active,
+    }));
+
+    console.log('[Terms API] ✅ Found', mappedData.length, 'terms');
 
     return NextResponse.json({ 
-      data: data || [],
-      meta: { count: data?.length || 0 }
+      data: mappedData,
+      meta: { count: mappedData.length }
     });
   } catch (error: any) {
     console.error('[Terms API] Error:', error?.message || error);
