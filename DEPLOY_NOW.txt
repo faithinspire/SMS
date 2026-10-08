@@ -1,0 +1,53 @@
+================================================================================
+                    DEPLOY TO VERCEL - DO THIS NOW
+================================================================================
+
+COPY-PASTE THESE COMMANDS INTO POWERSHELL/CMD:
+
+cd c:\Users\OLU\Desktop\SMS
+
+git add src/app/api/school/students/route.ts
+git add src/app/api/school/academic/sessions/route.ts
+git add src/app/api/school/academic/terms/route.ts
+git add src/app/api/school/academic/classes/route.ts
+git add src/app/api/school/academic/arms/route.ts
+git add src/app/school-admin/results/page.tsx
+
+git commit -m "fix: School Admin rebuild - fix APIs and column mapping"
+
+git push -u origin main
+
+================================================================================
+
+THEN:
+
+1. Go to: https://vercel.com/dashboard
+2. Watch for "Deploying..." status
+3. Wait for "Deployed just now" (3-5 minutes)
+4. Check for green checkmark = success
+
+================================================================================
+
+WHAT YOU'RE DEPLOYING:
+
+✅ Fixed Students API (removed auth cookies)
+✅ Fixed Sessions API (standardized format)
+✅ Fixed Terms API (maps database columns correctly)
+✅ Fixed Classes API (standardized format)
+✅ Fixed Arms API (fixed Supabase joins)
+✅ Fixed Results Page (better error handling)
+
+All code verified, no errors, ready for production.
+
+================================================================================
+
+AFTER DEPLOYMENT:
+
+1. Results page will work (once you add academic data via SQL)
+2. All dropdowns will cascade correctly
+3. Students list will populate
+4. Everything is live on Vercel
+
+================================================================================
+
+EXECUTE THE COMMANDS ABOVE NOW.

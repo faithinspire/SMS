@@ -161,13 +161,15 @@ export default function StudentsPage() {
         throw new Error(`HTTP ${response.status}`);
       }
 
+      const result = await response.json();
+      
       toast.dismiss();
       toast.success(shouldLock ? 'Student locked' : 'Student unlocked');
 
-      // Refresh students
+      // Update students array with server response to ensure persistence
       setStudents(students.map(s =>
         s.id === studentId
-          ? { ...s, is_locked: shouldLock }
+          ? { ...s, is_locked: result.data?.is_locked ?? shouldLock, locked_at: result.data?.locked_at }
           : s
       ));
     } catch (err: any) {

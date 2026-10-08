@@ -71,21 +71,29 @@ export default function StudentDashboard() {
         setUser(currentUser)
 
         // ✅ CHECK ACCOUNT STATUS: Prevent locked/paused/suspended students from accessing dashboard
-        const { data: studentRecord } = await supabase
+        const { data: studentRecord, error: studentError } = await supabase
           .from('students')
-          .select('id, is_locked, status')
+          .select('id, is_locked, locked_at, lock_reason, status')
           .eq('user_id', currentUser.id)
-          .maybeSingle();
+          .single();
+
+        if (studentError) {
+          console.error('Error fetching student record:', studentError);
+        }
 
         if (studentRecord) {
+          console.log('[Student Dashboard] Student lock status:', { is_locked: studentRecord.is_locked, status: studentRecord.status });
+          
           // Check if student is locked by admin
-          if (studentRecord.is_locked) {
+          if (studentRecord.is_locked === true) {
+            console.log('[Student Dashboard] Student is locked, redirecting...');
             router.push('/student/account-locked-admin');
             return;
           }
 
           // Also check if account is paused/suspended
           if (studentRecord.status === 'PAUSED' || studentRecord.status === 'SUSPENDED') {
+            console.log('[Student Dashboard] Student status is', studentRecord.status, 'redirecting...');
             router.push(`/student/account-locked?status=${studentRecord.status.toLowerCase()}`);
             return;
           }
