@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AuthService } from '@/services/auth.service';
 import { toast } from 'react-hot-toast';
 import { Download, Printer, AlertCircle } from 'lucide-react';
+import StudentDetailsModal from '@/components/StudentDetailsModal';
 
 interface Session {
   id: string;
@@ -59,6 +60,14 @@ export default function ResultsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
+
+  // Modal state
+  const [selectedStudent, setSelectedStudent] = useState<{
+    id: string;
+    name: string;
+    admission: string;
+  } | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Get authenticated user's school
   useEffect(() => {
@@ -478,7 +487,17 @@ export default function ResultsPage() {
                         <span className="text-sm text-green-600 font-semibold">Excellent</span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-semibold transition">
+                        <button
+                          onClick={() => {
+                            setSelectedStudent({
+                              id: student.id,
+                              name: student.full_name,
+                              admission: student.admission_number,
+                            });
+                            setIsModalOpen(true);
+                          }}
+                          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-semibold transition"
+                        >
                           View Details
                         </button>
                       </td>
@@ -504,6 +523,21 @@ export default function ResultsPage() {
           </div>
         )}
       </div>
+
+      {/* Student Details Modal */}
+      {selectedStudent && (
+        <StudentDetailsModal
+          isOpen={isModalOpen}
+          studentId={selectedStudent.id}
+          studentName={selectedStudent.name}
+          admissionNumber={selectedStudent.admission}
+          termId={selectedTerm}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedStudent(null);
+          }}
+        />
+      )}
     </div>
   );
 }
