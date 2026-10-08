@@ -79,8 +79,13 @@ export default function StudentResultsPage() {
   /**
    * Initialize student and verify access
    */
+  useEffect(() => {
+    initializeStudent()
+  }, [])
+
   async function initializeStudent() {
     try {
+      setLoading(true)
       const currentUser = await AuthService.getCurrentUser()
       if (!currentUser || currentUser.role !== 'STUDENT') {
         router.push('/landing')
@@ -109,30 +114,6 @@ export default function StudentResultsPage() {
     } catch (err) {
       console.error('Error initializing student:', err)
       setError('Failed to initialize student session')
-      setLoading(false)
-    }
-  }
-
-  const loadSessions = async () => {
-
-      const currentUser = await AuthService.getCurrentUser()
-      if (!currentUser) {
-        router.push('/landing')
-        return
-      }
-
-      if (currentUser.role !== 'STUDENT') {
-        toast.error('Only students can access this page')
-        router.push('/landing')
-        return
-      }
-
-      setUser(currentUser)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to initialize'
-      setError(message)
-      console.error('[StudentResults] Init error:', err)
-    } finally {
       setLoading(false)
     }
   }
