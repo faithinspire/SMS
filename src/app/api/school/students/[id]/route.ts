@@ -24,32 +24,16 @@ export async function GET(
 
     console.log('[Student Details API] Fetching student:', studentId);
 
-    // Fetch student with user details - simplified query
-    const { data: student, error } = await supabase
+    // Fetch student basic info only (no relations to avoid RLS issues)
+    const { data: student, error: studentError } = await supabase
       .from('students')
-      .select(`
-        id,
-        user_id,
-        school_id,
-        admission_number,
-        date_of_birth,
-        photo_url,
-        status,
-        is_locked,
-        users (
-          id,
-          full_name,
-          email,
-          phone,
-          photo_url
-        )
-      `)
+      .select('id, user_id, school_id, admission_number, date_of_birth, photo_url, status, is_locked')
       .eq('id', studentId)
       .single();
 
-    if (error) {
-      console.error('[Student Details API] Supabase error:', error.message);
-      throw error;
+    if (studentError) {
+      console.error('[Student Details API] Student query error:', studentError.message);
+      throw studentError;
     }
 
     if (!student) {
@@ -59,16 +43,29 @@ export async function GET(
       );
     }
 
-    console.log('[Student Details API] ✅ Student found:', student.id);
+    console.log('[Student Details API] Student found, fetching user details for:', student.user_id);
+
+    // Fetch user details separately
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, full_name, email, phone, photo_url')
+      .eq('id', student.user_id)
+      .single();
+
+    if (userError) {
+      console.warn('[Student Details API] User not found, continuing with student data only');
+    }
+
+    console.log('[Student Details API] ✅ Data loaded successfully');
 
     // Format response
     const formattedStudent = {
       id: student.id,
-      full_name: student.users?.full_name || 'Unknown',
+      full_name: user?.full_name || 'Unknown',
       admission_number: student.admission_number,
-      email: student.users?.email || '',
-      phone: student.users?.phone || '',
-      photo_url: student.photo_url || student.users?.photo_url,
+      email: user?.email || '',
+      phone: user?.phone || '',
+      photo_url: student.photo_url || user?.photo_url,
       status: student.status,
       is_locked: student.is_locked,
       date_of_birth: student.date_of_birth,
