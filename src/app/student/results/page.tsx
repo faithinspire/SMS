@@ -112,11 +112,8 @@ export default function StudentResultsPage() {
       setLoading(false)
     }
   }
-   */
-  const initializeStudent = async () => {
-    try {
-      setLoading(true)
-      setError(null)
+
+  const loadSessions = async () => {
 
       const currentUser = await AuthService.getCurrentUser()
       if (!currentUser) {
