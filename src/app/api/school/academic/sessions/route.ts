@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('academic_sessions')
-      .select('*')
+      .select('id, session_year, name, start_year, end_year, is_active, is_current, created_at')
       .eq('school_id', schoolId)
       .order('start_year', { ascending: false });
 
@@ -33,11 +33,26 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    console.log('[Sessions API] ✅ Found', data?.length || 0, 'sessions');
+    if (!data || data.length === 0) {
+      console.warn('[Sessions API] ⚠️ No sessions found for school:', schoolId);
+    }
+
+    // Transform data to ensure consistent format
+    const transformedData = (data || []).map((session: any) => ({
+      id: session.id,
+      session_year: session.session_year || session.name || `${session.start_year}/${session.end_year}`,
+      name: session.name || `${session.start_year}/${session.end_year}`,
+      start_year: session.start_year,
+      end_year: session.end_year,
+      is_active: session.is_active || session.is_current || false,
+      created_at: session.created_at,
+    }));
+
+    console.log('[Sessions API] ✅ Found', transformedData.length, 'sessions');
 
     return NextResponse.json({ 
-      data: data || [],
-      meta: { count: data?.length || 0 }
+      data: transformedData,
+      meta: { count: transformedData.length }
     });
   } catch (error: any) {
     console.error('[Sessions API] Error:', error?.message || error);

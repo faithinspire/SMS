@@ -114,6 +114,7 @@ export default function ResultsPage() {
         }
         
         const result = await response.json();
+        console.log('[Results] API Response:', result);
         
         if (!result.data || result.data.length === 0) {
           console.warn('[Results] No sessions found for school:', schoolId);
@@ -122,8 +123,9 @@ export default function ResultsPage() {
           return;
         }
         
-        console.log('[Results] ✅ Loaded', result.data.length, 'sessions');
+        console.log('[Results] ✅ Loaded', result.data.length, 'sessions:', result.data);
         setSessions(result.data);
+        setError(null);
       } catch (err: any) {
         console.error('[Results] Error loading sessions:', err);
         setError(`Failed to load sessions: ${err.message}`);

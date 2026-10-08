@@ -65,6 +65,41 @@ export default function StudentCBTPage() {
     loadExam()
   }, [])
 
+  // Lock enforcement before exam loads
+  useEffect(() => {
+    const checkLock = async () => {
+      try {
+        const currentUser = await AuthService.getCurrentUser();
+        if (!currentUser) {
+          router.push('/auth/student/login');
+          return;
+        }
+
+        const { data: student } = await supabase
+          .from('students')
+          .select('id, is_locked, status')
+          .eq('user_id', currentUser.id)
+          .single();
+
+        if (student?.is_locked) {
+          router.push('/student/account-locked-admin');
+          return;
+        }
+
+        if (student?.status === 'PAUSED' || student?.status === 'SUSPENDED') {
+          router.push(`/student/account-locked?status=${student.status.toLowerCase()}`);
+          return;
+        }
+
+        setStudentId(student?.id || '');
+      } catch (err) {
+        console.error('Error checking lock:', err);
+      }
+    };
+
+    checkLock();
+  }, [router]);
+
   useEffect(() => {
     if (!started || submitted || timeLeft <= 0) return
 

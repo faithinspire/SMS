@@ -79,6 +79,40 @@ export default function StudentResultsPage() {
   /**
    * Initialize student and verify access
    */
+  async function initializeStudent() {
+    try {
+      const currentUser = await AuthService.getCurrentUser()
+      if (!currentUser || currentUser.role !== 'STUDENT') {
+        router.push('/landing')
+        return
+      }
+
+      // ✅ CHECK LOCK STATUS BEFORE SHOWING RESULTS
+      const { data: student } = await supabase
+        .from('students')
+        .select('id, is_locked, status')
+        .eq('user_id', currentUser.id)
+        .single()
+
+      if (student?.is_locked) {
+        router.push('/student/account-locked-admin')
+        return
+      }
+
+      if (student?.status === 'PAUSED' || student?.status === 'SUSPENDED') {
+        router.push(`/student/account-locked?status=${student.status.toLowerCase()}`)
+        return
+      }
+
+      setUser(currentUser)
+      setLoading(false)
+    } catch (err) {
+      console.error('Error initializing student:', err)
+      setError('Failed to initialize student session')
+      setLoading(false)
+    }
+  }
+   */
   const initializeStudent = async () => {
     try {
       setLoading(true)
