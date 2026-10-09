@@ -1,0 +1,189 @@
+================================================================================
+SCORE SHEETS POPULATION - QUICK REFERENCE
+================================================================================
+
+FILES CREATED:
+1. src/app/api/debug/insert-test-data/route.ts      [API Endpoint]
+2. database/migrations/171_populate_score_sheets_test_data.sql    [Migration]
+3. run-migration-171.js                             [Migration Runner]
+4. POPULATE_SCORE_SHEETS_GUIDE.md                   [Full Documentation]
+5. SCORE_SHEETS_IMPLEMENTATION_COMPLETE.md          [Implementation Details]
+6. DEPLOY_SCORE_POPULATION_NOW.md                   [Deployment Guide]
+
+================================================================================
+QUICK COMMANDS
+================================================================================
+
+DEVELOPMENT:
+  npm run dev
+  # In another terminal:
+  curl -X POST "http://localhost:3000/api/debug/insert-test-data" \
+    -H "Content-Type: application/json" \
+    -d '{"action": "populate"}'
+
+CHECK STATUS:
+  curl "http://localhost:3000/api/debug/insert-test-data"
+
+PRODUCTION (Node Script):
+  node run-migration-171.js
+
+PRODUCTION (Supabase SQL):
+  1. Supabase Dashboard → SQL Editor
+  2. Paste: database/migrations/171_populate_score_sheets_test_data.sql
+  3. Run
+
+PRODUCTION (API):
+  curl -X POST "https://your-domain.vercel.app/api/debug/insert-test-data" \
+    -H "Content-Type: application/json" \
+    -d '{"action": "populate"}'
+
+CLEAR SCORES (if needed):
+  curl -X POST "http://localhost:3000/api/debug/insert-test-data" \
+    -H "Content-Type: application/json" \
+    -d '{"action": "clear"}'
+
+================================================================================
+API ENDPOINT RESPONSES
+================================================================================
+
+GET /api/debug/insert-test-data
+Response:
+{
+  "debug": true,
+  "totalScoreRecords": 240,        ← Number of score records in database
+  "sampleData": [...],              ← 5 sample score records
+  "message": "Database has 240 score records"
+}
+
+POST /api/debug/insert-test-data (action: "populate")
+Response:
+{
+  "success": true,
+  "message": "Score data populated successfully",
+  "school": "School Name",
+  "studentsProcessed": 10,          ← Number of test students
+  "termsProcessed": 3,              ← Number of terms
+  "subjectsPerStudent": 8,          ← Subjects per student
+  "recordsGenerated": 240,          ← Total score records created
+  "recordsInDatabase": 240          ← Verification count
+}
+
+================================================================================
+DATA GENERATED
+================================================================================
+
+- School: First active school
+- Students: 10 active students
+- Terms: 3 (First, Second, Third)
+- Subjects: ~8 per student (from actual enrollment)
+- Total Records: 240 (10 × 3 × 8)
+
+Scores per record:
+  - test1: 0-10 (random)
+  - test2: 0-10 (random)
+  - test3: 0-10 (random)
+  - test4: 0-10 (random)
+  - exam: 0-60 (random)
+  - total: auto-calculated (max 100)
+
+================================================================================
+DEPLOYMENT STEPS
+================================================================================
+
+1. Commit:
+   git add -A
+   git commit -m "feat: Add score_sheets population endpoint and migration 171"
+   git push origin main
+
+2. Wait for Vercel deployment (2-3 minutes)
+
+3. Populate (choose one):
+   - Option A: node run-migration-171.js
+   - Option B: Paste migration SQL in Supabase
+   - Option C: curl POST to /api/debug/insert-test-data
+
+4. Verify:
+   curl "https://your-domain.com/api/debug/insert-test-data"
+   Should show: "totalScoreRecords": 240
+
+5. Test in UI:
+   - Log in as student
+   - Go to Student Results
+   - Select Session/Term/Class
+   - View scores displayed
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+"totalScoreRecords": 0
+  → Population hasn't run yet
+  → Execute: curl -X POST .../api/debug/insert-test-data -d {"action":"populate"}
+
+"No active schools found"
+  → School must have status = 'ACTIVE' in database
+
+"No active students found"
+  → Register students and mark as 'ACTIVE'
+
+Scores not showing in UI
+  → Check browser console (F12) for errors
+  → Refresh page (Ctrl+F5)
+  → Verify student is in selected class
+
+================================================================================
+KEY FILES REFERENCE
+================================================================================
+
+Full Guide:
+  POPULATE_SCORE_SHEETS_GUIDE.md
+
+Implementation Details:
+  SCORE_SHEETS_IMPLEMENTATION_COMPLETE.md
+
+Deployment Guide:
+  DEPLOY_SCORE_POPULATION_NOW.md
+
+API Endpoint:
+  src/app/api/debug/insert-test-data/route.ts
+
+Migration SQL:
+  database/migrations/171_populate_score_sheets_test_data.sql
+
+Runner Script:
+  run-migration-171.js
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+
+After Population:
+  [ ] API returns totalScoreRecords > 0
+  [ ] Sample data shows test scores and exam values
+  [ ] Student Results page loads without errors
+  [ ] Session dropdown works
+  [ ] Term dropdown works
+  [ ] Class dropdown works
+  [ ] Scores display correctly
+  [ ] Total is calculated (sum of all scores)
+  [ ] No console errors
+
+================================================================================
+ROLLBACK
+================================================================================
+
+Clear test scores:
+  curl -X POST "http://localhost:3000/api/debug/insert-test-data" \
+    -H "Content-Type: application/json" \
+    -d '{"action": "clear"}'
+
+Or in Supabase SQL:
+  DELETE FROM score_sheets 
+  WHERE updated_at > NOW() - INTERVAL '1 hour';
+
+================================================================================
+STATUS: READY TO DEPLOY ✅
+Risk Level: LOW
+Deploy Time: 5-10 minutes
+Rollback Time: < 1 minute
+================================================================================
