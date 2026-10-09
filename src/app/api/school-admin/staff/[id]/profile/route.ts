@@ -36,7 +36,14 @@ export async function GET(
     )
 
     // Step 1: Get staff basic info
+    // The staffId could be either:
+    // 1. A staff.id (if staff record was created)
+    // 2. A user.id (if staff record was not created)
     console.log('[Staff Profile API] Step 1: Fetching staff record...')
+    let staffData = null
+    let userId: string | null = null
+
+    // First, try to find by staff.id
     const { data: staffArray, error: staffError } = await supabase
       .from('staff')
       .select('*')
@@ -49,24 +56,76 @@ export async function GET(
       throw new Error(`Failed to query staff: ${staffError.message}`)
     }
 
-    const staffData = staffArray && staffArray.length > 0 ? staffArray[0] : null
+    if (staffArray && staffArray.length > 0) {
+      // Found by staff.id
+      staffData = staffArray[0]
+      userId = staffData.user_id
+      console.log('[Staff Profile API] ✅ Staff found by staff.id, user_id:', userId)
+    } else {
+      // Not found by staff.id; staffId might be a user.id
+      // Try to find user first, then their staff record
+      console.log('[Staff Profile API] Staff.id not found; trying as user.id...')
+      const { data: userArray, error: userError } = await supabase
+        .from('users')
+        .select('id, full_name, email, phone, status, role, school_id')
+        .eq('id', staffId)
+        .eq('school_id', schoolId)
+        .limit(1)
 
-    if (!staffData) {
-      console.warn('[Staff Profile API] Staff not found:', { staffId, schoolId })
-      return NextResponse.json(
-        { error: 'Staff member not found', success: false },
-        { status: 404 }
-      )
+      if (userError) {
+        console.error('[Staff Profile API] User query error:', userError)
+        throw new Error(`Failed to query user: ${userError.message}`)
+      }
+
+      if (!userArray || userArray.length === 0) {
+        console.warn('[Staff Profile API] Neither staff nor user found:', { staffId, schoolId })
+        return NextResponse.json(
+          { error: 'Staff member not found', success: false },
+          { status: 404 }
+        )
+      }
+
+      // User found; try to get their staff record
+      userId = userArray[0].id
+      const { data: staffRecords, error: staffRecordError } = await supabase
+        .from('staff')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('school_id', schoolId)
+        .limit(1)
+
+      if (staffRecordError) {
+        console.warn('[Staff Profile API] Staff record query error:', staffRecordError.message)
+      }
+
+      if (staffRecords && staffRecords.length > 0) {
+        staffData = staffRecords[0]
+        console.log('[Staff Profile API] ✅ Found staff record for user_id:', userId)
+      } else {
+        // No staff record created yet; create a minimal one from user data
+        console.warn('[Staff Profile API] No staff record found for user; creating minimal entry')
+        const user = userArray[0]
+        staffData = {
+          id: user.id, // Use user.id as staff.id fallback
+          user_id: userId,
+          school_id: schoolId,
+          first_name: user.full_name?.split(' ')[0] || 'Unknown',
+          last_name: user.full_name?.split(' ').slice(1).join(' ') || '',
+          email: user.email,
+          phone: user.phone,
+          position: user.role || 'STAFF',
+          employment_date: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        }
+      }
     }
-
-    console.log('[Staff Profile API] ✅ Staff found, user_id:', staffData.user_id)
 
     // Step 2: Check if teacher
     console.log('[Staff Profile API] Step 2: Checking if teacher...')
     const { data: teacherArray, error: teacherError } = await supabase
       .from('teachers')
       .select('*')
-      .eq('staff_id', staffId)
+      .eq('staff_id', staffData.id)
       .limit(1)
 
     if (teacherError) {
@@ -83,7 +142,7 @@ export async function GET(
     const { data: userArray, error: userError } = await supabase
       .from('users')
       .select('status')
-      .eq('id', staffData.user_id)
+      .eq('id', userId)
       .limit(1)
 
     if (userError) {
@@ -104,7 +163,7 @@ export async function GET(
             classes!inner(name, school_level),
             arms!inner(name)
           `)
-          .eq('class_teacher_id', staffData.user_id)
+          .eq('class_teacher_id', userId)
 
         if (classError) {
           console.warn('[Staff Profile API] Class query error:', classError.message)
@@ -143,7 +202,7 @@ export async function GET(
               arms(name)
             )
           `)
-          .eq('teacher_id', staffData.user_id)
+          .eq('teacher_id', userId)
 
         if (subjectError) {
           console.warn('[Staff Profile API] Subject query error:', subjectError.message)
@@ -195,12 +254,13 @@ export async function GET(
       class_assignments: classAssignments,
       subject_assignments: subjectAssignments,
       account_status: userData?.status || 'UNKNOWN',
+      user_id: userId,
     }
 
     const elapsed = Date.now() - startTime
     console.log(
       `[Staff Profile API] ✅ Complete success in ${elapsed}ms:`,
-      `${profile.first_name} ${profile.last_name}`
+      `${profile.first_name || 'Unknown'} ${profile.last_name || ''}`
     )
 
     return NextResponse.json(
