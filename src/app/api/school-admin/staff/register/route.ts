@@ -185,14 +185,17 @@ export async function POST(request: NextRequest) {
         const subjectAssignments = subjectIds.map((subjectId: string) => ({
           teacher_id: userId,
           subject_id: subjectId,
-          class_id: classArmComboId,
+          class_arm_combo_id: classArmComboId,
+          school_id: schoolId,
         }))
 
         const { error: subjectError } = await supabase
           .from('subject_teacher_assignments')
           .insert(subjectAssignments)
 
-        if (!subjectError) {
+        if (subjectError) {
+          console.error('[Staff Reg API] Warning: Failed to assign subjects:', subjectError.message)
+        } else {
           console.log('[Staff Reg API] ✅ Subjects assigned')
         }
       }

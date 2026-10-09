@@ -32,11 +32,15 @@ interface StaffDetail {
   account_name?: string
   salary?: number
   class_assignments?: Array<{
+    combo_id?: string
     class_name: string
     arm_name: string
   }>
   subject_assignments?: Array<{
     subject_name: string
+    subject_code?: string
+    class_name?: string
+    arm_name?: string
   }>
   account_status?: string
 }
@@ -62,91 +66,28 @@ export default function StaffProfileViewModal({
       setLoading(true)
       setError(null)
 
-      // Get staff basic info
-      const { data: staffData, error: staffError } = await supabase
-        .from('staff')
-        .select('*')
-        .eq('id', staffId)
-        .eq('school_id', schoolId)
-        .single()
+      console.log('[Staff Profile View] Loading staff:', staffId)
 
-      if (staffError) {
-        throw new Error(staffError.message)
+      // Call the API endpoint instead of querying directly
+      const response = await fetch(
+        `/api/school-admin/staff/${staffId}/profile?schoolId=${encodeURIComponent(schoolId)}`,
+        { method: 'GET' }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `API error: ${response.statusText}`)
       }
 
-      if (!staffData) {
-        throw new Error('Staff member not found')
+      const result = await response.json()
+
+      if (!result.success || !result.data) {
+        throw new Error('Invalid response from API')
       }
 
-      // Check if teacher
-      let isTeacher = false
-      let teacherData = null
-      const { data: tData } = await supabase
-        .from('teachers')
-        .select('*')
-        .eq('staff_id', staffId)
-        .single()
+      const detail: StaffDetail = result.data
 
-      if (tData) {
-        isTeacher = true
-        teacherData = tData
-      }
-
-      // Get user account status
-      const { data: userData } = await supabase
-        .from('users')
-        .select('status')
-        .eq('id', staffData.user_id)
-        .single()
-
-      // Get class assignments (if teacher)
-      let classAssignments: any[] = []
-      if (isTeacher && tData) {
-        const { data: cData } = await supabase
-          .from('class_arm_combos')
-          .select(`
-            classes (name),
-            arms (name)
-          `)
-          .eq('class_teacher_id', staffData.user_id)
-
-        if (cData) {
-          classAssignments = cData.map(c => ({
-            class_name: (c.classes as any)?.name || 'Unknown',
-            arm_name: (c.arms as any)?.name || 'Unknown',
-          }))
-        }
-      }
-
-      // Get subject assignments (if teacher)
-      let subjectAssignments: any[] = []
-      if (isTeacher && tData) {
-        const { data: sData } = await supabase
-          .from('subject_teacher_assignments')
-          .select(`
-            subjects (name)
-          `)
-          .eq('teacher_id', staffData.user_id)
-
-        if (sData) {
-          subjectAssignments = sData.map(s => ({
-            subject_name: (s.subjects as any)?.name || 'Unknown',
-          }))
-        }
-      }
-
-      const detail: StaffDetail = {
-        ...staffData,
-        is_teacher: isTeacher,
-        teaching_level: teacherData?.teaching_level,
-        bank_name: teacherData?.bank_name,
-        account_number: teacherData?.account_number,
-        account_name: teacherData?.account_name,
-        salary: teacherData?.salary,
-        class_assignments: classAssignments,
-        subject_assignments: subjectAssignments,
-        account_status: userData?.status || 'UNKNOWN',
-      }
+      console.log('[Staff Profile View] ✅ Staff loaded:', detail.first_name, detail.last_name)
 
       setStaff(detail)
     } catch (err: any) {

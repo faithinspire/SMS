@@ -79,36 +79,70 @@ export async function GET(
 
     // Get class assignments (if teacher)
     let classAssignments: any[] = []
-    if (isTeacher) {
+    if (isTeacher && teacherData) {
+      // Get classes where this teacher is the class teacher via teacher_id
       const { data: classData } = await supabase
-        .from('class_arm_combos')
+        .from('teacher_class_assignments')
         .select(`
-          classes (name),
-          arms (name)
+          class_arm_combos (
+            id,
+            classes (name),
+            arms (name)
+          )
         `)
-        .eq('class_teacher_id', staffData.user_id)
+        .eq('teacher_id', staffData.user_id)
+        .eq('is_class_teacher', true)
 
-      if (classData) {
-        classAssignments = classData.map(c => ({
-          class_name: (c.classes as any)?.name || 'Unknown',
-          arm_name: (c.arms as any)?.name || 'Unknown',
+      if (classData && classData.length > 0) {
+        classAssignments = classData.map((assignment: any) => ({
+          combo_id: assignment.class_arm_combos?.id,
+          class_name: assignment.class_arm_combos?.classes?.name || 'Unknown',
+          arm_name: assignment.class_arm_combos?.arms?.name || 'Unknown',
         }))
+      }
+
+      // Also check class_arm_combos directly for backward compatibility
+      if (classAssignments.length === 0) {
+        const { data: directClassData } = await supabase
+          .from('class_arm_combos')
+          .select(`
+            id,
+            classes (name),
+            arms (name)
+          `)
+          .eq('class_teacher_id', staffData.user_id)
+
+        if (directClassData && directClassData.length > 0) {
+          classAssignments = directClassData.map((combo: any) => ({
+            combo_id: combo.id,
+            class_name: combo.classes?.name || 'Unknown',
+            arm_name: combo.arms?.name || 'Unknown',
+          }))
+        }
       }
     }
 
     // Get subject assignments (if teacher)
     let subjectAssignments: any[] = []
-    if (isTeacher) {
+    if (isTeacher && teacherData) {
       const { data: subjectData } = await supabase
         .from('subject_teacher_assignments')
         .select(`
-          subjects (name)
+          id,
+          subjects (name, code),
+          class_arm_combos (
+            classes (name),
+            arms (name)
+          )
         `)
         .eq('teacher_id', staffData.user_id)
 
       if (subjectData) {
         subjectAssignments = subjectData.map(s => ({
           subject_name: (s.subjects as any)?.name || 'Unknown',
+          subject_code: (s.subjects as any)?.code || '',
+          class_name: (s.class_arm_combos as any)?.classes?.name || 'Unknown',
+          arm_name: (s.class_arm_combos as any)?.arms?.name || 'Unknown',
         }))
       }
     }
