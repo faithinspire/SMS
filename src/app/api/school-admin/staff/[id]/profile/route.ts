@@ -40,12 +40,14 @@ export async function GET(
     )
 
     // Get staff basic info
-    const { data: staffData, error: staffError } = await supabase
+    const { data: staffArray, error: staffError } = await supabase
       .from('staff')
       .select('*')
       .eq('id', staffId)
       .eq('school_id', schoolId)
-      .single()
+      .limit(1)
+
+    const staffData = staffArray && staffArray.length > 0 ? staffArray[0] : null
 
     if (staffError || !staffData) {
       return NextResponse.json(

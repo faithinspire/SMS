@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { X } from 'lucide-react'
 
@@ -11,7 +11,7 @@ interface StaffRegistrationModalProps {
   onSuccess?: () => void
 }
 
-type StaffCategory = 'TEACHER' | 'ADMINISTRATOR' | 'SUPPORT_STAFF' | ''
+type StaffCategory = 'TEACHER' | 'PRINCIPAL' | 'HEAD_TEACHER' | 'ACCOUNTANT' | 'ADMINISTRATOR' | 'SUPPORT_STAFF' | ''
 
 export default function StaffRegistrationModal({
   isOpen,
@@ -24,6 +24,7 @@ export default function StaffRegistrationModal({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingTeachingData, setLoadingTeachingData] = useState(false)
 
   // Form Data - Step 1: Category & Personal
   const [staffCategory, setStaffCategory] = useState<StaffCategory>('')
@@ -47,7 +48,54 @@ export default function StaffRegistrationModal({
   const [accountName, setAccountName] = useState('')
   const [salary, setSalary] = useState('')
 
+  // Form Data - Step 5: Class/Subject Assignment (Teachers only)
+  const [selectedComboId, setSelectedComboId] = useState<string>('')
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([])
+  const [combos, setCombos] = useState<any[]>([])
+  const [subjects, setSubjects] = useState<any[]>([])
+
   if (!isOpen) return null
+
+  const loadTeachingData = async () => {
+    if (!teachingLevel || !schoolId) {
+      setError('Teaching level not selected')
+      return
+    }
+
+    setLoadingTeachingData(true)
+    setError(null)
+
+    try {
+      // Load class-arm combos
+      const response = await fetch(
+        `/api/teaching/class-combos?schoolId=${encodeURIComponent(schoolId)}&section=${encodeURIComponent(teachingLevel)}`,
+        { method: 'GET' }
+      )
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`)
+      }
+
+      const loadedCombos = await response.json()
+      setCombos(loadedCombos)
+
+      // Load subjects
+      const subjectsResponse = await fetch(
+        `/api/canonical-subjects?schoolId=${encodeURIComponent(schoolId)}`,
+        { method: 'GET' }
+      )
+
+      if (subjectsResponse.ok) {
+        const loadedSubjects = await subjectsResponse.json()
+        setSubjects(loadedSubjects)
+      }
+    } catch (err: any) {
+      console.error('Error loading teaching data:', err)
+      setError(`Failed to load teaching data: ${err.message}`)
+    } finally {
+      setLoadingTeachingData(false)
+    }
+  }
 
   const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -96,7 +144,25 @@ export default function StaffRegistrationModal({
       return
     }
     setError(null)
+    // Load teaching data then move to step 5
+    loadTeachingData()
+    setCurrentStep(5)
+  }
+
+  const handleStep5Submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedComboId || selectedSubjects.length === 0) {
+      setError('Please select a class and at least one subject')
+      return
+    }
+    setError(null)
     handleFinalSubmit()
+  }
+
+  const toggleSubject = (subjectId: string) => {
+    setSelectedSubjects(prev =>
+      prev.includes(subjectId) ? prev.filter(id => id !== subjectId) : [...prev, subjectId]
+    )
   }
 
   const handleFinalSubmit = async () => {
@@ -131,6 +197,8 @@ export default function StaffRegistrationModal({
           accountNumber: staffCategory === 'TEACHER' ? accountNumber : null,
           accountName: staffCategory === 'TEACHER' ? accountName : null,
           salary: staffCategory === 'TEACHER' ? salary : null,
+          classArmComboId: staffCategory === 'TEACHER' ? selectedComboId : null,
+          subjectIds: staffCategory === 'TEACHER' ? selectedSubjects : null,
         }),
       })
 
@@ -142,8 +210,8 @@ export default function StaffRegistrationModal({
       const result = await response.json()
       console.log('[Staff Reg Modal] ✅ Registration successful:', result)
 
-      setSuccess(`✅ Staff member ${firstName} ${lastName} registered successfully!`)
-      
+      setSuccess(`✅ ${staffCategory} ${firstName} ${lastName} registered successfully!`)
+
       // Reset form
       setCurrentStep(1)
       setStaffCategory('')
@@ -160,6 +228,8 @@ export default function StaffRegistrationModal({
       setAccountNumber('')
       setAccountName('')
       setSalary('')
+      setSelectedComboId('')
+      setSelectedSubjects([])
 
       if (onSuccess) {
         setTimeout(onSuccess, 1500)
@@ -173,6 +243,8 @@ export default function StaffRegistrationModal({
       setLoading(false)
     }
   }
+
+  const totalSteps = staffCategory === 'TEACHER' ? 5 : 3
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -192,7 +264,7 @@ export default function StaffRegistrationModal({
 
           {/* Progress Bar */}
           <div className="flex gap-2">
-            {[1, 2, 3, ...(currentStep >= 3 && staffCategory === 'TEACHER' ? [4] : [])].map((step) => (
+            {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
               <div key={step} className="flex-1 flex flex-col gap-1">
                 <div
                   className={`h-2 rounded-full transition-all ${
@@ -236,9 +308,12 @@ export default function StaffRegistrationModal({
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
                 >
                   <option value="">Select category...</option>
-                  <option value="TEACHER">Teacher</option>
-                  <option value="ADMINISTRATOR">Administrator</option>
-                  <option value="SUPPORT_STAFF">Support Staff</option>
+                  <option value="TEACHER">👨‍🏫 Teacher</option>
+                  <option value="PRINCIPAL">🎓 Principal</option>
+                  <option value="HEAD_TEACHER">📚 Head Teacher</option>
+                  <option value="ACCOUNTANT">💰 Accountant</option>
+                  <option value="ADMINISTRATOR">⚙️ Administrator</option>
+                  <option value="SUPPORT_STAFF">🤝 Support Staff</option>
                 </select>
               </div>
 
@@ -357,7 +432,7 @@ export default function StaffRegistrationModal({
                   type="submit"
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition"
                 >
-                  {staffCategory === 'TEACHER' ? 'Continue to Teacher Details →' : 'Complete Registration →'}
+                  {staffCategory === 'TEACHER' ? 'Continue to Teacher Details →' : 'Complete Registration ✓'}
                 </button>
               </div>
             </form>
@@ -366,7 +441,7 @@ export default function StaffRegistrationModal({
           {/* Step 4: Teacher-Specific Info (only for teachers) */}
           {currentStep === 4 && staffCategory === 'TEACHER' && (
             <form onSubmit={handleStep4Submit} className="space-y-6">
-              <h3 className="text-xl font-bold text-gray-900">Teacher Details</h3>
+              <h3 className="text-xl font-bold text-gray-900">Teacher Details & Bank Information</h3>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-3">
@@ -383,7 +458,7 @@ export default function StaffRegistrationModal({
                 </select>
               </div>
 
-              <h4 className="text-lg font-semibold text-gray-900 mt-6">Bank Details</h4>
+              <h4 className="text-lg font-semibold text-gray-900">Bank Details</h4>
 
               <input
                 type="text"
@@ -427,34 +502,95 @@ export default function StaffRegistrationModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={loading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition"
+                >
+                  Continue to Class/Subject Assignment →
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Step 5: Class/Subject Assignment (only for teachers) */}
+          {currentStep === 5 && staffCategory === 'TEACHER' && (
+            <form onSubmit={handleStep5Submit} className="space-y-6">
+              <h3 className="text-xl font-bold text-gray-900">Class & Subject Assignment</h3>
+
+              {loadingTeachingData && (
+                <div className="p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-700 rounded-r-lg">
+                  <p className="font-semibold">Loading classes and subjects...</p>
+                </div>
+              )}
+
+              {!loadingTeachingData && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-3">
+                      Select Class *
+                    </label>
+                    <select
+                      value={selectedComboId}
+                      onChange={(e) => {
+                        setSelectedComboId(e.target.value)
+                        setSelectedSubjects([])
+                      }}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+                    >
+                      <option value="">Choose a class...</option>
+                      {combos.map((combo: any) => (
+                        <option key={combo.id} value={combo.id}>
+                          {combo.classes?.name || 'Unknown'} - Arm {combo.arms?.name || 'Unknown'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedComboId && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-900 mb-3">
+                        Select Subjects * ({selectedSubjects.length} selected)
+                      </label>
+                      <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-300 rounded-lg p-4">
+                        {subjects.length > 0 ? (
+                          subjects.map((subject: any) => (
+                            <label
+                              key={subject.id}
+                              className="flex items-center gap-3 p-3 hover:bg-blue-50 rounded-lg cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedSubjects.includes(subject.id)}
+                                onChange={() => toggleSubject(subject.id)}
+                                className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                              />
+                              <span className="text-gray-900">{subject.name}</span>
+                            </label>
+                          ))
+                        ) : (
+                          <p className="text-gray-500">No subjects available</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(4)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-900 font-bold py-3 rounded-lg transition"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || loadingTeachingData}
                   className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-lg transition"
                 >
                   {loading ? 'Registering...' : 'Complete Registration ✓'}
                 </button>
               </div>
             </form>
-          )}
-
-          {/* Non-teacher final button */}
-          {currentStep === 3 && staffCategory !== 'TEACHER' && (
-            <div className="flex gap-4 mt-6">
-              <button
-                type="button"
-                onClick={() => setCurrentStep(2)}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-900 font-bold py-3 rounded-lg transition"
-              >
-                ← Back
-              </button>
-              <button
-                type="button"
-                onClick={() => handleFinalSubmit()}
-                disabled={loading}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-lg transition"
-              >
-                {loading ? 'Registering...' : 'Complete Registration ✓'}
-              </button>
-            </div>
           )}
         </div>
       </div>

@@ -3,7 +3,7 @@
  * 
  * POST /api/school-admin/staff/register
  * 
- * Registers a new staff member (teacher or other staff)
+ * Registers a new staff member (teacher, principal, headteacher, accountant, or support staff)
  * Handles multi-step registration and teacher-specific assignments
  */
 
@@ -32,6 +32,8 @@ export async function POST(request: NextRequest) {
       accountNumber,
       accountName,
       salary,
+      classArmComboId,
+      subjectIds,
     } = body
 
     // Validate required fields
@@ -58,6 +60,19 @@ export async function POST(request: NextRequest) {
     // Step 1: Create auth user via backend API
     console.log('[Staff Reg API] Creating auth user...')
     const trimmedEmail = email.trim().toLowerCase()
+    
+    // Map staff categories to appropriate roles
+    const roleMap: Record<string, string> = {
+      TEACHER: 'TEACHER',
+      PRINCIPAL: 'PRINCIPAL',
+      HEAD_TEACHER: 'HEAD_TEACHER',
+      ACCOUNTANT: 'ACCOUNTANT',
+      ADMINISTRATOR: 'STAFF',
+      SUPPORT_STAFF: 'STAFF',
+    }
+    
+    const authRole = roleMap[staffCategory] || 'STAFF'
+
     const authResponse = await fetch('http://localhost:3000/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -65,7 +80,7 @@ export async function POST(request: NextRequest) {
         email: trimmedEmail,
         password,
         full_name: `${firstName} ${lastName}`,
-        role: staffCategory === 'TEACHER' ? 'TEACHER' : 'STAFF',
+        role: authRole,
         school_id: schoolId,
         user_type: 'STAFF',
       }),
@@ -89,7 +104,7 @@ export async function POST(request: NextRequest) {
       school_id: schoolId,
       email: trimmedEmail,
       full_name: `${firstName} ${lastName}`,
-      role: staffCategory === 'TEACHER' ? 'TEACHER' : 'STAFF',
+      role: authRole,
       status: 'ACTIVE',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -150,6 +165,37 @@ export async function POST(request: NextRequest) {
       }
 
       console.log('[Staff Reg API] ✅ Teacher record created')
+
+      // Step 5: Assign class to teacher
+      if (classArmComboId) {
+        console.log('[Staff Reg API] Assigning class to teacher...')
+        const { error: classError } = await supabase
+          .from('class_arm_combos')
+          .update({ class_teacher_id: userId })
+          .eq('id', classArmComboId)
+
+        if (!classError) {
+          console.log('[Staff Reg API] ✅ Class assigned')
+        }
+      }
+
+      // Step 6: Assign subjects to teacher
+      if (subjectIds && subjectIds.length > 0) {
+        console.log('[Staff Reg API] Assigning subjects to teacher...')
+        const subjectAssignments = subjectIds.map((subjectId: string) => ({
+          teacher_id: userId,
+          subject_id: subjectId,
+          class_id: classArmComboId,
+        }))
+
+        const { error: subjectError } = await supabase
+          .from('subject_teacher_assignments')
+          .insert(subjectAssignments)
+
+        if (!subjectError) {
+          console.log('[Staff Reg API] ✅ Subjects assigned')
+        }
+      }
     }
 
     return NextResponse.json({
@@ -164,7 +210,7 @@ export async function POST(request: NextRequest) {
         position,
         isTeacher: staffCategory === 'TEACHER',
       },
-      message: `Staff member ${firstName} ${lastName} registered successfully!`,
+      message: `${staffCategory} ${firstName} ${lastName} registered successfully!`,
     })
   } catch (error: any) {
     console.error('[Staff Reg API] Error:', error)
