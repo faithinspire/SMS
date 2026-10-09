@@ -1,107 +1,86 @@
 @echo off
-REM Deploy 3 critical fixes to Vercel
-REM Fixes: Staff Edit Modal, Results Session, Staff/Student data fetching
-
-cd /d c:\Users\OLU\Desktop\SMS
+REM ==========================================================
+REM 🚀 DEPLOY CRITICAL FIXES TO VERCEL
+REM ==========================================================
+REM Commits and pushes all fixes to GitHub
+REM Vercel automatically deploys on push
 
 echo.
-echo ================================================================================
-echo DEPLOYING 3 CRITICAL FIXES TO VERCEL
-echo ================================================================================
+echo ==========================================================
+echo 🚀 DEPLOYING CRITICAL FIXES TO VERCEL
+echo ==========================================================
 echo.
 
-REM Add the fixed files
-echo [1/4] Staging modified files...
-git add src/app/school-admin/staff/page.tsx
-git add src/app/school-admin/students/page.tsx
-git add src/app/school-admin/results/page.tsx
-echo ✓ Files staged
+cd /d "%~dp0"
+
+echo [1/4] Staging all changes...
+git add -A
+if errorlevel 1 echo ❌ Failed to stage changes & goto :error
+
+echo ✅ Changes staged
+
 echo.
+echo [2/4] Committing fixes...
+git commit -m "fix: resolve staff registration errors - fix API query, add all staff categories, add teacher class/subject assignment"
+if errorlevel 1 echo ⚠️ Nothing to commit or error & exit /b 0
 
-REM Show what will be committed
-echo [2/4] Files ready to commit:
-git diff --cached --name-only
+echo ✅ Commit created
+
 echo.
-
-REM Commit with comprehensive message
-echo [3/4] Creating commit...
-git commit -m "Fix: Resolve three critical issues - Staff Edit Modal, Results Session display, Staff/Student data fetching
-
-FIXES:
-- Fix #1: Rebuild Staff Edit Modal with complete profile editor (8 sections)
-- Fix #2: Fix Results Session dropdown showing actual sessions not 'ACTIVE'
-- Fix #3: Fix Staff/Student pages not fetching school records
-
-DETAILS:
-Fix #1: Staff Edit Modal Complete Profile Editor
-  * 8 complete sections: Personal, Contact, Employment, Academic, Class Assignment, Subject Assignment, Salary, Account
-  * Modal loads lookup data (sessions, classes, subjects) from database
-  * Modal loads complete staff record before opening
-  * All changes persist to database on save
-  * File: src/app/school-admin/staff/page.tsx
-
-Fix #2: Results Session Page Shows Actual Sessions
-  * Enhanced loadSessions() with strict validation
-  * Sessions display as '2026/2027' instead of 'ACTIVE'
-  * Clear error messages when no sessions found
-  * Proper session_year extraction and display
-  * File: src/app/school-admin/results/page.tsx
-
-Fix #3: Staff/Student Pages Now Fetch School Records
-  * Replaced .single() with .maybeSingle() in user profile queries
-  * Safe school_id resolution prevents PGRST116 errors
-  * Staff page fetches and displays all school staff
-  * Students page fetches and displays all school students
-  * Files: src/app/school-admin/staff/page.tsx, src/app/school-admin/students/page.tsx
-
-IMPACT:
-- Teachers/staff can edit complete profile including subjects and classes
-- Results pages show correct session years
-- Staff and student records load from database reliably
-- No PGRST116 errors
-- No silent failures with empty data
-
-VERIFICATION:
-- All fixes tested locally
-- No breaking changes
-- API contracts unchanged
-- Database unchanged
-- Ready for production"
-
-if %ERRORLEVEL% NEQ 0 (
-  echo ✗ Commit failed
-  exit /b 1
-)
-echo ✓ Commit created
-echo.
-
-REM Push to GitHub
-echo [4/4] Pushing to GitHub (triggers Vercel deployment)...
+echo [3/4] Pushing to GitHub...
 git push origin main
-
-if %ERRORLEVEL% NEQ 0 (
-  echo ✗ Push failed
-  exit /b 1
+if errorlevel 1 (
+  echo ❌ Push failed
+  echo Please check your git credentials
+  goto :error
 )
-echo ✓ Push successful
-echo.
 
-echo ================================================================================
-echo ✅ DEPLOYMENT TO VERCEL INITIATED
-echo ================================================================================
+echo ✅ Pushed to GitHub
+
 echo.
-echo DEPLOYMENT TIMELINE:
-echo   NOW:      Push to GitHub
-echo   +10 sec:  Vercel receives webhook
-echo   +30 sec:  Build starts
-echo   +3-5 min: Build completes
-echo   +5-7 min: LIVE ON PRODUCTION
+echo [4/4] Vercel deployment initiated...
+
 echo.
-echo LIVE URL: https://sms-gold-eta.vercel.app
-echo Dashboard: https://sms-gold-eta.vercel.app/school-admin/dashboard
+echo ==========================================================
+echo ✅ DEPLOYMENT PIPELINE ACTIVATED
+echo ==========================================================
 echo.
-echo Monitor deployment at: https://vercel.com/dashboard/projects/sms-gold-eta
+echo 📍 What happens next:
+echo    1. GitHub receives your push
+echo    2. Vercel receives webhook notification
+echo    3. Build starts (2-3 minutes)
+echo    4. Tests run
+echo    5. Deploy to production
 echo.
-echo 🎉 All three critical fixes are now deploying to production!
+echo 🔍 Monitor at:
+echo    https://vercel.com/dashboard/projects/sms-gold-eta
+echo.
+echo 🌐 Live at:
+echo    https://sms-gold-eta.vercel.app
+echo.
+echo ✨ FIXED IN THIS DEPLOYMENT:
+echo    ✓ Staff profile view API error (400 status)
+echo    ✓ Added all staff categories (Principal, Headteacher, Accountant)
+echo    ✓ Added teacher class/subject assignment (Step 5)
+echo.
+echo ⏱️ Expected timeline:
+echo    NOW     - Push to GitHub
+echo    +1 min  - Vercel receives notification
+echo    +3 min  - Build starts
+echo    +5 min  - Build completes
+echo    +7 min  - ✅ LIVE
 echo.
 pause
+exit /b 0
+
+:error
+echo.
+echo ❌ DEPLOYMENT FAILED
+echo.
+echo Troubleshooting:
+echo   • Check git is configured: git config --list
+echo   • Verify GitHub credentials are saved
+echo   • Try pushing manually: git push origin main
+echo.
+pause
+exit /b 1
