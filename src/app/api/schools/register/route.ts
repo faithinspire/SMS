@@ -202,7 +202,32 @@ export async function POST(req: NextRequest) {
 
     console.log('âœ… School registered with ID:', school.id)
 
-    // Step 3: Update auth user with school ID if auth was successful
+    // Step 3: Initialize complete academic data for the school
+    console.log('ðŸ"„ Step 3: Initializing academic data via API...')
+    try {
+      const initResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/../api/school/initialize-data?schoolId=${school.id}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      if (initResponse.ok) {
+        const initData = await initResponse.json()
+        console.log('âœ… Academic data initialized:', initData)
+      } else {
+        console.warn('âš ï¸ Academic data initialization warning:', await initResponse.text())
+        // Don't block school registration if init fails
+      }
+    } catch (e: any) {
+      console.warn('âš ï¸ Academic data initialization exception:', e.message)
+      // Don't block school registration if init fails
+    }
+
+    // Step 4: Update auth user with school ID if auth was successful
     if (authUserId) {
       console.log('ðŸ”Œ Step 3: Updating auth user with school ID...')
       try {

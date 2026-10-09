@@ -1,118 +1,96 @@
 #!/usr/bin/env node
-/**
- * Deploy Three Critical Fixes to Vercel via Git
- * 
- * Fixes:
- * 1. Staff Edit Modal - Rebuilt complete profile editor
- * 2. Results Session - Shows actual sessions not "ACTIVE"
- * 3. Staff/Student Navigation - Fixed school context resolution
- */
 
-const { execSync } = require('child_process');
-const path = require('path');
+const { execSync } = require('child_process')
+const path = require('path')
 
-const projectRoot = 'c:\\Users\\OLU\\Desktop\\SMS';
+const projectDir = 'c:\\Users\\OLU\\Desktop\\SMS'
 
-console.log('\n' + '='.repeat(80));
-console.log('🚀 DEPLOYING 3 CRITICAL FIXES TO VERCEL');
-console.log('='.repeat(80) + '\n');
-
-const filesToDeploy = [
-  'src/app/school-admin/staff/page.tsx',
-  'src/app/school-admin/students/page.tsx',
-  'src/app/school-admin/results/page.tsx',
-];
-
-const commitMessage = `Fix: Resolve three critical issues - Staff Edit Modal, Results Session display, Staff/Student data fetching
-
-FIXES:
-- Fix #1: Rebuild Staff Edit Modal with complete profile editor (8 sections)
-- Fix #2: Fix Results Session dropdown showing actual sessions not 'ACTIVE'
-- Fix #3: Fix Staff/Student pages not fetching school records
-
-DETAILS:
-Fix #1: Staff Edit Modal Complete Profile Editor
-  * 8 complete sections: Personal, Contact, Employment, Academic, Class Assignment, Subject Assignment, Salary, Account
-  * Modal loads lookup data (sessions, classes, subjects) from database
-  * Modal loads complete staff record before opening
-  * All changes persist to database on save
-  * File: src/app/school-admin/staff/page.tsx
-
-Fix #2: Results Session Page Shows Actual Sessions
-  * Enhanced loadSessions() with strict validation
-  * Sessions display as '2026/2027' instead of 'ACTIVE'
-  * Clear error messages when no sessions found
-  * Proper session_year extraction and display
-  * File: src/app/school-admin/results/page.tsx
-
-Fix #3: Staff/Student Pages Now Fetch School Records
-  * Replaced .single() with .maybeSingle() in user profile queries
-  * Safe school_id resolution prevents PGRST116 errors
-  * Staff page fetches and displays all school staff
-  * Students page fetches and displays all school students
-  * Files: src/app/school-admin/staff/page.tsx, src/app/school-admin/students/page.tsx
-
-IMPACT:
-- Teachers/staff can edit complete profile including subjects and classes
-- Results pages show correct session years
-- Staff and student records load from database reliably
-- No PGRST116 errors
-- No silent failures with empty data
-
-VERIFICATION:
-- All fixes tested locally
-- No breaking changes
-- API contracts unchanged
-- Database unchanged
-- Ready for production`;
+console.log('\n' + '='.repeat(70))
+console.log('       DEPLOYING STAFF REGISTRATION REBUILD TO VERCEL')
+console.log('='.repeat(70) + '\n')
 
 try {
-  process.chdir(projectRoot);
-  
-  console.log('[1/4] Staging files...');
-  for (const file of filesToDeploy) {
-    console.log(`      Adding: ${file}`);
-    execSync(`git add "${file}"`, { encoding: 'utf-8' });
+  // Step 1: Stage files
+  console.log('📍 [1/5] Staging files...')
+  const filesToStage = [
+    'src/app/api/teaching/canonical-subjects/route.ts',
+    'src/components/admin/ProfessionalStaffRegistrationModal.tsx',
+    'src/app/api/teaching/class-combos/route.ts',
+    'src/app/api/school-admin/staff/register/route.ts',
+    'src/app/school-admin/staff/page.tsx'
+  ]
+
+  for (const file of filesToStage) {
+    try {
+      execSync(`git add "${file}"`, { cwd: projectDir, stdio: 'pipe' })
+      console.log(`   ✓ ${file}`)
+    } catch (e) {
+      console.log(`   ⚠ ${file} (may not exist or already staged)`)
+    }
   }
-  console.log('✅ Files staged\n');
 
-  console.log('[2/4] Checking git status...');
-  const status = execSync('git status --short', { encoding: 'utf-8' });
-  console.log(status);
-  console.log('✅ Ready to commit\n');
+  // Step 2: Check status
+  console.log('\n📍 [2/5] Checking git status...')
+  const status = execSync('git status --short', { cwd: projectDir, encoding: 'utf-8' })
+  console.log(status || '   No changes to stage')
 
-  console.log('[3/4] Creating commit...');
-  execSync(`git commit -m "${commitMessage}"`, { encoding: 'utf-8' });
-  console.log('✅ Commit created\n');
+  // Step 3: Commit
+  console.log('\n📍 [3/5] Creating commit...')
+  const commitMessage = `Professional rebuild of Staff Registration module
 
-  console.log('[4/4] Pushing to GitHub...');
-  const pushOutput = execSync('git push origin main', { encoding: 'utf-8', stdio: 'pipe' });
-  console.log(pushOutput);
-  console.log('✅ Push successful\n');
+- Fixed class-combos API 500 error (invalid Supabase orderBy syntax)
+- Created canonical-subjects API for real subject loading
+- Rebuilt staff registration modal with professional multi-step UI
+- Implemented separate teacher and non-teaching registration flows
+- Improved registration backend using Supabase admin API
+- Integrated with existing dashboards and authentication
+- Teacher class and subject assignments now properly persisted
+- All staff roles route to appropriate dashboards
+- No breaking changes to existing functionality`
 
-  console.log('='.repeat(80));
-  console.log('✅ DEPLOYMENT TO VERCEL INITIATED');
-  console.log('='.repeat(80) + '\n');
+  try {
+    execSync(`git commit -m "${commitMessage}"`, { cwd: projectDir, stdio: 'pipe' })
+    console.log('   ✓ Commit created successfully')
+  } catch (e) {
+    console.log('   ⚠ Commit skipped (may be no changes to commit)')
+  }
 
-  console.log('📊 Deployment Timeline:');
-  console.log('   NOW:      Push to GitHub');
-  console.log('   +10 sec:  Vercel receives webhook');
-  console.log('   +30 sec:  Build starts');
-  console.log('   +3-5 min: Build completes');
-  console.log('   +5-7 min: LIVE ON PRODUCTION\n');
+  // Step 4: Push to GitHub
+  console.log('\n📍 [4/5] Pushing to GitHub main...')
+  execSync('git push origin main', { cwd: projectDir, stdio: 'inherit' })
+  console.log('   ✓ Push successful')
 
-  console.log('🌐 URLs:');
-  console.log('   Live:      https://sms-gold-eta.vercel.app');
-  console.log('   Dashboard: https://sms-gold-eta.vercel.app/school-admin/dashboard');
-  console.log('   Vercel:    https://vercel.com/dashboard/projects/sms-gold-eta\n');
+  // Step 5: Success message
+  console.log('\n' + '='.repeat(70))
+  console.log('                 ✅ DEPLOYMENT INITIATED')
+  console.log('='.repeat(70) + '\n')
 
-  console.log('🎉 All three critical fixes are now deploying to production!\n');
+  console.log('📊 Vercel will automatically deploy when push completes.\n')
 
-  process.exit(0);
+  console.log('🔗 Monitor at: https://vercel.com/dashboard\n')
 
+  console.log('⏱️  Expected deployment time: 7-10 minutes\n')
+
+  console.log('📋 Next steps:')
+  console.log('   1. Go to https://vercel.com/dashboard')
+  console.log('   2. Find the SMS project and monitor build status')
+  console.log('   3. Wait for status to show "Ready"')
+  console.log('   4. Test production endpoints:\n')
+
+  console.log('   curl "https://sms-gold-eta.vercel.app/api/teaching/class-combos?schoolId=9f9bda71-dc25-488f-8283-02eb5a931681&section=SECONDARY"')
+  console.log('   curl "https://sms-gold-eta.vercel.app/api/teaching/canonical-subjects?schoolId=9f9bda71-dc25-488f-8283-02eb5a931681"\n')
+
+  console.log('   5. Test staff registration modal in production')
+  console.log('   6. Verify teacher can be registered and dashboard loads\n')
+
+  console.log('📝 Documentation:')
+  console.log('   - STAFF_REGISTRATION_REBUILD_COMPLETE.md')
+  console.log('   - IMPLEMENTATION_SUMMARY_AND_TESTING_GUIDE.md')
+  console.log('   - FILES_CHANGED_AND_VERIFICATION.md\n')
+
+  console.log('=' .repeat(70) + '\n')
 } catch (error) {
-  console.error('\n❌ ERROR:', error.message);
-  if (error.stdout) console.error('Output:', error.stdout.toString());
-  if (error.stderr) console.error('Error:', error.stderr.toString());
-  process.exit(1);
+  console.error('\n❌ ERROR:', error.message)
+  console.log('\nDeployment failed. Check the error above.\n')
+  process.exit(1)
 }

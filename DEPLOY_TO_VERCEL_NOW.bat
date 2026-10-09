@@ -1,150 +1,105 @@
 @echo off
 REM ============================================================================
-REM DEPLOY TO VERCEL - Push to GitHub and Trigger Vercel Build
+REM SMS AUTO-DEPLOY SCRIPT - Deploy All Fixes to Vercel
+REM ============================================================================
+REM
+REM This script deploys:
+REM - Class-Combos API fix (use 'type' column)
+REM - Teacher registration fix (use 'user_id' + fields)
+REM - Auto-init school system (migration 172 + 3 APIs)
+REM
+REM Vercel will auto-build and deploy
 REM ============================================================================
 
+setlocal enabledelayedexpansion
+
+color 0a
 echo.
 echo ============================================================================
-echo 🚀 DEPLOYING SCORE SHEETS TO VERCEL
+echo 🚀 SMS VERCEL DEPLOYMENT
 echo ============================================================================
 echo.
 
-REM Change to project directory
-cd /d "c:\Users\OLU\Desktop\SMS" || (
-  echo ❌ Failed to change to project directory
-  pause
-  exit /b 1
-)
-
-REM ============================================================================
-REM STEP 1: Check git status
-REM ============================================================================
-echo [1/5] Checking git status...
-git status > nul 2>&1
+REM Navigate to repo
+echo [1/4] Navigating to repository...
+cd /d c:\Users\OLU\Desktop\SMS
 if errorlevel 1 (
-  echo ❌ Git not available or not in git repository
-  pause
-  exit /b 1
+    echo ❌ ERROR: Could not navigate to repository
+    pause
+    exit /b 1
 )
-echo ✅ Git repository found
+echo ✅ Repository found
 echo.
 
-REM ============================================================================
-REM STEP 2: Stage all changes
-REM ============================================================================
-echo [2/5] Staging new files and changes...
-git add -A > nul 2>&1
-if errorlevel 1 (
-  echo ❌ Failed to stage changes
-  pause
-  exit /b 1
-)
-echo ✅ All changes staged
+REM Configure Git
+echo [2/4] Configuring Git...
+git config user.email "deploy@schoolms.app"
+git config user.name "Auto Deploy Bot"
+echo ✅ Git configured
 echo.
 
-REM ============================================================================
-REM STEP 3: Commit changes
-REM ============================================================================
-echo [3/5] Committing changes...
-git commit -m "feat: Add score_sheets population endpoint and migration 171
-
-- Creates API endpoint /api/debug/insert-test-data
-- Adds database migration 171 to populate score_sheets table
-- Includes migration runner script run-migration-171.js
-- Enables students to view exam results after selecting Session/Term/Class
-
-Test data generated:
-- 10 test students
-- 3 academic terms (First, Second, Third)  
-- 8 subjects per student
-- 240 total score records
-
-Features:
-- GET endpoint to check score count
-- POST endpoint to populate with action='populate'
-- POST endpoint to clear with action='clear'
-- UPSERT prevents duplicates
-
-Comprehensive documentation included:
-- Implementation guide
-- Deployment procedures
-- Quick reference
-- Visual architecture
-- Complete user guide
-
-Zero breaking changes, fully backward compatible." > nul 2>&1
-
+REM Stage changes
+echo [3/4] Staging all changes...
+git add -A
 if errorlevel 1 (
-  echo ❌ Failed to commit changes
-  pause
-  exit /b 1
+    echo ❌ ERROR: Could not stage changes
+    pause
+    exit /b 1
 )
-echo ✅ Changes committed successfully
+echo ✅ Changes staged
 echo.
 
-REM ============================================================================
-REM STEP 4: Push to GitHub
-REM ============================================================================
-echo [4/5] Pushing to GitHub (main branch)...
-git push origin main > nul 2>&1
+REM Commit
+echo [4/4] Creating commit and pushing...
+git commit -m "🎯 Auto-initialize schools + fixes (migration 172 + 3 APIs + 2 fixes)"
 if errorlevel 1 (
-  echo ⚠️ Push may have failed, but continuing...
+    echo ⚠️ Nothing new to commit (or error)
 ) else (
-  echo ✅ Pushed to GitHub successfully
+    echo ✅ Commit created
 )
 echo.
 
-REM ============================================================================
-REM STEP 5: Trigger Vercel deployment via API
-REM ============================================================================
-echo [5/5] Triggering Vercel deployment...
-node vercel-direct-deploy.js
+REM Push to GitHub
+echo Pushing to GitHub (Vercel auto-deploys)...
+git push origin main
 if errorlevel 1 (
-  echo ⚠️ Vercel API deployment may have encountered an issue
-  echo ✅ However, GitHub push was successful - Vercel should auto-deploy shortly
+    echo ⚠️ Push failed - Check GitHub credentials
+    echo Try: git config --global credential.helper store
+    pause
+    exit /b 1
 )
+echo ✅ Pushed to GitHub
 echo.
 
-REM ============================================================================
-REM Deployment Complete
-REM ============================================================================
 echo ============================================================================
-echo ✅ DEPLOYMENT INITIATED
+echo ✅ DEPLOYMENT INITIATED - Vercel will auto-build and deploy
 echo ============================================================================
 echo.
-echo 📊 Deployment Status:
-echo   ✅ Changes staged
-echo   ✅ Changes committed
-echo   ✅ Pushed to GitHub
-echo   ✅ Vercel deployment triggered
+echo 📊 Monitor deployment at:
+echo    https://vercel.com/dashboard/projects/sms-gold-eta
 echo.
-echo ⏱️ Expected Timeline:
-echo   NOW:      Deployment initiated
-echo   +30 sec:  Vercel detects GitHub push
-echo   +1 min:   Build starts
-echo   +3-5 min: Build completes
-echo   +5-7 min: LIVE at https://sms-gold-eta.vercel.app
+echo ⏱️ Timeline:
+echo    NOW:       Push sent to GitHub
+echo    +30 sec:   GitHub receives push
+echo    +1 min:    Vercel webhook triggered
+echo    +2 min:    Build starts
+echo    +5-7 min:  Build completes
+echo    +7 min:    🎉 LIVE on production
 echo.
-echo 🔍 Monitor Deployment:
-echo   1. Vercel Dashboard: https://vercel.com/dashboard/projects/sms-gold-eta
-echo   2. Deployments tab to see build status
-echo   3. Check logs for any errors
-echo.
-echo 📝 After Deployment (5-10 minutes):
-echo   1. Run: node run-migration-171.js
-echo      OR
-echo   2. Call: curl -X POST "https://sms-gold-eta.vercel.app/api/debug/insert-test-data" ^
-              -H "Content-Type: application/json" -d {"action":"populate"}
-echo.
-echo 🧪 Test in UI:
-echo   1. Log in as student
-echo   2. Go to Student Results page
-echo   3. Select Session/Term/Class dropdowns
-echo   4. View scores displayed ✅
+echo 📋 Next steps:
+echo    1. Wait 7 minutes for Vercel build
+echo    2. Run migration 172 in Supabase SQL Editor
+echo    3. Test new school creation
+echo    4. Initialize existing schools
 echo.
 echo ============================================================================
-echo 🎉 READY TO POPULATE SCORES (see above for next steps)
+echo 🎉 FILES DEPLOYED:
+echo    ✅ database/migrations/172_auto_init_school_data.sql
+echo    ✅ src/app/api/school/initialize-data/route.ts
+echo    ✅ src/app/api/admin/initialize-all-schools/route.ts
+echo    ✅ src/app/api/schools/register/route.ts (UPDATED)
+echo    ✅ src/app/api/teaching/class-combos/route.ts (FIXED)
+echo    ✅ src/app/api/school-admin/staff/register/route.ts (FIXED)
 echo ============================================================================
 echo.
-
 pause
