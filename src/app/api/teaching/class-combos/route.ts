@@ -33,16 +33,16 @@ export async function GET(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
-    // PHASE 1: Fetch classes for the school with the given school_level
+    // PHASE 1: Fetch classes for the school with the given type (PRIMARY|SECONDARY)
     console.log('[Class Combos API] Phase 1: Fetching classes...')
     let classesQuery = supabase
       .from('classes')
-      .select('id, name, school_level, type')
+      .select('id, name, level, type')
       .eq('school_id', schoolId)
 
-    // Filter by section/school_level if provided
+    // Filter by section/type if provided (type = PRIMARY or SECONDARY)
     if (section) {
-      classesQuery = classesQuery.eq('school_level', section)
+      classesQuery = classesQuery.eq('type', section)
     }
 
     const { data: classes, error: classesError } = await classesQuery
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
           arm_id: arm.id,
           class_name: classRecord.name,
           arm_name: arm.name,
-          school_level: classRecord.school_level,
+          level: classRecord.level,
           type: classRecord.type,
           label: `${classRecord.name} - Arm ${arm.name}`,
           class_teacher_id: comboRecord?.class_teacher_id || null,
