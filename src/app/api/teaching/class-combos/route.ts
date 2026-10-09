@@ -43,8 +43,7 @@ export async function GET(request: NextRequest) {
         arm_id,
         classes!inner(id, name, school_level),
         arms!inner(id, name)
-      `,
-        { count: 'exact' }
+      `
       )
       .eq('school_id', schoolId)
 
@@ -53,9 +52,7 @@ export async function GET(request: NextRequest) {
       query = query.eq('classes.school_level', section)
     }
 
-    const { data: combos, error: queryError, count } = await query.order('classes(name)', {
-      ascending: true,
-    })
+    const { data: combos, error: queryError } = await query
 
     if (queryError) {
       console.error('[Class Combos API] Database error:', queryError.message, queryError.code)
@@ -67,8 +64,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([], { status: 200 })
     }
 
-    // Transform response
-    const formattedCombos = combos.map((combo: any) => {
+    // Transform response and sort by class name
+    let formattedCombos = combos.map((combo: any) => {
       const classObj = Array.isArray(combo.classes) ? combo.classes[0] : combo.classes
       const armObj = Array.isArray(combo.arms) ? combo.arms[0] : combo.arms
 
@@ -82,6 +79,11 @@ export async function GET(request: NextRequest) {
         school_level: classObj?.school_level,
       }
     })
+
+    // Sort by class name (client-side since orderBy doesn't work with joined fields)
+    formattedCombos = formattedCombos.sort((a, b) => 
+      a.class_name.localeCompare(b.class_name)
+    )
 
     const elapsed = Date.now() - startTime
     console.log(`[Class Combos API] ✅ Success: returned ${formattedCombos.length} combos in ${elapsed}ms`)
