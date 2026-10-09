@@ -1,9 +1,8 @@
 /**
- * Get Canonical Subjects for Staff Registration
+ * Get All Subjects for a School
+ * GET /api/canonical-subjects?schoolId=<uuid>
  * 
- * GET /api/canonical-subjects?schoolId=<schoolId>
- * 
- * Returns all available subjects for a school
+ * Returns array of all available subjects for staff/student registration
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -12,42 +11,64 @@ import { createClient } from '@supabase/supabase-js'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  try {
-    const schoolId = request.nextUrl.searchParams.get('schoolId')
+  const startTime = Date.now()
+  const schoolId = request.nextUrl.searchParams.get('schoolId')
 
+  try {
+    // Validate inputs
     if (!schoolId) {
+      console.error('[Canonical Subjects API] Missing schoolId')
       return NextResponse.json(
-        { error: 'schoolId is required' },
+        { error: 'schoolId is required', success: false },
         { status: 400 }
       )
     }
 
-    console.log('[Canonical Subjects API] Fetching subjects for school:', schoolId)
+    console.log('[Canonical Subjects API] Request for school:', schoolId)
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
-    // Get all subjects for this school
-    const { data: subjects, error } = await supabase
+    // Get all subjects for school
+    const { data: subjects, error: queryError, count } = await supabase
       .from('subjects')
-      .select('id, name, code, subject_type')
+      .select('id, name, code, subject_type, section, is_active', { count: 'exact' })
       .eq('school_id', schoolId)
+      .eq('is_active', true)
       .order('name', { ascending: true })
 
-    if (error) {
-      console.error('[Canonical Subjects API] Error:', error)
-      throw error
+    if (queryError) {
+      console.error('[Canonical Subjects API] Database error:', queryError.message)
+      throw new Error(`Database error: ${queryError.message}`)
     }
 
-    console.log('[Canonical Subjects API] ✅ Loaded subjects:', subjects?.length || 0)
+    if (!subjects) {
+      console.warn('[Canonical Subjects API] No subjects found for school:', schoolId)
+      return NextResponse.json([], { status: 200 })
+    }
 
-    return NextResponse.json(subjects || [])
+    const elapsed = Date.now() - startTime
+    console.log(`[Canonical Subjects API] ✅ Success: returned ${subjects.length} subjects in ${elapsed}ms`)
+
+    return NextResponse.json(subjects, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
   } catch (error: any) {
-    console.error('[Canonical Subjects API] Error:', error)
+    const elapsed = Date.now() - startTime
+    console.error(`[Canonical Subjects API] ❌ Error after ${elapsed}ms:`, {
+      message: error.message,
+      code: error.code,
+    })
+
     return NextResponse.json(
-      { error: error.message || 'Failed to load subjects' },
+      {
+        success: false,
+        error: error.message || 'Failed to load subjects',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      },
       { status: 500 }
     )
   }

@@ -58,40 +58,72 @@ export default function StaffRegistrationModal({
 
   const loadTeachingData = async () => {
     if (!teachingLevel || !schoolId) {
+      console.error('[Staff Reg Modal] Missing teachingLevel or schoolId')
       setError('Teaching level not selected')
-      return
+      return false
     }
 
     setLoadingTeachingData(true)
     setError(null)
 
     try {
+      console.log('[Staff Reg Modal] Loading teaching data for:', { teachingLevel, schoolId })
+
       // Load class-arm combos
-      const response = await fetch(
+      console.log('[Staff Reg Modal] Fetching class combos...')
+      const classResponse = await fetch(
         `/api/teaching/class-combos?schoolId=${encodeURIComponent(schoolId)}&section=${encodeURIComponent(teachingLevel)}`,
         { method: 'GET' }
       )
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.statusText}`)
+      if (!classResponse.ok) {
+        const errorData = await classResponse.json()
+        console.error('[Staff Reg Modal] Class API error:', errorData)
+        throw new Error(
+          `Failed to load classes: ${classResponse.status} ${errorData.error || classResponse.statusText}`
+        )
       }
 
-      const loadedCombos = await response.json()
+      const loadedCombos = await classResponse.json()
+      console.log('[Staff Reg Modal] ✅ Loaded', loadedCombos.length, 'class combos')
+
+      if (!Array.isArray(loadedCombos)) {
+        throw new Error('Invalid response format from class combos API')
+      }
+
       setCombos(loadedCombos)
 
       // Load subjects
+      console.log('[Staff Reg Modal] Fetching subjects...')
       const subjectsResponse = await fetch(
         `/api/canonical-subjects?schoolId=${encodeURIComponent(schoolId)}`,
         { method: 'GET' }
       )
 
-      if (subjectsResponse.ok) {
-        const loadedSubjects = await subjectsResponse.json()
-        setSubjects(loadedSubjects)
+      if (!subjectsResponse.ok) {
+        const errorData = await subjectsResponse.json()
+        console.error('[Staff Reg Modal] Subjects API error:', errorData)
+        throw new Error(
+          `Failed to load subjects: ${subjectsResponse.status} ${errorData.error || subjectsResponse.statusText}`
+        )
       }
+
+      const loadedSubjects = await subjectsResponse.json()
+      console.log('[Staff Reg Modal] ✅ Loaded', loadedSubjects.length, 'subjects')
+
+      if (!Array.isArray(loadedSubjects)) {
+        throw new Error('Invalid response format from subjects API')
+      }
+
+      setSubjects(loadedSubjects)
+      return true
     } catch (err: any) {
-      console.error('Error loading teaching data:', err)
+      console.error('[Staff Reg Modal] ❌ Error loading teaching data:', {
+        message: err.message,
+        stack: err.stack?.substring(0, 200),
+      })
       setError(`Failed to load teaching data: ${err.message}`)
+      return false
     } finally {
       setLoadingTeachingData(false)
     }
@@ -144,10 +176,18 @@ export default function StaffRegistrationModal({
       return
     }
     setError(null)
-    // Load teaching data then move to step 5
-    setLoadingTeachingData(true)
-    await loadTeachingData()
-    setLoadingTeachingData(false)
+
+    console.log('[Staff Reg Modal] Step 4 submitted, loading teaching data...')
+
+    // Load teaching data and wait for it
+    const success = await loadTeachingData()
+
+    if (!success) {
+      console.error('[Staff Reg Modal] Failed to load teaching data, staying on Step 4')
+      return
+    }
+
+    console.log('[Staff Reg Modal] ✅ Teaching data loaded, moving to Step 5')
     setCurrentStep(5)
   }
 
