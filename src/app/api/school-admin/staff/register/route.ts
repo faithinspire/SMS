@@ -162,7 +162,12 @@ export async function POST(request: NextRequest) {
       const { data: teacherData, error: teacherError } = await supabaseAdmin
         .from('teachers')
         .insert({
-          staff_id: staffId,
+          school_id: schoolId,
+          user_id: userId,
+          first_name: firstName,
+          last_name: lastName,
+          email: trimmedEmail,
+          phone: phone || null,
           teaching_level: teachingLevel,
           bank_name: bankName || null,
           account_number: accountNumber || null,
