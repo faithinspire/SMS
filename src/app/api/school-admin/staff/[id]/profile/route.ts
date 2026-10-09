@@ -58,21 +58,24 @@ export async function GET(
 
     console.log('[Staff Profile API] ✅ Staff found')
 
-    // Check if teacher
-    const { data: teacherData } = await supabase
+    // Check if teacher - use limit(1) instead of .single() to avoid 406 error
+    const { data: teacherArray } = await supabase
       .from('teachers')
       .select('*')
       .eq('staff_id', staffId)
-      .single()
+      .limit(1)
 
+    const teacherData = teacherArray && teacherArray.length > 0 ? teacherArray[0] : null
     const isTeacher = !!teacherData
 
-    // Get user account status
-    const { data: userData } = await supabase
+    // Get user account status - use limit(1) instead of .single()
+    const { data: userArray } = await supabase
       .from('users')
       .select('status')
       .eq('id', staffData.user_id)
-      .single()
+      .limit(1)
+
+    const userData = userArray && userArray.length > 0 ? userArray[0] : null
 
     // Get class assignments (if teacher)
     let classAssignments: any[] = []

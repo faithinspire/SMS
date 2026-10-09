@@ -1,12 +1,9 @@
 /**
- * School Admin - Student Registration Dropdown Data API
+ * Get Dropdown Data for Student/Staff Registration
  * 
- * Provides sessions, terms, classes, and arms for student registration form
+ * GET /api/school-admin/students/dropdown-data?schoolId=<schoolId>&dataType=<all|sessions|terms|classes|subjects>
  * 
- * Query params:
- * - schoolId: required
- * - dataType: optional (sessions | terms | classes | arms | all) - default: all
- * - classId: optional (required when fetching arms)
+ * Returns sessions, terms, classes, and subjects for registration forms
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -18,7 +15,6 @@ export async function GET(request: NextRequest) {
   try {
     const schoolId = request.nextUrl.searchParams.get('schoolId')
     const dataType = request.nextUrl.searchParams.get('dataType') || 'all'
-    const classId = request.nextUrl.searchParams.get('classId')
 
     if (!schoolId) {
       return NextResponse.json(
@@ -27,98 +23,101 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log(`[Dropdown Data API] Fetching ${dataType} for school:`, schoolId)
+    console.log('[Dropdown Data API] Fetching data for school:', schoolId, 'type:', dataType)
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
-    const result: any = {}
+    const result: any = {
+      data: {},
+    }
 
-    // Fetch sessions
-    if (dataType === 'all' || dataType === 'sessions') {
+    // Load academic sessions
+    if (['all', 'sessions'].includes(dataType)) {
       const { data: sessions, error: sessionsError } = await supabase
         .from('academic_sessions')
-        .select('id, session_year, start_year, end_year, is_active')
+        .select('id, name, start_year, end_year, status')
         .eq('school_id', schoolId)
+        .eq('status', 'ACTIVE')
         .order('start_year', { ascending: false })
 
       if (sessionsError) {
-        console.error('[Dropdown Data API] Error fetching sessions:', sessionsError.message)
+        console.error('[Dropdown Data API] Error loading sessions:', sessionsError)
       } else {
-        result.sessions = sessions || []
-        console.log(`[Dropdown Data API] ✅ Fetched ${sessions?.length || 0} sessions`)
+        result.data.sessions = sessions || []
       }
     }
 
-    // Fetch terms
-    if (dataType === 'all' || dataType === 'terms') {
+    // Load terms
+    if (['all', 'terms'].includes(dataType)) {
       const { data: terms, error: termsError } = await supabase
         .from('academic_terms')
-        .select('id, session_id, term_number, name, is_active')
+        .select('id, name, term_number, session_id, status')
         .eq('school_id', schoolId)
+        .eq('status', 'ACTIVE')
         .order('term_number', { ascending: true })
 
       if (termsError) {
-        console.error('[Dropdown Data API] Error fetching terms:', termsError.message)
+        console.error('[Dropdown Data API] Error loading terms:', termsError)
       } else {
-        result.terms = terms || []
-        console.log(`[Dropdown Data API] ✅ Fetched ${terms?.length || 0} terms`)
+        result.data.terms = terms || []
       }
     }
 
-    // Fetch classes
-    if (dataType === 'all' || dataType === 'classes') {
+    // Load class-arm combos
+    if (['all', 'classes'].includes(dataType)) {
       const { data: classes, error: classesError } = await supabase
-        .from('classes')
-        .select('id, name, level, type')
+        .from('class_arm_combos')
+        .select(`
+          id,
+          classes (id, name, section),
+          arms (id, name)
+        `)
         .eq('school_id', schoolId)
-        .order('level', { ascending: true })
+        .order('classes.name', { ascending: true })
 
       if (classesError) {
-        console.error('[Dropdown Data API] Error fetching classes:', classesError.message)
+        console.error('[Dropdown Data API] Error loading classes:', classesError)
       } else {
-        result.classes = classes || []
-        console.log(`[Dropdown Data API] ✅ Fetched ${classes?.length || 0} classes`)
+        const formattedClasses = (classes || []).map((combo: any) => ({
+          id: combo.id,
+          class_name: combo.classes?.name || 'Unknown',
+          arm_name: combo.arms?.name || 'Unknown',
+          label: `${combo.classes?.name || 'Unknown'} - ${combo.arms?.name || 'Unknown'}`,
+        }))
+        result.data.classes = formattedClasses
       }
     }
 
-    // Fetch arms
-    if (dataType === 'all' || dataType === 'arms') {
-      let query = supabase
-        .from('class_arms')
-        .select('id, class_id, arm_name')
+    // Load subjects
+    if (['all', 'subjects'].includes(dataType)) {
+      const { data: subjects, error: subjectsError } = await supabase
+        .from('subjects')
+        .select('id, name, code, subject_type')
+        .eq('school_id', schoolId)
+        .order('name', { ascending: true })
 
-      if (classId) {
-        query = query.eq('class_id', classId)
-      }
-
-      const { data: arms, error: armsError } = await query
-        .order('arm_name', { ascending: true })
-
-      if (armsError) {
-        console.error('[Dropdown Data API] Error fetching arms:', armsError.message)
+      if (subjectsError) {
+        console.error('[Dropdown Data API] Error loading subjects:', subjectsError)
       } else {
-        result.arms = arms || []
-        console.log(`[Dropdown Data API] ✅ Fetched ${arms?.length || 0} arms`)
+        result.data.subjects = subjects || []
       }
     }
 
-    console.log('[Dropdown Data API] Returning dropdown data:', Object.keys(result))
-
-    return NextResponse.json({
-      data: result,
-      meta: {
-        schoolId,
-        dataType,
-        timestamp: new Date().toISOString(),
-      },
+    console.log('[Dropdown Data API] ✅ Loaded data:', {
+      sessions: result.data.sessions?.length,
+      terms: result.data.terms?.length,
+      classes: result.data.classes?.length,
+      subjects: result.data.subjects?.length,
     })
+
+    return NextResponse.json(result)
   } catch (error: any) {
-    console.error('[Dropdown Data API] Unexpected error:', error)
+    console.error('[Dropdown Data API] Error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch dropdown data', details: error.message },
+      { error: error.message || 'Failed to load dropdown data' },
       { status: 500 }
     )
   }

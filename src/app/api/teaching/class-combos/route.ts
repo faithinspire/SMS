@@ -1,64 +1,72 @@
-import { supabase } from '@/lib/supabase-client'
-import { NextRequest, NextResponse } from 'next/server'
-
 /**
- * GET /api/teaching/class-combos
- * Fetch class-arm combos bypassing the broken nested query
- * Query params: schoolId, section (optional)
+ * Get Class-Arm Combos for Teacher Registration
  * 
- * ⚠️ DYNAMIC: Uses nextUrl.searchParams - cannot be statically rendered
+ * GET /api/teaching/class-combos?schoolId=<schoolId>&section=<section>
+ * 
+ * Returns all available class-arm combos for a school and section
  */
 
-// ✅ Mark as dynamic - uses searchParams which requires request context
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const schoolId = req.nextUrl.searchParams.get('schoolId')
-    const section = req.nextUrl.searchParams.get('section')
+    const schoolId = request.nextUrl.searchParams.get('schoolId')
+    const section = request.nextUrl.searchParams.get('section')
 
     if (!schoolId) {
-      return NextResponse.json({ error: 'schoolId required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'schoolId is required' },
+        { status: 400 }
+      )
     }
 
-    console.log(`🔗 API: Loading class-arm combos for ${schoolId}, section: ${section}`)
+    console.log('[Class Combos API] Fetching combos for school:', schoolId, 'section:', section)
 
-    // Fetch ALL combos at once (no nested field ordering)
-    const { data: allCombos, error: comboError } = await supabase
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
+    // Build query
+    let query = supabase
       .from('class_arm_combos')
       .select(`
         id,
-        class_id,
-        arm_id,
-        classes: class_id (id, name, level, type),
-        arms: arm_id (id, name, capacity)
+        classes (id, name, section),
+        arms (id, name)
       `)
       .eq('school_id', schoolId)
 
-    if (comboError) {
-      console.error('❌ Error loading combos:', comboError)
-      return NextResponse.json({ error: comboError.message }, { status: 500 })
-    }
-
-    let filtered = allCombos || []
-
-    // Filter by section AFTER fetching (in-memory)
+    // Filter by section if provided
     if (section) {
-      filtered = filtered.filter((combo: any) => combo.classes?.type === section)
+      query = query.eq('classes.section', section)
     }
 
-    // Sort by class level (in-memory)
-    const sorted = filtered.sort(
-      (a: any, b: any) => (a.classes?.level || 0) - (b.classes?.level || 0)
-    )
+    const { data: combos, error } = await query.order('classes.name', { ascending: true })
 
-    console.log(`✅ API: Loaded ${sorted.length} combos`)
+    if (error) {
+      console.error('[Class Combos API] Error:', error)
+      throw error
+    }
 
-    return NextResponse.json(sorted)
+    // Transform response
+    const formattedCombos = (combos || []).map((combo: any) => ({
+      id: combo.id,
+      class_name: combo.classes?.name || 'Unknown',
+      arm_name: combo.arms?.name || 'Unknown',
+      label: `${combo.classes?.name || 'Unknown'} - ${combo.arms?.name || 'Unknown'}`,
+    }))
+
+    console.log('[Class Combos API] ✅ Loaded combos:', formattedCombos.length)
+
+    return NextResponse.json(formattedCombos)
   } catch (error: any) {
-    console.error('❌ API Error:', error)
+    console.error('[Class Combos API] Error:', error)
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: error.message || 'Failed to load class combos' },
       { status: 500 }
     )
   }
