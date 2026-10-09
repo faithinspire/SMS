@@ -191,8 +191,8 @@ export default function StudentResultsPage() {
    */
   const loadResult = async () => {
     try {
-      if (!user?.id || !selectedTerm || !user?.school_id) {
-        console.log('[StudentResults] Missing: user_id, selectedTerm, or school_id')
+      if (!user?.id || !selectedTerm) {
+        console.log('[StudentResults] Missing: user_id or selectedTerm')
         setResult(null)
         return
       }
@@ -201,28 +201,63 @@ export default function StudentResultsPage() {
       setError(null)
 
       console.log('[StudentResults] Loading result for term:', selectedTerm)
+      console.log('[StudentResults] User data:', { user_id: user.id, school_id: user.school_id, role: user.role })
+
+      // Try to get school_id from multiple sources
+      let schoolId = user.school_id
+
+      // If no school_id from auth, try to get it from student record
+      if (!schoolId) {
+        console.warn('[StudentResults] No school_id in auth, attempting lookup from student record')
+        
+        const { data: studentLookup } = await supabase
+          .from('students')
+          .select('school_id')
+          .eq('user_id', user.id)
+          .limit(1)
+
+        if (studentLookup && studentLookup.length > 0) {
+          schoolId = studentLookup[0].school_id
+          console.log('[StudentResults] Found school_id from student record:', schoolId)
+        }
+      }
+
+      if (!schoolId) {
+        console.error('[StudentResults] Cannot determine school_id')
+        setError('Unable to determine your school. Please log out and log in again.')
+        setResult(null)
+        setLoadingResult(false)
+        return
+      }
 
       // Get student's actual student record ID
-      const { data: studentRecord, error: studentError } = await supabase
+      const { data: studentRecords, error: studentError } = await supabase
         .from('students')
-        .select('id')
+        .select('id, user_id, school_id, admission_number')
         .eq('user_id', user.id)
-        .eq('school_id', user.school_id)
-        .single()
+        .eq('school_id', schoolId)
+        .limit(10)
+
+      console.log('[StudentResults] Query params - user_id:', user.id, 'school_id:', schoolId)
+      console.log('[StudentResults] Student records found:', studentRecords?.length || 0)
 
       if (studentError) {
         console.error('[StudentResults] Error fetching student record:', studentError)
-        setError('Student record not found')
+        setError(`Database error: ${studentError.message}`)
         setResult(null)
+        setLoadingResult(false)
         return
       }
 
-      if (!studentRecord) {
-        console.warn('[StudentResults] No student record found')
-        setError('Student record not found')
+      if (!studentRecords || studentRecords.length === 0) {
+        console.warn('[StudentResults] No student record found for user_id:', user.id, 'school_id:', schoolId)
+        setError('Your student record not found. Please contact your school administrator.')
         setResult(null)
+        setLoadingResult(false)
         return
       }
+
+      const studentRecord = studentRecords[0]
 
       console.log('[StudentResults] Student record:', studentRecord.id)
 
