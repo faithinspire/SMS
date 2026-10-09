@@ -35,14 +35,14 @@ export async function GET(request: NextRequest) {
       .from('class_arm_combos')
       .select(`
         id,
-        classes (id, name, section),
+        classes (id, name, school_level),
         arms (id, name)
       `)
       .eq('school_id', schoolId)
 
-    // Filter by section if provided
+    // Filter by school_level if provided (PRIMARY or SECONDARY)
     if (section) {
-      query = query.eq('classes.section', section)
+      query = query.eq('classes.school_level', section)
     }
 
     const { data: combos, error } = await query.order('classes.name', { ascending: true })

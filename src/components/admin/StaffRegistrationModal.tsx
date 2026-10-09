@@ -137,7 +137,7 @@ export default function StaffRegistrationModal({
     }
   }
 
-  const handleStep4Submit = (e: React.FormEvent) => {
+  const handleStep4Submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!teachingLevel || !bankName.trim() || !accountNumber.trim() || !accountName.trim() || !salary.trim()) {
       setError('Please fill in all teacher information')
@@ -145,7 +145,9 @@ export default function StaffRegistrationModal({
     }
     setError(null)
     // Load teaching data then move to step 5
-    loadTeachingData()
+    setLoadingTeachingData(true)
+    await loadTeachingData()
+    setLoadingTeachingData(false)
     setCurrentStep(5)
   }
 
@@ -538,7 +540,7 @@ export default function StaffRegistrationModal({
                       <option value="">Choose a class...</option>
                       {combos.map((combo: any) => (
                         <option key={combo.id} value={combo.id}>
-                          {combo.classes?.name || 'Unknown'} - Arm {combo.arms?.name || 'Unknown'}
+                          {combo.label || `${combo.class_name} - ${combo.arm_name}`}
                         </option>
                       ))}
                     </select>
