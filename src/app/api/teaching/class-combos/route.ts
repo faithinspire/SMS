@@ -2,7 +2,8 @@
  * Get Class-Arm Combos for Teacher Registration
  * GET /api/teaching/class-combos?schoolId=<uuid>&section=<PRIMARY|SECONDARY>
  * 
- * Returns array of class-arm combos formatted for dropdowns
+ * Loads actual classes and arms from Supabase for the authenticated school.
+ * Returns properly formatted combo options for registration dropdowns.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -32,61 +33,115 @@ export async function GET(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
-    // Query class-arm combos with proper joins
-    let query = supabase
-      .from('class_arm_combos')
-      .select(
-        `
-        id,
-        school_id,
-        class_id,
-        arm_id,
-        classes!inner(id, name, school_level),
-        arms!inner(id, name)
-      `
-      )
+    // PHASE 1: Fetch classes for the school with the given school_level
+    console.log('[Class Combos API] Phase 1: Fetching classes...')
+    let classesQuery = supabase
+      .from('classes')
+      .select('id, name, school_level, type')
       .eq('school_id', schoolId)
 
-    // Filter by school_level if provided
+    // Filter by section/school_level if provided
     if (section) {
-      query = query.eq('classes.school_level', section)
+      classesQuery = classesQuery.eq('school_level', section)
     }
 
-    const { data: combos, error: queryError } = await query
+    const { data: classes, error: classesError } = await classesQuery
 
-    if (queryError) {
-      console.error('[Class Combos API] Database error:', queryError.message, queryError.code)
-      throw new Error(`Database error: ${queryError.message}`)
+    if (classesError) {
+      console.error('[Class Combos API] Classes query error:', classesError)
+      throw new Error(`Failed to fetch classes: ${classesError.message}`)
     }
 
-    if (!combos || combos.length === 0) {
-      console.warn('[Class Combos API] No combos found for school:', schoolId, 'section:', section)
+    if (!classes || classes.length === 0) {
+      console.log(
+        '[Class Combos API] No classes found for school:',
+        schoolId,
+        'section:',
+        section || 'any'
+      )
       return NextResponse.json([], { status: 200 })
     }
 
-    // Transform response and sort by class name
-    let formattedCombos = combos.map((combo: any) => {
-      const classObj = Array.isArray(combo.classes) ? combo.classes[0] : combo.classes
-      const armObj = Array.isArray(combo.arms) ? combo.arms[0] : combo.arms
+    console.log(`[Class Combos API] Found ${classes.length} classes`)
 
-      return {
-        id: combo.id,
-        class_id: combo.class_id,
-        arm_id: combo.arm_id,
-        class_name: classObj?.name || 'Unknown Class',
-        arm_name: armObj?.name || 'Unknown Arm',
-        label: `${classObj?.name || 'Unknown'} - Arm ${armObj?.name || '?'}`,
-        school_level: classObj?.school_level,
-      }
-    })
+    // PHASE 2: Fetch arms for each class
+    console.log('[Class Combos API] Phase 2: Fetching arms for classes...')
+    const classIds = classes.map((c: any) => c.id)
 
-    // Sort by class name (client-side since orderBy doesn't work with joined fields)
-    formattedCombos = formattedCombos.sort((a, b) => 
-      a.class_name.localeCompare(b.class_name)
+    const { data: arms, error: armsError } = await supabase
+      .from('arms')
+      .select('id, class_id, name')
+      .in('class_id', classIds)
+
+    if (armsError) {
+      console.error('[Class Combos API] Arms query error:', armsError)
+      throw new Error(`Failed to fetch arms: ${armsError.message}`)
+    }
+
+    const armsByClassId = (arms || []).reduce(
+      (acc: any, arm: any) => {
+        if (!acc[arm.class_id]) acc[arm.class_id] = []
+        acc[arm.class_id].push(arm)
+        return acc
+      },
+      {}
     )
 
+    console.log(`[Class Combos API] Found ${arms?.length || 0} arms total`)
+
+    // PHASE 3: Fetch class-arm-combos to get class teacher info
+    console.log('[Class Combos API] Phase 3: Fetching class-arm combo records...')
+    const { data: combos, error: combosError } = await supabase
+      .from('class_arm_combos')
+      .select('id, class_id, arm_id, class_teacher_id')
+      .eq('school_id', schoolId)
+      .in('class_id', classIds)
+
+    if (combosError) {
+      console.error('[Class Combos API] Combos query error:', combosError)
+      throw new Error(`Failed to fetch class-arm combos: ${combosError.message}`)
+    }
+
+    console.log(`[Class Combos API] Found ${combos?.length || 0} combos`)
+
+    // PHASE 4: Build formatted response
+    console.log('[Class Combos API] Phase 4: Building formatted response...')
+    const formattedCombos: any[] = []
+
+    for (const classRecord of classes) {
+      const classArms = armsByClassId[classRecord.id] || []
+
+      for (const arm of classArms) {
+        // Find the matching combo record
+        const comboRecord = (combos || []).find(
+          (c: any) => c.class_id === classRecord.id && c.arm_id === arm.id
+        )
+
+        formattedCombos.push({
+          id: comboRecord?.id || `${classRecord.id}-${arm.id}`, // Use combo ID if available
+          class_id: classRecord.id,
+          arm_id: arm.id,
+          class_name: classRecord.name,
+          arm_name: arm.name,
+          school_level: classRecord.school_level,
+          type: classRecord.type,
+          label: `${classRecord.name} - Arm ${arm.name}`,
+          class_teacher_id: comboRecord?.class_teacher_id || null,
+        })
+      }
+    }
+
+    // Sort by class name, then arm name
+    formattedCombos.sort((a, b) => {
+      const classCompare = a.class_name.localeCompare(b.class_name)
+      if (classCompare !== 0) return classCompare
+      return a.arm_name.localeCompare(b.arm_name)
+    })
+
     const elapsed = Date.now() - startTime
-    console.log(`[Class Combos API] ✅ Success: returned ${formattedCombos.length} combos in ${elapsed}ms`)
+    console.log(
+      `[Class Combos API] ✅ Success: returned ${formattedCombos.length} combos in ${elapsed}ms`
+    )
 
     return NextResponse.json(formattedCombos, {
       status: 200,
@@ -97,14 +152,13 @@ export async function GET(request: NextRequest) {
     console.error(`[Class Combos API] ❌ Error after ${elapsed}ms:`, {
       message: error.message,
       code: error.code,
-      stack: error.stack?.substring(0, 200),
+      stack: error.stack?.substring(0, 300),
     })
 
     return NextResponse.json(
       {
         success: false,
         error: error.message || 'Failed to load class combos',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       },
       { status: 500 }
     )

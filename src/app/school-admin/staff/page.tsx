@@ -6,7 +6,7 @@ import { AuthService } from '@/services/auth.service'
 import { StaffService, StaffProfile } from '@/services/staff.service'
 import StaffProfileEditModal from '@/components/admin/StaffProfileEditModal'
 import { LetterPreviewModal } from '@/components/admin/LetterPreviewModal'
-import StaffRegistrationModal from '@/components/admin/StaffRegistrationModal'
+import ProfessionalStaffRegistrationModal from '@/components/admin/ProfessionalStaffRegistrationModal'
 import StaffProfileViewModal from '@/components/admin/StaffProfileViewModal'
 import { toast } from 'react-hot-toast'
 import { Plus, Edit2, Trash2, Mail, FileText, Eye } from 'lucide-react'
@@ -253,7 +253,7 @@ export default function StaffPage() {
       )}
 
       {showRegisterModal && schoolId && (
-        <StaffRegistrationModal
+        <ProfessionalStaffRegistrationModal
           isOpen={showRegisterModal}
           onClose={() => setShowRegisterModal(false)}
           schoolId={schoolId}
