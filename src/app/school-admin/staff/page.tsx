@@ -6,8 +6,10 @@ import { AuthService } from '@/services/auth.service'
 import { StaffService, StaffProfile } from '@/services/staff.service'
 import StaffProfileEditModal from '@/components/admin/StaffProfileEditModal'
 import { LetterPreviewModal } from '@/components/admin/LetterPreviewModal'
+import StaffRegistrationModal from '@/components/admin/StaffRegistrationModal'
+import StaffProfileViewModal from '@/components/admin/StaffProfileViewModal'
 import { toast } from 'react-hot-toast'
-import { Plus, Edit2, Trash2, Mail, FileText } from 'lucide-react'
+import { Plus, Edit2, Trash2, Mail, FileText, Eye } from 'lucide-react'
 
 export default function StaffPage() {
   const router = useRouter()
@@ -17,6 +19,8 @@ export default function StaffPage() {
   const [selectedStaff, setSelectedStaff] = useState<StaffProfile | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showLetterModal, setShowLetterModal] = useState(false)
+  const [showRegisterModal, setShowRegisterModal] = useState(false)
+  const [showViewModal, setShowViewModal] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
 
   // Load current user and fetch staff
@@ -95,6 +99,24 @@ export default function StaffPage() {
     }
   }
 
+  const handleViewStaff = (staffMember: StaffProfile) => {
+    setSelectedStaff(staffMember)
+    setShowViewModal(true)
+  }
+
+  const handleRegisterSuccess = () => {
+    setShowRegisterModal(false)
+    // Refresh staff list
+    if (schoolId) {
+      const loadStaff = async () => {
+        const staffList = await StaffService.getStaffList(schoolId)
+        setStaff(staffList)
+      }
+      loadStaff()
+    }
+    toast.success('Staff member registered successfully!')
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -113,6 +135,16 @@ export default function StaffPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Staff Management</h1>
           <p className="text-gray-600">Manage teachers, administrators, and support staff</p>
+        </div>
+
+        {/* Actions */}
+        <div className="mb-6 flex gap-3">
+          <button
+            onClick={() => setShowRegisterModal(true)}
+            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center gap-2"
+          >
+            <Plus size={20} /> Register New Staff
+          </button>
         </div>
 
         {/* Content */}
@@ -160,6 +192,13 @@ export default function StaffPage() {
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <div className="flex gap-2">
+                          <button
+                            onClick={() => handleViewStaff(member)}
+                            className="p-2 text-gray-600 hover:text-green-600 transition"
+                            title="View Staff Profile"
+                          >
+                            <Eye size={18} />
+                          </button>
                           <button
                             onClick={() => handleGenerateLetter(member)}
                             className="p-2 text-gray-600 hover:text-blue-600 transition"
@@ -210,6 +249,24 @@ export default function StaffPage() {
           staffId={selectedStaff.user_id}
           schoolId={schoolId!}
           letterType="appointment"
+        />
+      )}
+
+      {showRegisterModal && schoolId && (
+        <StaffRegistrationModal
+          isOpen={showRegisterModal}
+          onClose={() => setShowRegisterModal(false)}
+          schoolId={schoolId}
+          onSuccess={handleRegisterSuccess}
+        />
+      )}
+
+      {showViewModal && selectedStaff && (
+        <StaffProfileViewModal
+          isOpen={showViewModal}
+          onClose={() => setShowViewModal(false)}
+          staffId={selectedStaff.id}
+          schoolId={schoolId!}
         />
       )}
     </div>

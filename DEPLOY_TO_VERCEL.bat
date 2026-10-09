@@ -1,41 +1,75 @@
 @echo off
-REM Deploy to Vercel - School Admin Rebuild
+REM ============================================================
+REM 🚀 VERCEL DEPLOYMENT SCRIPT FOR WINDOWS
+REM ============================================================
+REM This script deploys the SMS application to Vercel
 
-cd c:\Users\OLU\Desktop\SMS
+setlocal enabledelayedexpansion
 
-REM Configure git
-git config user.email "agent@kiro.dev"
-git config user.name "Kiro Agent"
-
-REM Stage the 6 modified files
-git add src/app/api/school/students/route.ts
-git add src/app/api/school/academic/sessions/route.ts
-git add src/app/api/school/academic/terms/route.ts
-git add src/app/api/school/academic/classes/route.ts
-git add src/app/api/school/academic/arms/route.ts
-git add src/app/school-admin/results/page.tsx
-
-REM Verify staging
-git status
-
-REM Create commit
-git commit -m "fix: School Admin rebuild - fix APIs, column mapping, and error handling
-
-- Fix Students API: remove auth cookie dependencies, use anon client
-- Fix Sessions/Terms/Classes/Arms APIs: standardize response format
-- Fix Terms API: map database columns (name->term_name, term_number->term_order)
-- Improve Results page error handling and logging
-- All queries scoped by school_id (multi-school safe)
-- Ready for Vercel production deployment"
-
-REM Push to main branch
-git push -u origin main
+cd /d "%~dp0"
 
 echo.
-echo ========================================
-echo Deployment pushed to Git!
-echo ========================================
-echo Next: Watch Vercel build at https://vercel.com/dashboard
-echo Build should complete in 3-5 minutes
-echo ========================================
+echo ============================================================
+echo 🚀 VERCEL DEPLOYMENT - School Management System
+echo ============================================================
+echo.
+
+REM Check git status
+echo [1/4] Checking git status...
+git status >nul 2>&1
+if errorlevel 1 (
+    echo ❌ Git not configured or not in repo
+    echo Please ensure you're in the SMS directory and git is initialized
+    pause
+    exit /b 1
+)
+echo ✅ Git repository ready
+
+REM Verify changes
+echo.
+echo [2/4] Changes to deploy:
+git status --short
+
+REM Ask for confirmation
+echo.
+echo [3/4] Ready to deploy to production?
+echo Press Y to continue, any other key to cancel
+choice /c YN /N /T 5 /D N
+if errorlevel 2 goto :cancel
+
+REM Add and commit
+echo.
+echo [4/4] Committing and pushing...
+git add -A
+git commit -m "feat: deploy school admin staff/student registration system with multi-step modals"
+if errorlevel 1 (
+    echo ⚠️ Nothing to commit
+    git push origin main
+) else (
+    git push origin main
+)
+
+echo.
+echo ============================================================
+echo ✅ DEPLOYMENT INITIATED
+echo ============================================================
+echo.
+echo 📍 Vercel will automatically build and deploy
+echo 🌐 Monitor at: https://vercel.com/dashboard/projects/sms-gold-eta
+echo 📊 Deployment should complete in 5-10 minutes
+echo 🔴 Live at: https://sms-gold-eta.vercel.app
+echo.
+echo ✨ Features deployed:
+echo   • Multi-step staff registration modal
+echo   • Staff profile view modal
+echo   • Student registration dropdown APIs
+echo   • Real database data integration
+echo.
 pause
+exit /b 0
+
+:cancel
+echo.
+echo ❌ Deployment cancelled
+pause
+exit /b 1

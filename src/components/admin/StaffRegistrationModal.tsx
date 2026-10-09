@@ -1,380 +1,461 @@
 'use client'
 
-import { useState } from 'react'
-import { UserRegistrationService, StaffRegistrationData } from '@/services/user-registration.service'
-import { supabase } from '@/lib/supabase-client'
+import React, { useState, useEffect } from 'react'
+import { toast } from 'react-hot-toast'
+import { X } from 'lucide-react'
 
 interface StaffRegistrationModalProps {
-  schoolId: string
   isOpen: boolean
   onClose: () => void
-  onSuccess: () => void
+  schoolId: string
+  onSuccess?: () => void
 }
 
+type StaffCategory = 'TEACHER' | 'ADMINISTRATOR' | 'SUPPORT_STAFF' | ''
+
 export default function StaffRegistrationModal({
-  schoolId,
   isOpen,
   onClose,
+  schoolId,
   onSuccess,
 }: StaffRegistrationModalProps) {
+  // UI State
+  const [currentStep, setCurrentStep] = useState(1)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
 
-  const [formData, setFormData] = useState({
-    full_name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    role: 'STAFF' as const,
-    position: '',
-    employment_date: new Date().toISOString().split('T')[0],
-    // Payment details
-    bank_name: '',
-    account_number: '',
-    account_holder_name: '',
-    salary_amount: '',
-  })
+  // Form Data - Step 1: Category & Personal
+  const [staffCategory, setStaffCategory] = useState<StaffCategory>('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Form Data - Step 2: Contact
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [password, setPassword] = useState('')
+
+  // Form Data - Step 3: Employment
+  const [position, setPosition] = useState('')
+  const [department, setDepartment] = useState('')
+  const [staffNumber, setStaffNumber] = useState('')
+
+  // Form Data - Step 4: Role-Specific (Teachers only)
+  const [teachingLevel, setTeachingLevel] = useState<'PRIMARY' | 'SECONDARY' | ''>('')
+  const [bankName, setBankName] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [accountName, setAccountName] = useState('')
+  const [salary, setSalary] = useState('')
+
+  if (!isOpen) return null
+
+  const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    setSuccess('')
-
-    // Validation
-    if (!formData.full_name || !formData.email || !formData.password) {
-      setError('Name, email, and password are required')
+    if (!staffCategory.trim() || !firstName.trim() || !lastName.trim()) {
+      setError('Please fill in all required fields')
       return
     }
+    setError(null)
+    setCurrentStep(2)
+  }
 
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
+  const handleStep2Submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail || !phone.trim() || !password.trim()) {
+      setError('Please fill in all contact fields')
       return
     }
-
-    if (formData.password.length < 6) {
+    if (password.length < 6) {
       setError('Password must be at least 6 characters')
       return
     }
+    setEmail(trimmedEmail)
+    setError(null)
+    setCurrentStep(3)
+  }
+
+  const handleStep3Submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!position.trim() || !department.trim()) {
+      setError('Please fill in employment information')
+      return
+    }
+    setError(null)
+    if (staffCategory === 'TEACHER') {
+      setCurrentStep(4)
+    } else {
+      handleFinalSubmit()
+    }
+  }
+
+  const handleStep4Submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!teachingLevel || !bankName.trim() || !accountNumber.trim() || !accountName.trim() || !salary.trim()) {
+      setError('Please fill in all teacher information')
+      return
+    }
+    setError(null)
+    handleFinalSubmit()
+  }
+
+  const handleFinalSubmit = async () => {
+    if (loading) return
 
     setLoading(true)
+    setError(null)
+    setSuccess(null)
 
     try {
-      // Register staff member
-      const staffResult = await UserRegistrationService.registerStaffMember({
-        email: formData.email,
-        password: formData.password,
-        full_name: formData.full_name,
-        role: formData.role,
-        school_id: schoolId,
+      const trimmedEmail = email.trim().toLowerCase()
+
+      console.log('[Staff Reg Modal] Submitting registration...')
+
+      // Use the staff registration API
+      const response = await fetch('/api/school-admin/staff/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schoolId,
+          staffCategory,
+          firstName,
+          lastName,
+          email: trimmedEmail,
+          phone,
+          password,
+          position,
+          department,
+          staffNumber: staffNumber || null,
+          teachingLevel: staffCategory === 'TEACHER' ? teachingLevel : null,
+          bankName: staffCategory === 'TEACHER' ? bankName : null,
+          accountNumber: staffCategory === 'TEACHER' ? accountNumber : null,
+          accountName: staffCategory === 'TEACHER' ? accountName : null,
+          salary: staffCategory === 'TEACHER' ? salary : null,
+        }),
       })
 
-      console.log('✅ Staff registered:', staffResult.id)
-
-      // Create staff record with payment details
-      const { error: staffError } = await supabase
-        .from('staff')
-        .insert({
-          user_id: staffResult.id,
-          school_id: schoolId,
-          position: formData.position || null,
-          employment_date: formData.employment_date || null,
-        })
-
-      if (staffError) {
-        console.warn('⚠️ Staff record warning:', staffError)
-      } else {
-        console.log('✅ Staff record created')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to register staff')
       }
 
-      // Save payment/bank details in staff_accounts table if it exists, otherwise in metadata
-      if (formData.bank_name || formData.account_number || formData.salary_amount) {
-        try {
-          // Try to insert into staff_accounts if table exists
-          const { error: accountError } = await supabase
-            .from('staff_accounts')
-            .insert({
-              user_id: staffResult.id,
-              school_id: schoolId,
-              bank_name: formData.bank_name || null,
-              account_number: formData.account_number || null,
-              account_holder_name: formData.account_holder_name || null,
-            })
+      const result = await response.json()
+      console.log('[Staff Reg Modal] ✅ Registration successful:', result)
 
-          if (accountError && !accountError.message.includes('does not exist')) {
-            console.warn('⚠️ Account details warning:', accountError)
-          } else if (!accountError) {
-            console.log('✅ Bank details saved')
-          }
-        } catch (err) {
-          console.warn('⚠️ Could not save bank details:', err)
-        }
+      setSuccess(`✅ Staff member ${firstName} ${lastName} registered successfully!`)
+      
+      // Reset form
+      setCurrentStep(1)
+      setStaffCategory('')
+      setFirstName('')
+      setLastName('')
+      setEmail('')
+      setPhone('')
+      setPassword('')
+      setPosition('')
+      setDepartment('')
+      setStaffNumber('')
+      setTeachingLevel('')
+      setBankName('')
+      setAccountNumber('')
+      setAccountName('')
+      setSalary('')
 
-        // Save salary information
-        if (formData.salary_amount) {
-          try {
-            // Get current term
-            const { data: currentTerm } = await supabase
-              .from('terms')
-              .select('id')
-              .eq('school_id', schoolId)
-              .eq('is_current', true)
-              .single()
-
-            // First, get the staff id from the created record
-            const { data: staffRecord } = await supabase
-              .from('staff')
-              .select('id')
-              .eq('user_id', staffResult.id)
-              .single()
-
-            if (staffRecord) {
-              const { error: salaryError } = await supabase
-                .from('salaries')
-                .insert({
-                  staff_id: staffRecord.id,
-                  school_id: schoolId,
-                  amount: parseFloat(formData.salary_amount),
-                  term_id: currentTerm?.id || null,
-                  payment_status: 'PENDING',
-                })
-
-              if (salaryError) {
-                console.warn('⚠️ Salary record warning:', salaryError)
-              } else {
-                console.log('✅ Salary recorded')
-              }
-            }
-          } catch (err) {
-            console.warn('⚠️ Could not save salary:', err)
-          }
-        }
+      if (onSuccess) {
+        setTimeout(onSuccess, 1500)
       }
 
-      setSuccess('✅ Staff member registered successfully!')
-      setTimeout(() => {
-        onSuccess()
-        onClose()
-        // Reset form
-        setFormData({
-          full_name: '',
-          email: '',
-          password: '',
-          confirmPassword: '',
-          role: 'STAFF',
-          position: '',
-          employment_date: new Date().toISOString().split('T')[0],
-          bank_name: '',
-          account_number: '',
-          account_holder_name: '',
-          salary_amount: '',
-        })
-      }, 2000)
+      setTimeout(onClose, 2000)
     } catch (err: any) {
-      setError(err.message || 'Failed to register staff member')
+      console.error('[Staff Reg Modal] ❌ Registration error:', err)
+      setError(`Registration failed: ${err.message}`)
     } finally {
       setLoading(false)
     }
   }
 
-  if (!isOpen) return null
-
-  const bgOverlay = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'
-  const modalClass = 'bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto'
-
   return (
-    <div className={bgOverlay}>
-      <div className={modalClass}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full my-8">
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6 border-b shadow-lg">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">👤 Register Staff Member</h2>
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 text-white p-6 rounded-t-2xl">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-3xl font-bold">📋 Register New Staff</h2>
             <button
               onClick={onClose}
-              className="text-white hover:bg-white/20 rounded-full p-2 transition-all"
+              className="text-white hover:bg-white/20 rounded-full p-2 transition hover:scale-110"
+              type="button"
             >
-              ✕
+              <X size={24} />
             </button>
           </div>
-          <p className="text-purple-100 mt-2">
-            Register accountants, office staff, and other non-teaching staff
-          </p>
+
+          {/* Progress Bar */}
+          <div className="flex gap-2">
+            {[1, 2, 3, ...(currentStep >= 3 && staffCategory === 'TEACHER' ? [4] : [])].map((step) => (
+              <div key={step} className="flex-1 flex flex-col gap-1">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    currentStep >= step ? 'bg-white' : 'bg-white/30'
+                  }`}
+                />
+                <span className="text-xs text-white/70">Step {step}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-8 max-h-[calc(100vh-250px)] overflow-y-auto">
+          {/* Error Message */}
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-              {error}
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r-lg">
+              <p className="font-semibold">{error}</p>
             </div>
           )}
 
+          {/* Success Message */}
           {success && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
-              {success}
+            <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 text-green-700 rounded-r-lg">
+              <p className="font-semibold">{success}</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Basic Information */}
-            <div>
-              <h3 className="text-lg font-bold text-gray-800 mb-4">👤 Basic Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name *</label>
-                  <input
-                    type="text"
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    placeholder="e.g., Mrs. Jane Okafor"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
+          {/* Step 1: Category & Personal Info */}
+          {currentStep === 1 && (
+            <form onSubmit={handleStep1Submit} className="space-y-6">
+              <h3 className="text-xl font-bold text-gray-900">Category & Personal Information</h3>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Role *</label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="ACCOUNTANT">Accountant</option>
-                    <option value="STAFF">Office Staff</option>
-                    <option value="PRINCIPAL">Principal</option>
-                    <option value="HEAD_TEACHER">Head Teacher</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address *</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="e.g., jane@school.com"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Position</label>
-                  <input
-                    type="text"
-                    value={formData.position}
-                    onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                    placeholder="e.g., Finance Officer"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Employment Date</label>
-                  <input
-                    type="date"
-                    value={formData.employment_date}
-                    onChange={(e) => setFormData({ ...formData, employment_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Password *</label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="At least 6 characters"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm Password *</label>
-                  <input
-                    type="password"
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    placeholder="Re-enter password"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">
+                  Staff Category *
+                </label>
+                <select
+                  value={staffCategory}
+                  onChange={(e) => setStaffCategory(e.target.value as StaffCategory)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+                >
+                  <option value="">Select category...</option>
+                  <option value="TEACHER">Teacher</option>
+                  <option value="ADMINISTRATOR">Administrator</option>
+                  <option value="SUPPORT_STAFF">Support Staff</option>
+                </select>
               </div>
-            </div>
 
-            {/* Payment Details */}
-            <div className="border-t pt-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">💰 Bank & Payment Details</h3>
-              <p className="text-sm text-gray-600 mb-4">Save staff salary account information</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Bank Name</label>
-                  <input
-                    type="text"
-                    value={formData.bank_name}
-                    onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
-                    placeholder="e.g., First Bank"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Account Number</label>
-                  <input
-                    type="text"
-                    value={formData.account_number}
-                    onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
-                    placeholder="e.g., 1234567890"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Account Holder Name</label>
-                  <input
-                    type="text"
-                    value={formData.account_holder_name}
-                    onChange={(e) => setFormData({ ...formData, account_holder_name: e.target.value })}
-                    placeholder="Name on account"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Salary Amount</label>
-                  <input
-                    type="number"
-                    value={formData.salary_amount}
-                    onChange={(e) => setFormData({ ...formData, salary_amount: e.target.value })}
-                    placeholder="e.g., 50000"
-                    step="0.01"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  placeholder="First Name *"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+                />
+                <input
+                  type="text"
+                  placeholder="Last Name *"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+                />
               </div>
-            </div>
 
-            {/* Buttons */}
-            <div className="flex gap-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all"
-              >
-                Cancel
-              </button>
               <button
                 type="submit"
-                disabled={loading}
-                className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 disabled:bg-gray-400 transition-all disabled:cursor-not-allowed"
+                disabled={!staffCategory || !firstName || !lastName}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-lg transition"
               >
-                {loading ? 'Registering...' : 'Register Staff Member ✓'}
+                Continue to Contact Info →
+              </button>
+            </form>
+          )}
+
+          {/* Step 2: Contact */}
+          {currentStep === 2 && (
+            <form onSubmit={handleStep2Submit} className="space-y-6">
+              <h3 className="text-xl font-bold text-gray-900">Contact Information</h3>
+
+              <input
+                type="email"
+                placeholder="Email Address *"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <input
+                type="tel"
+                placeholder="Phone Number *"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <input
+                type="password"
+                placeholder="Password (min. 6 characters) *"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(1)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-900 font-bold py-3 rounded-lg transition"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition"
+                >
+                  Continue to Employment Info →
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Step 3: Employment */}
+          {currentStep === 3 && (
+            <form onSubmit={handleStep3Submit} className="space-y-6">
+              <h3 className="text-xl font-bold text-gray-900">Employment Information</h3>
+
+              <input
+                type="text"
+                placeholder="Position/Title *"
+                value={position}
+                onChange={(e) => setPosition(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <input
+                type="text"
+                placeholder="Department *"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <input
+                type="text"
+                placeholder="Staff Number (Optional)"
+                value={staffNumber}
+                onChange={(e) => setStaffNumber(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(2)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-900 font-bold py-3 rounded-lg transition"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition"
+                >
+                  {staffCategory === 'TEACHER' ? 'Continue to Teacher Details →' : 'Complete Registration →'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Step 4: Teacher-Specific Info (only for teachers) */}
+          {currentStep === 4 && staffCategory === 'TEACHER' && (
+            <form onSubmit={handleStep4Submit} className="space-y-6">
+              <h3 className="text-xl font-bold text-gray-900">Teacher Details</h3>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">
+                  Teaching Level *
+                </label>
+                <select
+                  value={teachingLevel}
+                  onChange={(e) => setTeachingLevel(e.target.value as any)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+                >
+                  <option value="">Select level...</option>
+                  <option value="PRIMARY">Primary School</option>
+                  <option value="SECONDARY">Secondary School</option>
+                </select>
+              </div>
+
+              <h4 className="text-lg font-semibold text-gray-900 mt-6">Bank Details</h4>
+
+              <input
+                type="text"
+                placeholder="Bank Name *"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <input
+                type="text"
+                placeholder="Account Number *"
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <input
+                type="text"
+                placeholder="Account Name *"
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <input
+                type="number"
+                placeholder="Monthly Salary *"
+                value={salary}
+                onChange={(e) => setSalary(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-600"
+              />
+
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-900 font-bold py-3 rounded-lg transition"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-lg transition"
+                >
+                  {loading ? 'Registering...' : 'Complete Registration ✓'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Non-teacher final button */}
+          {currentStep === 3 && staffCategory !== 'TEACHER' && (
+            <div className="flex gap-4 mt-6">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(2)}
+                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-900 font-bold py-3 rounded-lg transition"
+              >
+                ← Back
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFinalSubmit()}
+                disabled={loading}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-lg transition"
+              >
+                {loading ? 'Registering...' : 'Complete Registration ✓'}
               </button>
             </div>
-          </form>
+          )}
         </div>
       </div>
     </div>

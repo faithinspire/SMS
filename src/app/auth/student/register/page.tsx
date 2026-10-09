@@ -103,22 +103,33 @@ export default function StudentRegisterPage() {
 
     const loadSessionsAndClasses = async () => {
       try {
-        // Load sessions
-        const { data: sessionData } = await RegistrationConfigService.getAcademicTerms(
-          formData.schoolId!
+        console.log('[Student Reg] Loading dropdown data for school:', formData.schoolId)
+        // Use new dropdown API
+        const response = await fetch(
+          `/api/school-admin/students/dropdown-data?schoolId=${encodeURIComponent(formData.schoolId!)}&dataType=all`
         )
-        const uniqueSessions = [
-          ...new Map(
-            sessionData.map((t) => [t.session_id, { id: t.session_id, name: t.term_name }])
-          ).values(),
-        ]
-        setSessions(uniqueSessions)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
 
-        // Load classes
-        const classCombo = await RegistrationConfigService.getClassArmCombos(formData.schoolId!)
-        setClassOptions(classCombo)
+        const result = await response.json()
+        console.log('[Student Reg] ✅ Loaded dropdown data:', {
+          sessions: result.data.sessions?.length,
+          terms: result.data.terms?.length,
+          classes: result.data.classes?.length,
+        })
+
+        setSessions(result.data.sessions || [])
+        setTerms(result.data.terms || [])
+        
+        // Convert classes to class-arm combos format
+        if (result.data.classes) {
+          const classCombo = await RegistrationConfigService.getClassArmCombos(formData.schoolId!)
+          setClassOptions(classCombo)
+        }
       } catch (error) {
-        console.error('Error loading data:', error)
+        console.error('[Student Reg] Error loading data:', error)
         toast.error('Failed to load sessions/classes')
       }
     }
@@ -134,14 +145,11 @@ export default function StudentRegisterPage() {
 
     const loadTerms = async () => {
       try {
-        const { data: allTerms } = await RegistrationConfigService.getAcademicTerms(
-          formData.schoolId!
-        )
-        const sessionTerms = allTerms.filter((t) => t.session_id === formData.sessionId)
+        // Filter already-loaded terms by session
+        const sessionTerms = terms.filter((t: any) => t.session_id === formData.sessionId)
         setTerms(sessionTerms)
       } catch (error) {
-        console.error('Error loading terms:', error)
-        toast.error('Failed to load terms')
+        console.error('Error filtering terms:', error)
       }
     }
     loadTerms()
