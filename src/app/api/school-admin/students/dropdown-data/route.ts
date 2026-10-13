@@ -34,14 +34,44 @@ export async function GET(request: NextRequest) {
       data: {},
     }
 
-    // Load academic sessions
+    // Load academic sessions (try both table names for compatibility)
     if (['all', 'sessions'].includes(dataType)) {
-      const { data: sessions, error: sessionsError } = await supabase
+      let sessions
+      let sessionsError
+
+      // Try academic_sessions first
+      const res1 = await supabase
         .from('academic_sessions')
-        .select('id, name, start_year, end_year, status')
+        .select('id, session_name, start_date, end_date, status')
         .eq('school_id', schoolId)
         .eq('status', 'ACTIVE')
-        .order('start_year', { ascending: false })
+        .order('start_date', { ascending: false })
+
+      if (res1.error) {
+        console.warn('[Dropdown Data API] academic_sessions not available, trying terms...')
+        // Fallback - try to get sessions from terms table
+        const res2 = await supabase
+          .from('terms')
+          .select('session_id, academic_sessions(session_name)')
+          .eq('school_id', schoolId)
+          .eq('status', 'ACTIVE')
+          .order('session_id', { ascending: false })
+        
+        if (!res2.error && res2.data) {
+          // Deduplicate by session_id
+          const uniqueSessions = Array.from(
+            new Map(res2.data.map((item: any) => [
+              item.session_id,
+              item.session_id
+            ])).values()
+          )
+          sessions = uniqueSessions
+        }
+        sessionsError = res2.error
+      } else {
+        sessions = res1.data
+        sessionsError = res1.error
+      }
 
       if (sessionsError) {
         console.error('[Dropdown Data API] Error loading sessions:', sessionsError)
@@ -50,11 +80,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Load terms
+    // Load terms (from terms table, not academic_terms)
     if (['all', 'terms'].includes(dataType)) {
       const { data: terms, error: termsError } = await supabase
-        .from('academic_terms')
-        .select('id, name, term_number, session_id, status')
+        .from('terms')
+        .select('id, term_name, term_number, session_id, status')
         .eq('school_id', schoolId)
         .eq('status', 'ACTIVE')
         .order('term_number', { ascending: true })
@@ -72,10 +102,11 @@ export async function GET(request: NextRequest) {
         .from('class_arm_combos')
         .select(`
           id,
-          classes (id, name, section),
+          classes (id, name, type, level),
           arms (id, name)
         `)
         .eq('school_id', schoolId)
+        .eq('status', 'ACTIVE')
         .order('classes.name', { ascending: true })
 
       if (classesError) {
@@ -83,9 +114,13 @@ export async function GET(request: NextRequest) {
       } else {
         const formattedClasses = (classes || []).map((combo: any) => ({
           id: combo.id,
+          class_id: combo.classes?.id,
+          arm_id: combo.arms?.id,
           class_name: combo.classes?.name || 'Unknown',
           arm_name: combo.arms?.name || 'Unknown',
-          label: `${combo.classes?.name || 'Unknown'} - ${combo.arms?.name || 'Unknown'}`,
+          class_type: combo.classes?.type,
+          class_level: combo.classes?.level,
+          label: `${combo.classes?.name || 'Unknown'} - Arm ${combo.arms?.name || 'Unknown'}`,
         }))
         result.data.classes = formattedClasses
       }
