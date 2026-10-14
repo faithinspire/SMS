@@ -155,16 +155,17 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
         for (const session of allSessions) {
           const startYear = session.start_year
           for (let termNum = 1; termNum <= 3; termNum++) {
-            const startMonth = 8 + (termNum - 1) * 3 // Sept, Dec, Mar
-            const endMonth = 10 + (termNum - 1) * 3 // Nov, Feb, May
+            const termNames = ['First Term', 'Second Term', 'Third Term']
+            const startMonths = [9, 1, 4] // Sept, Jan, Apr
+            const endMonths = [12, 3, 6]  // Dec, Mar, Jun
 
             terms.push({
               school_id: schoolId,
               session_id: session.id,
+              name: termNames[termNum - 1],
               term_number: termNum,
-              term_name: `Term ${termNum}`,
-              start_date: `${startYear}-${String(startMonth).padStart(2, '0')}-01`,
-              end_date: `${startYear}-${String(endMonth).padStart(2, '0')}-28`,
+              start_date: `${termNum === 2 ? startYear + 1 : startYear}-${String(startMonths[termNum - 1]).padStart(2, '0')}-01`,
+              end_date: `${termNum === 2 ? startYear + 1 : startYear}-${String(endMonths[termNum - 1]).padStart(2, '0')}-28`,
               is_active: termNum === 1,
             })
           }
@@ -173,7 +174,7 @@ export async function seedSchoolCurriculum(schoolId: string): Promise<SeedingRes
 
       if (terms.length > 0) {
         const { data: insertedTerms, error: termError } = await supabase
-          .from('terms')
+          .from('academic_terms')
           .upsert(terms, { onConflict: 'school_id,session_id,term_number', ignoreDuplicates: true })
           .select()
 
