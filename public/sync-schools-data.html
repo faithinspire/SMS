@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sync All Schools Data - Critical Fix</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    h1 {
+      color: #333;
+      margin: 0 0 10px 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .emoji { font-size: 32px; }
+    .subtitle {
+      color: #666;
+      font-size: 14px;
+      margin: 0 0 30px 0;
+    }
+    .status-box {
+      background: #f5f5f5;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .status-box h3 {
+      margin: 0 0 10px 0;
+      color: #333;
+    }
+    .status-box p {
+      margin: 5px 0;
+      color: #666;
+      font-size: 14px;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-top: 20px;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .results {
+      margin-top: 30px;
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      display: none;
+    }
+    .results.visible {
+      display: block;
+    }
+    .results h3 {
+      margin: 0 0 15px 0;
+      color: #333;
+    }
+    .result-row {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 20px;
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .result-row:last-child {
+      border-bottom: none;
+    }
+    .result-label {
+      font-weight: bold;
+      color: #667eea;
+    }
+    .result-value {
+      color: #333;
+    }
+    .success {
+      color: #22c55e;
+      font-weight: bold;
+    }
+    .error {
+      color: #ef4444;
+      font-weight: bold;
+    }
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin: 20px 0;
+    }
+    .info-card {
+      background: #f5f9ff;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      border-radius: 4px;
+    }
+    .info-card h4 {
+      margin: 0 0 10px 0;
+      color: #333;
+    }
+    .info-card p {
+      margin: 0;
+      color: #666;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .warning {
+      background: #fffbeb;
+      border-left-color: #f59e0b;
+      color: #92400e;
+    }
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .loading {
+      display: flex;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>
+      <span class="emoji">🔧</span>
+      Sync All Schools with Complete Academic Data
+    </h1>
+    <p class="subtitle">CRITICAL FIX: Populate missing sessions, terms, classes, and subjects for all schools</p>
+
+    <div class="status-box">
+      <h3>🎯 Problem</h3>
+      <p>New schools were missing academic data (sessions, terms, subjects), causing empty dropdowns in registration forms</p>
+    </div>
+
+    <div class="status-box" style="border-left-color: #22c55e;">
+      <h3>✅ Solution</h3>
+      <p>This tool syncs ALL schools (old and new) with identical complete academic data:</p>
+      <ul>
+        <li>17 Academic Sessions (2024-2040)</li>
+        <li>51 Academic Terms (3 per session)</li>
+        <li>12 Standard Classes (JSS 1-3, SSS 1-3, Primary 1-6)</li>
+        <li>36 Arms (A, B, C per class)</li>
+        <li>20 Nigerian Curriculum Subjects</li>
+      </ul>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-card">
+        <h4>⚡ What It Does</h4>
+        <p>
+          Fills missing data in academic_sessions, academic_terms, classes, arms, and subjects tables for every school. 
+          Idempotent - safe to run multiple times. No data loss or overwrite.
+        </p>
+      </div>
+      <div class="info-card">
+        <h4>⏱️ How Long</h4>
+        <p>
+          Typical run time: 30-60 seconds (depending on number of schools).
+          No server restarts needed. Results immediate.
+        </p>
+      </div>
+      <div class="info-card warning">
+        <h4>⚠️ Important</h4>
+        <p>
+          This is a ONE-TIME fix. Run once to sync all schools permanently. 
+          All subsequent new schools will have data automatically.
+        </p>
+      </div>
+      <div class="info-card">
+        <h4>🔐 Safety</h4>
+        <p>
+          Uses upsert with ON CONFLICT - never overwrites existing data. 
+          Only adds missing data. No destructive operations.
+        </p>
+      </div>
+    </div>
+
+    <button id="syncButton" onclick="syncAllSchools()">
+      🚀 START SYNC NOW
+    </button>
+
+    <div id="results" class="results">
+      <h3>📊 Sync Results</h3>
+      <div id="resultsContent"></div>
+    </div>
+  </div>
+
+  <script>
+    async function syncAllSchools() {
+      const button = document.getElementById('syncButton');
+      const results = document.getElementById('results');
+      const resultsContent = document.getElementById('resultsContent');
+
+      try {
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner"></span><span class="loading">Syncing all schools...</span>';
+        results.classList.remove('visible');
+
+        console.log('🔧 Starting sync...');
+
+        // Call the API
+        const response = await fetch('/api/admin/sync-all-schools-data', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const data = await response.json();
+
+        console.log('📊 Sync response:', data);
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || `HTTP ${response.status}`);
+        }
+
+        // Display results
+        const r = data.results;
+        resultsContent.innerHTML = `
+          <div class="result-row">
+            <div class="result-label">✅ Status</div>
+            <div class="result-value success">SUCCESS</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">🏫 Schools Processed</div>
+            <div class="result-value">${r.schools_processed}</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">📅 Sessions Created</div>
+            <div class="result-value">${r.sessions_created}</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">📋 Terms Created</div>
+            <div class="result-value">${r.terms_created}</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">📚 Classes Created</div>
+            <div class="result-value">${r.classes_created}</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">🔗 Arms Created</div>
+            <div class="result-value">${r.arms_created}</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">🔀 Combos Created</div>
+            <div class="result-value">${r.combos_created}</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">📖 Subjects Created</div>
+            <div class="result-value">${r.subjects_created}</div>
+          </div>
+          ${r.errors && r.errors.length > 0 ? `
+            <div class="result-row">
+              <div class="result-label">⚠️ Errors</div>
+              <div class="result-value error">${r.errors.join('<br>')}</div>
+            </div>
+          ` : ''}
+          <div class="result-row" style="margin-top: 20px; border-top: 2px solid #ddd; padding-top: 20px;">
+            <div class="result-label">🎉 Next Steps</div>
+            <div class="result-value">
+              1. Test a new school creation<br>
+              2. Verify student registration dropdowns show all options<br>
+              3. Verify teacher registration shows all subjects
+            </div>
+          </div>
+        `;
+
+        results.classList.add('visible');
+        button.innerHTML = '✅ Sync Complete!';
+
+      } catch (error) {
+        console.error('❌ Sync error:', error);
+        resultsContent.innerHTML = `
+          <div class="result-row">
+            <div class="result-label">❌ Status</div>
+            <div class="result-value error">ERROR</div>
+          </div>
+          <div class="result-row">
+            <div class="result-label">Message</div>
+            <div class="result-value error">${error.message}</div>
+          </div>
+        `;
+        results.classList.add('visible');
+        button.innerHTML = '❌ Sync Failed - Try Again';
+
+      } finally {
+        button.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
