@@ -256,7 +256,7 @@ export default function PrincipalResultsPage() {
                 .filter((t) => t.session_id === selectedSession)
                 .map((term) => (
                   <option key={term.id} value={term.id}>
-                    {term.term_name}
+                    {term.label || term.name || term.id}
                   </option>
                 ))}
             </select>

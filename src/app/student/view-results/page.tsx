@@ -366,8 +366,8 @@ export default function StudentViewResultsPage() {
               >
                 <option value="">-- Select Term --</option>
                 {availableTerms.map((term) => (
-                  <option key={term.id} value={term.term_name}>
-                    {term.term_name}
+                  <option key={term.id} value={term.id}>
+                    {term.label || term.name || term.id}
                   </option>
                 ))}
               </select>

@@ -395,7 +395,7 @@ export default function StudentRegisterPage() {
                   <option value="">Select Session *</option>
                   {sessions.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name || s.id}
+                      {s.label || s.session_year || s.id}
                     </option>
                   ))}
                 </select>
@@ -407,7 +407,7 @@ export default function StudentRegisterPage() {
                   <option value="">Select Term *</option>
                   {terms.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.term_name}
+                      {t.label || t.name || t.id}
                     </option>
                   ))}
                 </select>

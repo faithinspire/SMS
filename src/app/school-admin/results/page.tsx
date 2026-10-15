@@ -372,7 +372,7 @@ export default function ResultsPage() {
                 <option value="">-- Select Term --</option>
                 {terms.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.term_name}
+                    {t.label || t.name || t.term_name || t.id}
                   </option>
                 ))}
               </select>
