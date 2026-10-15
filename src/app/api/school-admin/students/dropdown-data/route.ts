@@ -4,6 +4,7 @@
  * GET /api/school-admin/students/dropdown-data?schoolId=<schoolId>&dataType=<all|sessions|terms|classes|subjects>
  * 
  * Returns sessions, terms, classes, and subjects for registration forms
+ * Uses ACTUAL schema column names (session_year, name, term_number, is_active)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,13 +18,14 @@ export async function GET(request: NextRequest) {
     const dataType = request.nextUrl.searchParams.get('dataType') || 'all'
 
     if (!schoolId) {
+      console.error('[Dropdown API] Missing schoolId')
       return NextResponse.json(
         { error: 'schoolId is required' },
         { status: 400 }
       )
     }
 
-    console.log('[Dropdown Data API] Fetching data for school:', schoolId, 'type:', dataType)
+    console.log('[Dropdown API] Fetching for school:', schoolId, 'dataType:', dataType)
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,117 +33,150 @@ export async function GET(request: NextRequest) {
     )
 
     const result: any = {
-      data: {},
+      data: {
+        sessions: [],
+        terms: [],
+        classes: [],
+        subjects: [],
+      },
     }
 
-    // Load academic sessions (try both table names for compatibility)
+    // ============================================================================
+    // LOAD ACADEMIC SESSIONS using ACTUAL schema: session_year, is_active
+    // ============================================================================
     if (['all', 'sessions'].includes(dataType)) {
-      let sessions
-      let sessionsError
-
-      // Try academic_sessions first
-      const res1 = await supabase
-        .from('academic_sessions')
-        .select('id, session_name, start_date, end_date, status')
-        .eq('school_id', schoolId)
-        .eq('status', 'ACTIVE')
-        .order('start_date', { ascending: false })
-
-      if (res1.error) {
-        console.warn('[Dropdown Data API] academic_sessions not available, trying terms...')
-        // Fallback - try to get sessions from terms table
-        const res2 = await supabase
-          .from('terms')
-          .select('session_id, academic_sessions(session_name)')
+      try {
+        console.log('[Dropdown API] Fetching academic_sessions...')
+        const { data: sessions, error: sessionsError } = await supabase
+          .from('academic_sessions')
+          .select('id, session_year, start_year, end_year, is_active')
           .eq('school_id', schoolId)
-          .eq('status', 'ACTIVE')
-          .order('session_id', { ascending: false })
-        
-        if (!res2.error && res2.data) {
-          // Deduplicate by session_id
-          const uniqueSessions = Array.from(
-            new Map(res2.data.map((item: any) => [
-              item.session_id,
-              item.session_id
-            ])).values()
-          )
-          sessions = uniqueSessions
+          .order('start_year', { ascending: false })
+
+        if (sessionsError) {
+          console.error('[Dropdown API] Sessions error:', sessionsError.message)
+        } else {
+          console.log('[Dropdown API] ✅ Loaded', sessions?.length || 0, 'sessions')
+          result.data.sessions = (sessions || []).map((s: any) => ({
+            id: s.id,
+            session_year: s.session_year,
+            session_name: s.session_year, // For backwards compatibility
+            start_year: s.start_year,
+            end_year: s.end_year,
+            is_active: s.is_active,
+            label: s.session_year,
+          }))
         }
-        sessionsError = res2.error
-      } else {
-        sessions = res1.data
-        sessionsError = res1.error
-      }
-
-      if (sessionsError) {
-        console.error('[Dropdown Data API] Error loading sessions:', sessionsError)
-      } else {
-        result.data.sessions = sessions || []
+      } catch (err) {
+        console.error('[Dropdown API] Exception loading sessions:', err)
       }
     }
 
-    // Load terms (from terms table, not academic_terms)
+    // ============================================================================
+    // LOAD ACADEMIC TERMS using ACTUAL schema: name, term_number, is_active
+    // ============================================================================
     if (['all', 'terms'].includes(dataType)) {
-      const { data: terms, error: termsError } = await supabase
-        .from('terms')
-        .select('id, term_name, term_number, session_id, status')
-        .eq('school_id', schoolId)
-        .eq('status', 'ACTIVE')
-        .order('term_number', { ascending: true })
+      try {
+        console.log('[Dropdown API] Fetching academic_terms...')
+        const { data: terms, error: termsError } = await supabase
+          .from('academic_terms')
+          .select('id, name, term_number, session_id, is_active, school_id')
+          .eq('school_id', schoolId)
+          .order('session_id, term_number', { ascending: true })
 
-      if (termsError) {
-        console.error('[Dropdown Data API] Error loading terms:', termsError)
-      } else {
-        result.data.terms = terms || []
+        if (termsError) {
+          console.error('[Dropdown API] Terms error:', termsError.message)
+        } else {
+          console.log('[Dropdown API] ✅ Loaded', terms?.length || 0, 'terms')
+          result.data.terms = (terms || []).map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            term_name: t.name, // For backwards compatibility
+            term_number: t.term_number,
+            session_id: t.session_id,
+            is_active: t.is_active,
+            label: t.name,
+          }))
+        }
+      } catch (err) {
+        console.error('[Dropdown API] Exception loading terms:', err)
       }
     }
 
-    // Load class-arm combos
+    // ============================================================================
+    // LOAD CLASS-ARM COMBOS with full relationships
+    // ============================================================================
     if (['all', 'classes'].includes(dataType)) {
-      const { data: classes, error: classesError } = await supabase
-        .from('class_arm_combos')
-        .select(`
-          id,
-          classes (id, name, type, level),
-          arms (id, name)
-        `)
-        .eq('school_id', schoolId)
-        .eq('status', 'ACTIVE')
-        .order('classes.name', { ascending: true })
+      try {
+        console.log('[Dropdown API] Fetching class_arm_combos...')
+        const { data: combos, error: classesError } = await supabase
+          .from('class_arm_combos')
+          .select(`
+            id,
+            school_id,
+            class_id,
+            arm_id,
+            classes (id, name, type, level),
+            arms (id, name)
+          `)
+          .eq('school_id', schoolId)
+          .order('classes.name', { ascending: true })
 
-      if (classesError) {
-        console.error('[Dropdown Data API] Error loading classes:', classesError)
-      } else {
-        const formattedClasses = (classes || []).map((combo: any) => ({
-          id: combo.id,
-          class_id: combo.classes?.id,
-          arm_id: combo.arms?.id,
-          class_name: combo.classes?.name || 'Unknown',
-          arm_name: combo.arms?.name || 'Unknown',
-          class_type: combo.classes?.type,
-          class_level: combo.classes?.level,
-          label: `${combo.classes?.name || 'Unknown'} - Arm ${combo.arms?.name || 'Unknown'}`,
-        }))
-        result.data.classes = formattedClasses
+        if (classesError) {
+          console.error('[Dropdown API] Classes error:', classesError.message)
+        } else {
+          console.log('[Dropdown API] ✅ Loaded', combos?.length || 0, 'class-arm combos')
+          result.data.classes = (combos || []).map((combo: any) => ({
+            id: combo.id,
+            class_id: combo.class_id,
+            arm_id: combo.arm_id,
+            classes: {
+              id: combo.classes?.id,
+              name: combo.classes?.name || 'Unknown',
+              type: combo.classes?.type,
+              level: combo.classes?.level,
+            },
+            arms: {
+              id: combo.arms?.id,
+              name: combo.arms?.name || 'Unknown',
+            },
+            class_name: combo.classes?.name || 'Unknown',
+            arm_name: combo.arms?.name || 'Unknown',
+            class_type: combo.classes?.type,
+            class_level: combo.classes?.level,
+            label: `${combo.classes?.name || 'Unknown'} - Arm ${combo.arms?.name || 'Unknown'}`,
+          }))
+        }
+      } catch (err) {
+        console.error('[Dropdown API] Exception loading classes:', err)
       }
     }
 
-    // Load subjects
+    // ============================================================================
+    // LOAD SUBJECTS for the school
+    // ============================================================================
     if (['all', 'subjects'].includes(dataType)) {
-      const { data: subjects, error: subjectsError } = await supabase
-        .from('subjects')
-        .select('id, name, code, subject_type')
-        .eq('school_id', schoolId)
-        .order('name', { ascending: true })
+      try {
+        console.log('[Dropdown API] Fetching subjects...')
+        const { data: subjects, error: subjectsError } = await supabase
+          .from('subjects')
+          .select('id, name, code, subject_type, department, is_active')
+          .eq('school_id', schoolId)
+          .eq('is_active', true)
+          .order('name', { ascending: true })
 
-      if (subjectsError) {
-        console.error('[Dropdown Data API] Error loading subjects:', subjectsError)
-      } else {
-        result.data.subjects = subjects || []
+        if (subjectsError) {
+          console.error('[Dropdown API] Subjects error:', subjectsError.message)
+        } else {
+          console.log('[Dropdown API] ✅ Loaded', subjects?.length || 0, 'subjects')
+          result.data.subjects = subjects || []
+        }
+      } catch (err) {
+        console.error('[Dropdown API] Exception loading subjects:', err)
       }
     }
 
-    console.log('[Dropdown Data API] ✅ Loaded data:', {
+    console.log('[Dropdown API] ✅ Response:', {
       sessions: result.data.sessions?.length,
       terms: result.data.terms?.length,
       classes: result.data.classes?.length,
@@ -150,9 +185,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result)
   } catch (error: any) {
-    console.error('[Dropdown Data API] Error:', error)
+    console.error('[Dropdown API] Fatal error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to load dropdown data' },
+      { error: error.message || 'Failed to load dropdown data', data: { sessions: [], terms: [], classes: [], subjects: [] } },
       { status: 500 }
     )
   }
