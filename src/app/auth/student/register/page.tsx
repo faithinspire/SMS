@@ -145,11 +145,29 @@ export default function StudentRegisterPage() {
 
     const loadTerms = async () => {
       try {
-        // Filter already-loaded terms by session
-        const sessionTerms = terms.filter((t: any) => t.session_id === formData.sessionId)
-        setTerms(sessionTerms)
+        console.log('[Student Reg] Loading terms for session:', formData.sessionId)
+        
+        // Fetch ALL terms from API
+        const response = await fetch(
+          `/api/school-admin/students/dropdown-data?schoolId=${encodeURIComponent(formData.schoolId!)}&dataType=terms`
+        )
+
+        if (response.ok) {
+          const result = await response.json()
+          const allTerms = result.data?.terms || []
+          
+          // Filter terms by session_id
+          const sessionTerms = allTerms.filter((t: any) => t.session_id === formData.sessionId)
+          console.log('[Student Reg] Filtered terms:', sessionTerms.length, 'out of', allTerms.length)
+          
+          setTerms(sessionTerms)
+        } else {
+          console.error('[Student Reg] Terms API failed, response:', response.status)
+          setTerms([])
+        }
       } catch (error) {
-        console.error('Error filtering terms:', error)
+        console.error('[Student Reg] Error loading terms:', error)
+        setTerms([])
       }
     }
     loadTerms()
