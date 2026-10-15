@@ -167,17 +167,52 @@ export default function StudentRegisterPage() {
         const classCombo = classOptions.find((c) => c.id === formData.classArmComboId)
         
         if (!classCombo || !classCombo?.classes?.level) {
+          console.warn('[Student Reg] Class combo or level not found:', classCombo)
           setSubjects([])
           return
         }
 
-        const subjectList = await CanonicalSubjectService.getSubjectsForLevel(
-          formData.schoolId!,
-          classCombo.classes.level
+        console.log('[Student Reg] Loading subjects for level:', classCombo.classes.level)
+        
+        // First try: load from API and filter by level
+        const response = await fetch(
+          `/api/school-admin/students/dropdown-data?schoolId=${encodeURIComponent(formData.schoolId!)}&dataType=subjects`
         )
-        setSubjects(subjectList)
+
+        if (response.ok) {
+          const result = await response.json()
+          const apiSubjects = result.data?.subjects || []
+          
+          // Filter by applicable level
+          let filtered = apiSubjects.filter((s: any) => {
+            const levels = s.applicable_to_levels || []
+            return levels.includes(classCombo.classes.level)
+          })
+          
+          console.log('[Student Reg] Filtered subjects by level:', filtered.length)
+          
+          // If no subjects found by level, use service as fallback
+          if (filtered.length === 0) {
+            console.log('[Student Reg] No subjects by level, trying service fallback...')
+            const subjectList = await CanonicalSubjectService.getSubjectsForLevel(
+              formData.schoolId!,
+              classCombo.classes.level
+            )
+            setSubjects(subjectList)
+          } else {
+            setSubjects(filtered)
+          }
+        } else {
+          // Fallback to service if API fails
+          console.log('[Student Reg] API call failed, using service fallback...')
+          const subjectList = await CanonicalSubjectService.getSubjectsForLevel(
+            formData.schoolId!,
+            classCombo.classes.level
+          )
+          setSubjects(subjectList)
+        }
       } catch (error) {
-        console.error('Error loading subjects:', error)
+        console.error('[Student Reg] Error loading subjects:', error)
         setSubjects([])
       }
     }

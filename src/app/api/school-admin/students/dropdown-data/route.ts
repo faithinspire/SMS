@@ -153,14 +153,14 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================================================
-    // LOAD SUBJECTS for the school
+    // LOAD SUBJECTS for the school (with fallback logic for old and new schools)
     // ============================================================================
     if (['all', 'subjects'].includes(dataType)) {
       try {
         console.log('[Dropdown API] Fetching subjects...')
         const { data: subjects, error: subjectsError } = await supabase
           .from('subjects')
-          .select('id, name, code, subject_type, department, is_active')
+          .select('id, name, code, subject_type, department, is_active, applicable_to_levels')
           .eq('school_id', schoolId)
           .eq('is_active', true)
           .order('name', { ascending: true })
@@ -169,7 +169,16 @@ export async function GET(request: NextRequest) {
           console.error('[Dropdown API] Subjects error:', subjectsError.message)
         } else {
           console.log('[Dropdown API] ✅ Loaded', subjects?.length || 0, 'subjects')
-          result.data.subjects = subjects || []
+          result.data.subjects = (subjects || []).map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            code: s.code,
+            subject_type: s.subject_type,
+            department: s.department,
+            is_active: s.is_active,
+            applicable_to_levels: s.applicable_to_levels || [],
+            label: s.name,
+          }))
         }
       } catch (err) {
         console.error('[Dropdown API] Exception loading subjects:', err)

@@ -174,13 +174,42 @@ export default function StudentMultiStageRegister() {
 
     const loadSubjects = async () => {
       try {
+        console.log('[Register-Multi] Loading subjects for class:', formData.classArmComboId)
+        
+        // First try: load from API with fallback
+        const response = await fetch(
+          `/api/school-admin/students/dropdown-data?schoolId=${encodeURIComponent(formData.schoolId || '')}&dataType=subjects`
+        )
+
+        if (response.ok) {
+          const result = await response.json()
+          const apiSubjects = result.data?.subjects || []
+          
+          // Get class level to filter
+          const classCombo = classes.find(c => c.id === formData.classArmComboId)
+          if (classCombo?.classes?.level) {
+            const filtered = apiSubjects.filter((s: any) => {
+              const levels = s.applicable_to_levels || []
+              return levels.includes(classCombo.classes.level)
+            })
+            console.log('[Register-Multi] Filtered subjects by level:', filtered.length)
+            
+            if (filtered.length > 0) {
+              setSubjects(filtered)
+              return
+            }
+          }
+        }
+        
+        // Fallback: use service
+        console.log('[Register-Multi] Using service fallback for subjects')
         const applicableSubjects = await CanonicalSubjectService.getSubjectsForClass(
           formData.classArmComboId || '',
           formData.schoolId || ''
         )
         setSubjects(applicableSubjects)
       } catch (err) {
-        console.error('Error loading subjects:', err)
+        console.error('[Register-Multi] Error loading subjects:', err)
         setError('Failed to load subjects')
       }
     }
