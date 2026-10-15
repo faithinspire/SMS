@@ -266,7 +266,7 @@ export default function ClassScoreSheetPage() {
 
       if (!classStudents || classStudents.length === 0) {
         setStudents([])
-        toast.info('No students in your class')
+        toast.success('No students in your class')
         return
       }
 
@@ -418,7 +418,7 @@ export default function ClassScoreSheetPage() {
       const dirtyScores = student.subjects.filter((s) => s.isDirty)
 
       if (dirtyScores.length === 0) {
-        toast.info('No changes to save')
+        toast.success('No changes to save')
         return
       }
 
@@ -499,7 +499,7 @@ export default function ClassScoreSheetPage() {
       )
 
       if (studentsWithChanges.length === 0) {
-        toast.info('No changes to save')
+        toast.success('No changes to save')
         return
       }
 

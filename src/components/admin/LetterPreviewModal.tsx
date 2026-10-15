@@ -186,7 +186,7 @@ export function LetterPreviewModal({
       `Hello,\n\nPlease find the ${letterType} letter attached.\n\nBest regards,\nSchool Admin`
     )
     window.location.href = `mailto:${recipientEmail}?subject=${subject}&body=${body}`
-    toast.info('Opening email client...')
+    toast.success('Opening email client...')
   }
 
   const handleWhatsAppShare = () => {
@@ -200,7 +200,7 @@ export function LetterPreviewModal({
     )
     const phoneNumber = recipientPhone.replace(/\D/g, '')
     window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank')
-    toast.info('Opening WhatsApp...')
+    toast.success('Opening WhatsApp...')
   }
 
   const handleWhatsAppShareEnhanced = async () => {

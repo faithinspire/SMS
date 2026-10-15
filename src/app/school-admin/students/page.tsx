@@ -116,7 +116,7 @@ export default function StudentsPage() {
         setStudents(result.data || []);
 
         if (!result.data || result.data.length === 0) {
-          toast.info('No students registered yet');
+          toast.success('No students registered yet');
         }
       } catch (err: any) {
         console.error('[Students Page] Error fetching students:', err);

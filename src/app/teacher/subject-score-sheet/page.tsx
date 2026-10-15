@@ -322,7 +322,7 @@ export default function SubjectScoreSheetPage() {
 
         if (!enrollments2 || enrollments2.length === 0) {
           setStudents([])
-          toast.info('No students enrolled in this subject')
+          toast.success('No students enrolled in this subject')
           return
         }
 
@@ -509,7 +509,7 @@ export default function SubjectScoreSheetPage() {
       }
 
       if (!student.isDirty) {
-        toast.info('No changes to save')
+        toast.success('No changes to save')
         return
       }
 
@@ -580,7 +580,7 @@ export default function SubjectScoreSheetPage() {
       const dirtyStudents = students.filter((s) => s.isDirty)
 
       if (dirtyStudents.length === 0) {
-        toast.info('No changes to save')
+        toast.success('No changes to save')
         return
       }
 
