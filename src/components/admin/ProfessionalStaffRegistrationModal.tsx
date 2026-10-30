@@ -280,10 +280,25 @@ export default function ProfessionalStaffRegistrationModal({
   // ============================================================================
 
   const handleSubmit = async () => {
+    console.log('[Staff Reg] handleSubmit called. isSubmitting:', isSubmitting, 'isLoadingData:', isLoadingData)
+    
+    if (isSubmitting || isLoadingData) {
+      console.log('[Staff Reg] Already submitting or loading, preventing double-submit')
+      return
+    }
+
     setError(null)
 
     // Final validation
-    if (currentStep === 5 && isTeacher && !validateStep5Teacher()) return
+    if (currentStep === 5 && isTeacher && !validateStep5Teacher()) {
+      console.log('[Staff Reg] Validation failed for step 5')
+      return
+    }
+
+    if (currentStep === 3 && !isTeacher && !validateStep3()) {
+      console.log('[Staff Reg] Validation failed for step 3')
+      return
+    }
 
     setIsSubmitting(true)
 
@@ -310,6 +325,8 @@ export default function ProfessionalStaffRegistrationModal({
           subjectIds: selectedSubjectIds,
         }),
       }
+
+      console.log('[Staff Reg] Payload:', payload)
 
       const response = await fetch('/api/school-admin/staff/register', {
         method: 'POST',
@@ -338,6 +355,7 @@ export default function ProfessionalStaffRegistrationModal({
     } catch (err: any) {
       console.error('[Staff Reg Modal] Submission error:', err)
       setError(err.message || 'Registration failed. Please try again.')
+      toast.error(err.message || 'Registration failed')
     } finally {
       setIsSubmitting(false)
     }
@@ -728,9 +746,13 @@ export default function ProfessionalStaffRegistrationModal({
           ← Back
         </button>
         <button
-          onClick={handleSubmit}
+          onClick={() => {
+            console.log('[Staff Reg] Submit button clicked. isSubmitting:', isSubmitting, 'isLoadingData:', isLoadingData)
+            handleSubmit()
+          }}
           disabled={isSubmitting || isLoadingData}
-          className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-lg transition flex items-center justify-center gap-2"
+          className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-lg transition flex items-center justify-center gap-2 cursor-pointer"
+          type="button"
         >
           {isSubmitting ? (
             <>
@@ -738,7 +760,7 @@ export default function ProfessionalStaffRegistrationModal({
             </>
           ) : (
             <>
-              Complete Registration ✓
+              ✓ Review & Submit
             </>
           )}
         </button>
