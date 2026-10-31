@@ -281,6 +281,7 @@ export default function ProfessionalStaffRegistrationModal({
 
   const handleSubmit = async () => {
     console.log('[Staff Reg] handleSubmit called. isSubmitting:', isSubmitting, 'isLoadingData:', isLoadingData)
+    console.log('[Staff Reg] currentStep:', currentStep, 'totalSteps:', totalSteps, 'isTeacher:', isTeacher)
     
     if (isSubmitting || isLoadingData) {
       console.log('[Staff Reg] Already submitting or loading, preventing double-submit')
@@ -289,21 +290,23 @@ export default function ProfessionalStaffRegistrationModal({
 
     setError(null)
 
-    // Final validation
-    if (currentStep === 5 && isTeacher && !validateStep5Teacher()) {
-      console.log('[Staff Reg] Validation failed for step 5')
-      return
-    }
-
-    if (currentStep === 3 && !isTeacher && !validateStep3()) {
-      console.log('[Staff Reg] Validation failed for step 3')
-      return
+    // Final validation based on current step
+    if (isTeacher) {
+      if (currentStep === 5 && !validateStep5Teacher()) {
+        console.log('[Staff Reg] Validation failed for teacher step 5')
+        return
+      }
+    } else {
+      if (currentStep === 3 && !validateStep3()) {
+        console.log('[Staff Reg] Validation failed for non-teacher step 3')
+        return
+      }
     }
 
     setIsSubmitting(true)
 
     try {
-      console.log('[Staff Reg Modal] Submitting registration...')
+      console.log('[Staff Reg] Building payload...')
 
       const payload = {
         schoolId,
@@ -326,21 +329,29 @@ export default function ProfessionalStaffRegistrationModal({
         }),
       }
 
-      console.log('[Staff Reg] Payload:', payload)
+      console.log('[Staff Reg] Payload ready:', JSON.stringify(payload, null, 2))
+      console.log('[Staff Reg] Sending POST to /api/school-admin/staff/register...')
 
       const response = await fetch('/api/school-admin/staff/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
       })
 
+      console.log('[Staff Reg] Response received. Status:', response.status, 'OK:', response.ok)
+      
+      const responseData = await response.json()
+      console.log('[Staff Reg] Response data:', responseData)
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `Registration failed: ${response.status}`)
+        const errorMsg = responseData.error || `Registration failed with status ${response.status}`
+        console.error('[Staff Reg] API error:', errorMsg)
+        throw new Error(errorMsg)
       }
 
-      const result = await response.json()
-      console.log('[Staff Reg Modal] ✅ Registration successful')
+      console.log('[Staff Reg Modal] ✅ Registration successful:', responseData)
 
       toast.success(`${ROLE_LABELS[role].label} registered successfully!`)
 
@@ -353,9 +364,10 @@ export default function ProfessionalStaffRegistrationModal({
 
       setTimeout(onClose, 1000)
     } catch (err: any) {
-      console.error('[Staff Reg Modal] Submission error:', err)
-      setError(err.message || 'Registration failed. Please try again.')
-      toast.error(err.message || 'Registration failed')
+      const errorMsg = err.message || 'Registration failed. Please try again.'
+      console.error('[Staff Reg Modal] Submission error:', errorMsg, err.stack)
+      setError(errorMsg)
+      toast.error(errorMsg)
     } finally {
       setIsSubmitting(false)
     }
