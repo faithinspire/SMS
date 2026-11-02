@@ -279,96 +279,112 @@ export default function ProfessionalStaffRegistrationModal({
   // HANDLERS: Form Submission
   // ============================================================================
 
-  const handleSubmit = async () => {
-    console.log('[Staff Reg] handleSubmit called. isSubmitting:', isSubmitting, 'isLoadingData:', isLoadingData)
-    console.log('[Staff Reg] currentStep:', currentStep, 'totalSteps:', totalSteps, 'isTeacher:', isTeacher)
+  const handleSubmit = async (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault()
+    }
     
-    if (isSubmitting || isLoadingData) {
-      console.log('[Staff Reg] Already submitting or loading, preventing double-submit')
+    console.log('[Staff Reg] ▶️ handleSubmit STARTED')
+    
+    // Guard: Already submitting
+    if (isSubmitting) {
+      console.log('[Staff Reg] ⏹️ Already submitting, aborting')
       return
     }
 
-    setError(null)
-
-    // Final validation based on current step
-    if (isTeacher) {
-      if (currentStep === 5 && !validateStep5Teacher()) {
-        console.log('[Staff Reg] Validation failed for teacher step 5')
+    // Guard: Validate based on role
+    if (isTeacher && currentStep === 5) {
+      if (!validateStep5Teacher()) {
+        console.log('[Staff Reg] ❌ Teacher validation failed')
         return
       }
-    } else {
-      if (currentStep === 3 && !validateStep3()) {
-        console.log('[Staff Reg] Validation failed for non-teacher step 3')
+    } else if (!isTeacher && currentStep === 3) {
+      if (!validateStep3()) {
+        console.log('[Staff Reg] ❌ Non-teacher validation failed')
         return
       }
     }
 
+    console.log('[Staff Reg] ✅ Validation passed')
+    setError(null)
     setIsSubmitting(true)
 
     try {
-      console.log('[Staff Reg] Building payload...')
-
-      const payload = {
+      // Build payload
+      const payload: any = {
         schoolId,
         staffCategory: role,
-        firstName,
-        lastName,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         email: email.trim().toLowerCase(),
-        phone,
+        phone: phone.trim(),
         password,
-        position,
-        department,
-        ...(isTeacher && {
-          teachingLevel,
-          bankName,
-          accountNumber,
-          accountName,
-          salary: salary ? parseFloat(salary) : null,
-          classArmComboId: selectedComboId,
-          subjectIds: selectedSubjectIds,
-        }),
+        position: position.trim(),
+        department: department.trim(),
       }
 
-      console.log('[Staff Reg] Payload ready:', JSON.stringify(payload, null, 2))
-      console.log('[Staff Reg] Sending POST to /api/school-admin/staff/register...')
+      // Add teacher-specific fields
+      if (isTeacher) {
+        payload.teachingLevel = teachingLevel
+        payload.bankName = bankName.trim()
+        payload.accountNumber = accountNumber.trim()
+        payload.accountName = accountName.trim()
+        payload.salary = salary ? parseFloat(salary) : null
+        payload.classArmComboId = selectedComboId
+        payload.subjectIds = selectedSubjectIds
+      }
 
+      console.log('[Staff Reg] 📦 Payload prepared:', { ...payload, password: '***' })
+
+      // Make API call
+      console.log('[Staff Reg] 🌐 Calling /api/school-admin/staff/register...')
       const response = await fetch('/api/school-admin/staff/register', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
 
-      console.log('[Staff Reg] Response received. Status:', response.status, 'OK:', response.ok)
-      
-      const responseData = await response.json()
-      console.log('[Staff Reg] Response data:', responseData)
+      console.log('[Staff Reg] 📩 Response status:', response.status)
 
+      let responseData: any = null
+      try {
+        responseData = await response.json()
+        console.log('[Staff Reg] 📄 Response body:', responseData)
+      } catch (parseErr) {
+        console.log('[Staff Reg] ⚠️ Could not parse response as JSON')
+        responseData = { error: `HTTP ${response.status}` }
+      }
+
+      // Check if successful
       if (!response.ok) {
-        const errorMsg = responseData.error || `Registration failed with status ${response.status}`
-        console.error('[Staff Reg] API error:', errorMsg)
+        const errorMsg = responseData?.error || responseData?.message || `HTTP ${response.status}`
+        console.error('[Staff Reg] ❌ API returned error:', errorMsg)
         throw new Error(errorMsg)
       }
 
-      console.log('[Staff Reg Modal] ✅ Registration successful:', responseData)
+      // Success!
+      console.log('[Staff Reg] ✅ Registration successful!')
+      toast.success(`${ROLE_LABELS[role]?.label || 'Staff'} registered successfully!`)
 
-      toast.success(`${ROLE_LABELS[role].label} registered successfully!`)
-
-      // Reset form
+      // Clean up
       resetForm()
 
+      // Notify parent
       if (onSuccess) {
-        setTimeout(onSuccess, 500)
+        console.log('[Staff Reg] 📞 Calling onSuccess callback')
+        onSuccess()
       }
 
-      setTimeout(onClose, 1000)
+      // Close modal
+      console.log('[Staff Reg] 🚪 Closing modal')
+      setTimeout(() => onClose(), 500)
     } catch (err: any) {
-      const errorMsg = err.message || 'Registration failed. Please try again.'
-      console.error('[Staff Reg Modal] Submission error:', errorMsg, err.stack)
+      console.error('[Staff Reg] ❌ Exception:', err.message)
+      const errorMsg = err?.message || 'Registration failed. Please check all fields and try again.'
       setError(errorMsg)
       toast.error(errorMsg)
     } finally {
+      console.log('[Staff Reg] 🏁 Submission complete')
       setIsSubmitting(false)
     }
   }
